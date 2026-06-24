@@ -1,0 +1,40 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.iml
+*.class
+*.log
+
+# Supabase / Secrets
+.env
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Android
+android/local.properties
+android/.gradle/
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/gradle/
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# macOS
+macos/Flutter/Flutter-Debug.xcconfig
+macos/Flutter/Flutter-Release.xcconfig
+
+# pubspec.lock (optionnel — certaines équipes le versionnent)
+# pubspec.lock
