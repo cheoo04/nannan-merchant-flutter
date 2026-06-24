@@ -283,3 +283,4 @@ flutter pub add supabase_flutter
 ---
 
 *Document généré le 24/06/2026 — Nan-Nan Connect v1.0*
+# nannan-merchant-flutter
