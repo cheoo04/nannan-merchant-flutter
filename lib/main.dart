@@ -10,6 +10,7 @@ import 'features/orders/orders_screen.dart';
 import 'features/products/products_screen.dart';
 import 'features/finances/finance_screen.dart';
 import 'features/prescriptions/prescriptions_screen.dart';
+import 'features/stories/stories_screen.dart';
 import 'features/become_merchant/become_merchant_screen.dart';
 
 Future<void> main() async {
@@ -94,9 +95,17 @@ class _AuthGateState extends State<_AuthGate> {
 }
 
 // ── MERCHANT SHELL ────────────────────────────────────────────────────────────
-// Gère la navigation entre les 5 onglets de l'espace marchand.
+// Gère la navigation entre les 6 onglets de l'espace marchand.
 // Utilise IndexedStack pour garder l'état de chaque onglet en mémoire
 // (le realtime reste actif même quand on change d'onglet).
+//
+// Index :
+//   0 → Dashboard
+//   1 → Commandes
+//   2 → Produits
+//   3 → Stories / Publications  ← nouveau
+//   4 → Ordonnances
+//   5 → Finances
 class MerchantShell extends StatefulWidget {
   const MerchantShell({super.key});
 
@@ -125,7 +134,7 @@ class _MerchantShellState extends State<MerchantShell> {
           onNavTap: (i) => setState(() => _index = i),
           onGoToOrders: () => setState(() => _index = 1),
           onGoToProducts: () => setState(() => _index = 2),
-          onGoToFinance: () => setState(() => _index = 4),
+          onGoToFinance: () => setState(() => _index = 5),
           onGoToNotifications: () {
             // TODO : ouvrir le centre de notifications
           },
@@ -146,13 +155,20 @@ class _MerchantShellState extends State<MerchantShell> {
           onGoToDashboard: () => setState(() => _index = 0),
         ),
 
-        // 3 — Ordonnances (onglet Ord.)
+        // 3 — Stories / Publications
+        StoriesScreen(
+          currentNavIndex: _index,
+          onNavTap: (i) => setState(() => _index = i),
+          onGoToDashboard: () => setState(() => _index = 0),
+        ),
+
+        // 4 — Ordonnances
         PrescriptionsScreen(
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
         ),
 
-        // 4 — Finances
+        // 5 — Finances
         FinanceScreen(
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
