@@ -66,7 +66,7 @@ class StoriesNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final path = 'stories/$userId/${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final path = '$userId/${DateTime.now().millisecondsSinceEpoch}.$ext';
       await _db.storage.from('stories').uploadBinary(
         path, bytes,
         fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: false),
@@ -96,7 +96,7 @@ class StoriesNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final path = 'stories/$userId/video_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final path = '$userId/video_${DateTime.now().millisecondsSinceEpoch}.$ext';
       await _db.storage.from('stories').uploadBinary(
         path, bytes,
         fileOptions: FileOptions(

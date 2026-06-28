@@ -149,7 +149,8 @@ class ProductsNotifier extends ChangeNotifier {
 
   Future<String?> uploadImage(String path, Uint8List bytes) async {
     if (merchant == null) return null;
-    final filePath = 'products/${merchant!.id}/$path';
+    final userId = _db.auth.currentUser!.id;           
+    final filePath = '$userId/$path';
     await _db.storage.from('products').uploadBinary(filePath, bytes,
         fileOptions: const FileOptions(upsert: true));
     return _db.storage.from('products').getPublicUrl(filePath);
