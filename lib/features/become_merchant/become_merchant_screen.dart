@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/toast.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -62,11 +63,19 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
   Future<void> _prefillFromProfile() async {
     final user = _db.auth.currentUser;
     if (user == null) return;
-    final profile = await _db.from('users_profiles')
-        .select('name, phone').eq('id', user.id).maybeSingle();
+    final profile = await _db
+        .from('users_profiles')
+        .select('name, phone, email')
+        .eq('id', user.id)
+        .maybeSingle();
     if (profile != null && mounted) {
-      _name.text = profile['name'] as String? ?? '';
-      _phone.text = profile['phone'] as String? ?? '';
+      // Préremplissage automatique — miroir de useAuth().profile dans le React
+      if ((profile['name'] as String? ?? '').isNotEmpty) {
+        _name.text = profile['name'] as String;
+      }
+      if ((profile['phone'] as String? ?? '').isNotEmpty) {
+        _phone.text = profile['phone'] as String;
+      }
     }
   }
 
@@ -85,37 +94,28 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
     });
   }
 
-  void _snack(String msg, {bool error = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: error ? AppColors.destructive : null,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    ));
-  }
-
   // ── Validation étape 1 ────────────────────────────────────
   void _submitInfo() {
     if (_name.text.trim().isEmpty || _phone.text.trim().isEmpty) {
-      _snack('Renseignez votre nom et numéro', error: true); return;
+      toast.error('Renseignez votre nom et numéro'); return;
     }
     if (_businessName.text.trim().isEmpty) {
-      _snack('Indiquez le nom de votre commerce', error: true); return;
+      toast.error('Indiquez le nom de votre commerce'); return;
     }
     if (_description.text.trim().isEmpty) {
-      _snack('Ajoutez une description', error: true); return;
+      toast.error('Ajoutez une description'); return;
     }
     if (_address.text.trim().isEmpty) {
-      _snack("Indiquez l'adresse du commerce", error: true); return;
+      toast.error("Indiquez l'adresse du commerce"); return;
     }
     setState(() => _step = _Step.terms);
   }
 
   // ── Soumission finale ─────────────────────────────────────
   Future<void> _submitTerms() async {
-    if (!_accepted) { _snack('Vous devez accepter les conditions', error: true); return; }
+    if (!_accepted) { toast.error('Vous devez accepter les conditions'); return; }
     final user = _db.auth.currentUser;
-    if (user == null) { _snack('Connectez-vous', error: true); return; }
+    if (user == null) { toast.error('Connectez-vous'); return; }
 
     setState(() => _submitting = true);
     try {
@@ -134,10 +134,10 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
           'description': _description.text.trim(),
         },
       });
-      _snack('Demande envoyée');
+      toast.success('Demande envoyée');
       setState(() { _step = _Step.pending; _existingPending = true; });
     } catch (e) {
-      _snack(e.toString(), error: true);
+      toast.error(e.toString());
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

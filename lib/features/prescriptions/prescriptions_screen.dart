@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 
@@ -341,7 +342,7 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
         (i['unit_price_xof'] as int? ?? 0) > 0 &&
         (i['qty'] as int? ?? 0) > 0).toList();
     if (cleaned.isEmpty) {
-      _snack('Ajoutez au moins un produit', error: true); return;
+      toast.error('Ajoutez au moins un produit'); return;
     }
     setState(() => _submitting = true);
     try {
@@ -351,7 +352,7 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
           readyMin: int.tryParse(_readyMin.text) ?? 20,
           note: _note.text.trim().isEmpty ? null : _note.text.trim());
       _snack(widget.p.status == 'quoted' ? 'Devis mis à jour' : 'Devis envoyé au client');
-    } catch (e) { _snack('Échec d\'envoi', error: true); }
+    } catch (e) { toast.error('Échec d\'envoi'); }
     finally { if (mounted) setState(() => _submitting = false); }
   }
 

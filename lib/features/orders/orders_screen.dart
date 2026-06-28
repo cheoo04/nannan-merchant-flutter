@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import 'orders_notifier.dart';
@@ -91,18 +92,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
     final err = await _notifier.refuseOrder(orderId);
     if (err != null) {
-      _showSnack(err, error: true);
+      toast.error(err);
     } else {
-      _showSnack('Commande refusée');
+      toast.success('Commande refusée');
     }
   }
 
   Future<void> _handleAccept(String orderId) async {
     final err = await _notifier.acceptOrder(orderId);
     if (err != null) {
-      _showSnack(err, error: true);
+      toast.error(err);
     } else {
-      _showSnack('Commande acceptée');
+      toast.success('Commande acceptée');
     }
   }
 

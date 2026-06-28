@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_colors.dart';
+import 'core/utils/toast.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/orders/orders_screen.dart';
 import 'features/products/products_screen.dart';
@@ -23,9 +24,9 @@ Future<void> main() async {
   ));
 
   await Supabase.initialize(
-    url: 'https://kmnrwcvaoaiktosvduvc.supabase.co',
+    url: 'https://ilhanzanjduogsmfjmwm.supabase.co',
     anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttbnJ3Y3Zhb2Fpa3Rvc3ZkdXZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNDI5NDgsImV4cCI6MjA5MjkxODk0OH0.m7lbgYdkcg4wrlj7yN0nOTn3w3WBYfcWJzK7B9evJq4',
+        'sb_publishable_gUzQnBCgVxn_tFlyK9WT5g_MD1X1cCF',
     realtimeClientOptions: const RealtimeClientOptions(eventsPerSecond: 10),
   );
 
@@ -41,6 +42,7 @@ class NanNanMerchantApp extends StatelessWidget {
       title: 'Nan-Nan — Marchand',
       theme: AppTheme.light(),
       debugShowCheckedModeBanner: false,
+      builder: (context, child) => ToastOverlay(child: child ?? const SizedBox()),
       home: const _AuthGate(),
     );
   }

@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/models/models.dart';
@@ -586,8 +587,8 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
                 onTap: () async {
                   try {
                     await widget.notifier.toggleOpen();
-                    widget.onSnack(m.isOpen ? 'Boutique fermée' : 'Boutique ouverte');
-                  } catch (e) { widget.onSnack(e.toString(), error: true); }
+                    toast.success(m.isOpen ? 'Boutique fermée' : 'Boutique ouverte');
+                  } catch (e) { toast.error(e.toString()); }
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -623,8 +624,8 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
                   onTap: () async {
                     try {
                       await widget.notifier.pauseMerchant(min);
-                      widget.onSnack('Pause $min min');
-                    } catch (e) { widget.onSnack(e.toString(), error: true); }
+                      toast.success('Pause $min min');
+                    } catch (e) { toast.error(e.toString()); }
                   },
                   child: Container(
                     height: 40,
@@ -653,8 +654,8 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
             const SizedBox(height: 8),
             GestureDetector(
               onTap: () async {
-                try { await widget.notifier.resumeMerchant(); widget.onSnack('Pause levée'); }
-                catch (e) { widget.onSnack(e.toString(), error: true); }
+                try { await widget.notifier.resumeMerchant(); toast.success('Pause levée'); }
+                catch (e) { toast.error(e.toString()); }
               },
               child: Container(
                 height: 40, width: double.infinity,
@@ -754,8 +755,8 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
                             closing: _closing,
                           );
                           setState(() => _showSched = false);
-                          widget.onSnack('Horaires enregistrés');
-                        } catch (e) { widget.onSnack(e.toString(), error: true); }
+                          toast.success('Horaires enregistrés');
+                        } catch (e) { toast.error(e.toString()); }
                       },
                       style: ElevatedButton.styleFrom(
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
