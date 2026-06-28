@@ -8,8 +8,8 @@
 ## 🔗 Connexion Supabase (même projet que le web)
 
 ```
-URL      : https://kmnrwcvaoaiktosvduvc.supabase.co
-ANON KEY : eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttbnJ3Y3Zhb2Fpa3Rvc3ZkdXZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNDI5NDgsImV4cCI6MjA5MjkxODk0OH0.m7lbgYdkcg4wrlj7yN0nOTn3w3WBYfcWJzK7B9evJq4
+URL      : https://ilhanzanjduogsmfjmwm.supabase.co
+ANON KEY : sb_publishable_gUzQnBCgVxn_tFlyK9WT5g_MD1X1cCF
 ```
 
 Mettre ces valeurs dans `lib/core/supabase/supabase_config.dart` (jamais dans le code versionné en prod).
