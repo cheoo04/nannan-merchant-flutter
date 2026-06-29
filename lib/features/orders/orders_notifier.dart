@@ -124,7 +124,8 @@ class OrdersNotifier extends ChangeNotifier {
   }
 
   void setCode(String v) {
-    codeInput = v.replaceAll(RegExp(r'\D'), '').substring(0, v.length > 4 ? 4 : v.length);
+    final digits = v.replaceAll(RegExp(r'\D'), '');
+    codeInput = digits.length > 4 ? digits.substring(0, 4) : digits;
     notifyListeners();
   }
 
@@ -136,10 +137,14 @@ class OrdersNotifier extends ChangeNotifier {
       final order = orders.firstWhere((o) => o.id == orderId);
       if (order.acceptCode != codeInput) return 'Code incorrect';
 
-      await _db.from('orders').update({
+      // .eq('status', 'pending') : garde-fou contre un double traitement
+      // (ex: deux onglets ouverts, ou commande déjà traitée entre-temps).
+      final updated = await _db.from('orders').update({
         'status': 'accepted',
         'merchant_confirmed_at': DateTime.now().toIso8601String(),
-      }).eq('id', orderId);
+      }).eq('id', orderId).eq('status', 'pending').select();
+
+      if ((updated as List).isEmpty) return 'Commande déjà traitée';
 
       acceptingOrderId = null;
       codeInput = '';
@@ -156,7 +161,12 @@ class OrdersNotifier extends ChangeNotifier {
     busyOrderId = orderId;
     notifyListeners();
     try {
-      await _db.from('orders').update({'status': 'cancelled'}).eq('id', orderId);
+      final updated = await _db.from('orders')
+          .update({'status': 'cancelled'})
+          .eq('id', orderId)
+          .eq('status', 'pending')
+          .select();
+      if ((updated as List).isEmpty) return 'Commande déjà traitée';
       return null;
     } catch (e) {
       return e.toString();

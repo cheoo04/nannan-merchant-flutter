@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
@@ -520,6 +521,7 @@ class _OrderCardState extends State<_OrderCard> {
                       Expanded(
                         child: TextField(
                           keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                           maxLength: 4,
                           textAlign: TextAlign.center,
                           onChanged: (v) => widget.notifier.setCode(v),
