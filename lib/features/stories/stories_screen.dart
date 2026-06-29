@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
@@ -261,9 +263,32 @@ class _StoriesScreenState extends State<StoriesScreen> {
     final picker = ImagePicker();
     final file = await picker.pickVideo(
       source: ImageSource.gallery,
-      maxDuration: const Duration(seconds: _maxVideoSeconds),
+      // NOTE : maxDuration n'a aucun effet pour ImageSource.gallery (ne
+      // fonctionne que pour la capture caméra). On vérifie la durée
+      // réelle ci-dessous après sélection.
     );
     if (file == null) return;
+
+    final controller = VideoPlayerController.file(File(file.path));
+    Duration? duration;
+    try {
+      await controller.initialize();
+      duration = controller.value.duration;
+    } catch (_) {
+      // Impossible de lire les métadonnées — on laisse passer plutôt que
+      // de bloquer un upload légitime sur une erreur de lecture locale.
+    } finally {
+      await controller.dispose();
+    }
+
+    if (duration != null && duration.inSeconds > _maxVideoSeconds) {
+      _snack(
+        'Vidéo trop longue (${duration.inSeconds}s) — maximum ${_maxVideoSeconds}s (1min30).',
+        error: true,
+      );
+      return;
+    }
+
     final bytes = await file.readAsBytes();
     final ext = file.name.split('.').last.toLowerCase();
     final err = await _n.uploadVideo(bytes, ext.isEmpty ? 'mp4' : ext);
@@ -1092,64 +1117,112 @@ class _ImageLightboxState extends State<_ImageLightbox> {
 }
 
 // ── LIGHTBOX VIDÉO ────────────────────────────────────────────────────────────
-// Note : lecture vidéo native nécessite le package video_player.
-// En attendant, on affiche l'URL et un bouton pour ouvrir dans le navigateur.
-class _VideoLightbox extends StatelessWidget {
+class _VideoLightbox extends StatefulWidget {
   final String videoUrl;
   final VoidCallback onClose;
 
   const _VideoLightbox({required this.videoUrl, required this.onClose});
 
   @override
+  State<_VideoLightbox> createState() => _VideoLightboxState();
+}
+
+class _VideoLightboxState extends State<_VideoLightbox> {
+  VideoPlayerController? _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
+      ..initialize().then((_) {
+        if (!mounted) return;
+        setState(() {});
+        _controller!.play();
+      }).catchError((e) {
+        if (!mounted) return;
+        setState(() => _error = e.toString());
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final c = _controller;
+    final ready = c != null && c.value.isInitialized;
+
     return Positioned.fill(
       child: Material(
         color: Colors.black.withOpacity(0.95),
         child: Stack(
           children: [
             Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.videocam_rounded, color: Colors.white, size: 48),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Aperçu vidéo',
-                    style: TextStyle(color: Colors.white, fontSize: 18,
-                        fontWeight: FontWeight.w700, fontFamily: 'Sora'),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Ajoutez video_player à pubspec.yaml\npour la lecture intégrée.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white60, fontSize: 13),
-                  ),
-                  const SizedBox(height: 24),
-                  // URL copiable
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 24),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white12,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      videoUrl,
-                      style: const TextStyle(color: Colors.white60, fontSize: 10),
-                      textAlign: TextAlign.center,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
+              child: _error != null
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: Colors.white60, size: 40),
+                          const SizedBox(height: 12),
+                          const Text('Impossible de lire cette vidéo',
+                              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    )
+                  : !ready
+                      ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                      : GestureDetector(
+                          onTap: () => setState(() {
+                            c.value.isPlaying ? c.pause() : c.play();
+                          }),
+                          child: AspectRatio(
+                            aspectRatio: c.value.aspectRatio,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                VideoPlayer(c),
+                                if (!c.value.isPlaying)
+                                  Container(
+                                    width: 56, height: 56,
+                                    decoration: BoxDecoration(
+                                      color: Colors.black54,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.play_arrow_rounded,
+                                        color: Colors.white, size: 32),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
             ),
+            // Barre de progression en bas
+            if (ready)
+              Positioned(
+                left: 16, right: 16,
+                bottom: MediaQuery.of(context).padding.bottom + 16,
+                child: VideoProgressIndicator(
+                  c,
+                  allowScrubbing: true,
+                  colors: const VideoProgressColors(
+                    playedColor: Colors.white,
+                    bufferedColor: Colors.white30,
+                    backgroundColor: Colors.white12,
+                  ),
+                ),
+              ),
             // Fermer
             Positioned(
               top: MediaQuery.of(context).padding.top + 8,
               right: 12,
               child: GestureDetector(
-                onTap: onClose,
+                onTap: widget.onClose,
                 child: Container(
                   width: 44, height: 44,
                   decoration: BoxDecoration(

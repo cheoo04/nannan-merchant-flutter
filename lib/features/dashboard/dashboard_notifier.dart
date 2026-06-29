@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/models/models.dart';
@@ -204,6 +206,33 @@ class DashboardNotifier extends ChangeNotifier {
     await _db
         .from('merchants')
         .update({'image_url': imageUrl}).eq('id', merchant!.id);
+  }
+
+  /// Upload réel de la photo de commerce vers le bucket 'merchant-images'.
+  /// Chemin = $userId/... (pas merchant.id) pour respecter la policy
+  /// Storage : (storage.foldername(name))[1] = auth.uid().
+  Future<String?> uploadShopImage(File file) async {
+    if (merchant == null) return null;
+    try {
+      final userId = _db.auth.currentUser!.id;
+      final ext = file.path.split('.').last.toLowerCase();
+      final path = '$userId/cover_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final bytes = await file.readAsBytes();
+
+      await _db.storage.from('merchant-images').uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(upsert: true),
+          );
+
+      final url = _db.storage.from('merchant-images').getPublicUrl(path);
+      await updateImage(url);
+      return url;
+    } catch (e) {
+      error = e.toString();
+      notifyListeners();
+      return null;
+    }
   }
 
   // ── Dispose ───────────────────────────────────────────────

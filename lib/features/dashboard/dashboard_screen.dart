@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
@@ -113,7 +116,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: _ShopImagePicker(
                       imageUrl: merchant.imageUrl,
-                      onUpdate: (url) => _notifier.updateImage(url),
+                      onPick: (file) => _notifier.uploadShopImage(file),
                     ),
                   ),
                 ),
@@ -855,21 +858,48 @@ class _RegisterMerchantCard extends StatelessWidget {
 }
 
 /// Sélecteur de photo du commerce
-class _ShopImagePicker extends StatelessWidget {
+class _ShopImagePicker extends StatefulWidget {
   final String? imageUrl;
-  final ValueChanged<String?> onUpdate;
+  final Future<String?> Function(File file) onPick;
 
-  const _ShopImagePicker({this.imageUrl, required this.onUpdate});
+  const _ShopImagePicker({this.imageUrl, required this.onPick});
+
+  @override
+  State<_ShopImagePicker> createState() => _ShopImagePickerState();
+}
+
+class _ShopImagePickerState extends State<_ShopImagePicker> {
+  bool _uploading = false;
+
+  Future<void> _handleTap() async {
+    if (_uploading) return;
+    final picker = ImagePicker();
+    final file = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1280,
+    );
+    if (file == null) return;
+
+    setState(() => _uploading = true);
+    final url = await widget.onPick(File(file.path));
+    if (mounted) setState(() => _uploading = false);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(url != null ? 'Photo mise à jour' : "Échec de l'envoi de la photo"),
+      ));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final imageUrl = widget.imageUrl;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
-          onTap: () {
-            // TODO: ouvrir image_picker et uploader dans Supabase Storage
-          },
+          onTap: _handleTap,
           child: Container(
             height: 120,
             width: double.infinity,
@@ -879,32 +909,39 @@ class _ShopImagePicker extends StatelessWidget {
               border: Border.all(color: AppColors.border, width: 0.5),
               image: imageUrl != null
                   ? DecorationImage(
-                      image: CachedNetworkImageProvider(imageUrl!),
+                      image: CachedNetworkImageProvider(imageUrl),
                       fit: BoxFit.cover,
                     )
                   : null,
             ),
-            child: imageUrl == null
-                ? const Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.add_photo_alternate_rounded,
-                        color: AppColors.mutedForeground,
-                        size: 28,
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Photo de mon commerce',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.mutedForeground,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+            child: _uploading
+                ? const Center(
+                    child: SizedBox(
+                      width: 22, height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   )
-                : null,
+                : imageUrl == null
+                    ? const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.add_photo_alternate_rounded,
+                            color: AppColors.mutedForeground,
+                            size: 28,
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Photo de mon commerce',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.mutedForeground,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      )
+                    : null,
           ),
         ),
         const SizedBox(height: 4),
