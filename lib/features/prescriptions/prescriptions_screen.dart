@@ -504,8 +504,10 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
 
                     // Lignes médicaments
                     ...List.generate(_items.length, (idx) => Padding(
+                      key: ValueKey('quote_item_$idx'),
                       padding: const EdgeInsets.only(bottom: 8),
                       child: _QuoteItemRow(
+                        key: ValueKey('quote_item_field_$idx'),
                         item: _items[idx],
                         onChanged: (updated) => setState(() => _items[idx] = updated),
                         onDelete: () => setState(() => _items.removeAt(idx)),
@@ -619,15 +621,45 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
 }
 
 // ── PETITS WIDGETS ────────────────────────────────────────────────────────────
-class _QuoteItemRow extends StatelessWidget {
+class _QuoteItemRow extends StatefulWidget {
   final Map<String, dynamic> item;
   final ValueChanged<Map<String, dynamic>> onChanged;
   final VoidCallback onDelete;
 
-  const _QuoteItemRow({required this.item, required this.onChanged, required this.onDelete});
+  const _QuoteItemRow({
+    super.key,
+    required this.item,
+    required this.onChanged,
+    required this.onDelete,
+  });
+
+  @override
+  State<_QuoteItemRow> createState() => _QuoteItemRowState();
+}
+
+class _QuoteItemRowState extends State<_QuoteItemRow> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _priceCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    // Créés UNE SEULE FOIS ici — plus jamais recréés pendant la frappe.
+    _nameCtrl = TextEditingController(text: widget.item['name'] as String? ?? '');
+    final price = widget.item['unit_price_xof'] as int? ?? 0;
+    _priceCtrl = TextEditingController(text: price != 0 ? '$price' : '');
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _priceCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final item = widget.item;
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -639,8 +671,8 @@ class _QuoteItemRow extends StatelessWidget {
           // Nom médicament
           Expanded(
             child: TextField(
-              controller: TextEditingController(text: item['name'] as String? ?? ''),
-              onChanged: (v) => onChanged({...item, 'name': v}),
+              controller: _nameCtrl,
+              onChanged: (v) => widget.onChanged({...item, 'name': v}),
               decoration: const InputDecoration(
                 hintText: 'Nom du médicament',
                 contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -655,7 +687,7 @@ class _QuoteItemRow extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               GestureDetector(
-                onTap: () => onChanged({
+                onTap: () => widget.onChanged({
                   ...item,
                   'qty': ((item['qty'] as int? ?? 1) - 1).clamp(1, 99),
                 }),
@@ -675,7 +707,7 @@ class _QuoteItemRow extends StatelessWidget {
                 ),
               ),
               GestureDetector(
-                onTap: () => onChanged({...item, 'qty': (item['qty'] as int? ?? 1) + 1}),
+                onTap: () => widget.onChanged({...item, 'qty': (item['qty'] as int? ?? 1) + 1}),
                 child: Container(
                   width: 28, height: 28,
                   decoration: BoxDecoration(color: AppColors.primary,
@@ -690,9 +722,8 @@ class _QuoteItemRow extends StatelessWidget {
           SizedBox(
             width: 72,
             child: TextField(
-              controller: TextEditingController(
-                  text: item['unit_price_xof'] != 0 ? '${item['unit_price_xof']}' : ''),
-              onChanged: (v) => onChanged({...item, 'unit_price_xof': int.tryParse(v) ?? 0}),
+              controller: _priceCtrl,
+              onChanged: (v) => widget.onChanged({...item, 'unit_price_xof': int.tryParse(v) ?? 0}),
               keyboardType: TextInputType.number,
               textAlign: TextAlign.right,
               decoration: const InputDecoration(
@@ -706,7 +737,7 @@ class _QuoteItemRow extends StatelessWidget {
           const SizedBox(width: 6),
           // Supprimer
           GestureDetector(
-            onTap: onDelete,
+            onTap: widget.onDelete,
             child: const Icon(Icons.delete_rounded, size: 16, color: AppColors.destructive),
           ),
         ],
