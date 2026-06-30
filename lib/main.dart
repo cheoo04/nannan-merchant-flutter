@@ -165,8 +165,6 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
-          unreadCount: 0 /* notif mise de côté */,
-          onGoToNotifications: _openNotifications,
         ),
 
         // 2 — Produits
@@ -174,8 +172,6 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
-          unreadCount: 0 /* notif mise de côté */,
-          onGoToNotifications: _openNotifications,
         ),
 
         // 3 — Stories / Publications
@@ -183,16 +179,12 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
-          unreadCount: 0 /* notif mise de côté */,
-          onGoToNotifications: _openNotifications,
         ),
 
         // 4 — Ordonnances
         PrescriptionsScreen(
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
-          unreadCount: 0 /* notif mise de côté */,
-          onGoToNotifications: _openNotifications,
         ),
 
         // 5 — Finances
@@ -200,8 +192,6 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
-          unreadCount: 0 /* notif mise de côté */,
-          onGoToNotifications: _openNotifications,
         ),
       ],
     );
