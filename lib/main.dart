@@ -13,6 +13,8 @@ import 'features/finances/finance_screen.dart';
 import 'features/prescriptions/prescriptions_screen.dart';
 import 'features/stories/stories_screen.dart';
 import 'features/become_merchant/become_merchant_screen.dart';
+import 'features/notifications/notifications_notifier.dart';
+import 'features/notifications/notifications_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -72,12 +74,18 @@ class _AuthGateState extends State<_AuthGate> {
   Future<void> _check() async {
     final session = Supabase.instance.client.auth.currentSession;
     if (session != null) {
-      final profile = await Supabase.instance.client
-          .from('users_profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .maybeSingle();
-      _isMerchant = profile?['role'] == 'merchant';
+      try {
+        final profile = await Supabase.instance.client
+            .from('users_profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .maybeSingle();
+        _isMerchant = profile?['role'] == 'merchant';
+      } catch (e) {
+        // Erreur réseau/serveur au démarrage : ne jamais rester bloqué sur
+        // le spinner — on renvoie vers Login où l'utilisateur peut réessayer.
+        _isMerchant = false;
+      }
     }
     if (mounted) setState(() => _checking = false);
   }
@@ -118,6 +126,33 @@ class MerchantShell extends StatefulWidget {
 class _MerchantShellState extends State<MerchantShell> {
   int _index = 0;
   bool _showBecomeMerchant = false;
+  late final NotificationsNotifier _notifNotifier = NotificationsNotifier();
+
+  @override
+  void initState() {
+    super.initState();
+    // Une seule souscription pour toute l'app — le badge de la cloche
+    // (sur les 6 écrans) se met à jour automatiquement.
+    _notifNotifier.addListener(_onNotifUpdate);
+  }
+
+  @override
+  void dispose() {
+    _notifNotifier.removeListener(_onNotifUpdate);
+    _notifNotifier.dispose();
+    super.dispose();
+  }
+
+  void _onNotifUpdate() => setState(() {});
+
+  void _openNotifications() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => NotificationsScreen(
+        notifier: _notifNotifier,
+        onGoToOrders: () => setState(() => _index = 1),
+      ),
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -137,9 +172,8 @@ class _MerchantShellState extends State<MerchantShell> {
           onGoToOrders: () => setState(() => _index = 1),
           onGoToProducts: () => setState(() => _index = 2),
           onGoToFinance: () => setState(() => _index = 5),
-          onGoToNotifications: () {
-            // TODO : ouvrir le centre de notifications
-          },
+          unreadCount: _notifNotifier.unreadCount,
+          onGoToNotifications: _openNotifications,
           onGoToBecomesMerchant: () => setState(() => _showBecomeMerchant = true),
         ),
 
@@ -148,6 +182,8 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
+          unreadCount: _notifNotifier.unreadCount,
+          onGoToNotifications: _openNotifications,
         ),
 
         // 2 — Produits
@@ -155,6 +191,8 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
+          unreadCount: _notifNotifier.unreadCount,
+          onGoToNotifications: _openNotifications,
         ),
 
         // 3 — Stories / Publications
@@ -162,12 +200,16 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
+          unreadCount: _notifNotifier.unreadCount,
+          onGoToNotifications: _openNotifications,
         ),
 
         // 4 — Ordonnances
         PrescriptionsScreen(
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
+          unreadCount: _notifNotifier.unreadCount,
+          onGoToNotifications: _openNotifications,
         ),
 
         // 5 — Finances
@@ -175,6 +217,8 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
+          unreadCount: _notifNotifier.unreadCount,
+          onGoToNotifications: _openNotifications,
         ),
       ],
     );
@@ -227,8 +271,11 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(builder: (_) => const MerchantShell()),
         );
       }
-    } catch (e) {
+    } on AuthException catch (_) {
       setState(() => _error = 'Email ou mot de passe incorrect.');
+    } catch (e) {
+      setState(() => _error =
+          'Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }

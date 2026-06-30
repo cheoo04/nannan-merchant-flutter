@@ -191,3 +191,39 @@ class OrderModel {
             : null,
       );
 }
+
+// ── NotificationRow ───────────────────────────────────────────────────────────
+class NotificationRow {
+  final String id;
+  final String userId;
+  final String type; // order | delivery | payment | system
+  final String title;
+  final String? body;
+  final String? orderId;
+  final DateTime? readAt;
+  final DateTime createdAt;
+
+  const NotificationRow({
+    required this.id,
+    required this.userId,
+    required this.type,
+    required this.title,
+    this.body,
+    this.orderId,
+    this.readAt,
+    required this.createdAt,
+  });
+
+  bool get isUnread => readAt == null;
+
+  factory NotificationRow.fromJson(Map<String, dynamic> j) => NotificationRow(
+        id: j['id'] as String,
+        userId: j['user_id'] as String,
+        type: j['type'] as String? ?? 'system',
+        title: j['title'] as String? ?? '',
+        body: j['body'] as String?,
+        orderId: j['order_id'] as String?,
+        readAt: j['read_at'] != null ? DateTime.parse(j['read_at'] as String) : null,
+        createdAt: DateTime.parse(j['created_at'] as String),
+      );
+}

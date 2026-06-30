@@ -11,6 +11,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
+import '../../shared/widgets/notification_bell_button.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -205,12 +206,16 @@ class StoriesScreen extends StatefulWidget {
   final int currentNavIndex;
   final ValueChanged<int> onNavTap;
   final VoidCallback onGoToDashboard;
+  final int unreadCount;
+  final VoidCallback? onGoToNotifications;
 
   const StoriesScreen({
     super.key,
     required this.currentNavIndex,
     required this.onNavTap,
     required this.onGoToDashboard,
+    this.unreadCount = 0,
+    this.onGoToNotifications,
   });
 
   @override
@@ -366,6 +371,8 @@ class _StoriesScreenState extends State<StoriesScreen> {
                   imageCount: imgCount,
                   maxImages: maxImg,
                   hasVideo: hasVideo,
+                  unreadCount: widget.unreadCount,
+                  onNotifications: widget.onGoToNotifications,
                 ),
               ),
 
@@ -567,10 +574,13 @@ class _StoriesHeader extends StatelessWidget {
   final int imageCount;
   final int maxImages;
   final bool hasVideo;
+  final int unreadCount;
+  final VoidCallback? onNotifications;
 
   const _StoriesHeader({
     required this.topPadding, required this.onBack,
     required this.imageCount, required this.maxImages, required this.hasVideo,
+    this.unreadCount = 0, this.onNotifications,
   });
 
   @override
@@ -600,9 +610,17 @@ class _StoriesHeader extends StatelessWidget {
                   child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
                 ),
               ),
-              const Text('Espace Marchand',
-                  style: TextStyle(color: Colors.white, fontSize: 12,
-                      fontWeight: FontWeight.w500)),
+              Row(
+                children: [
+                  const Text('Espace Marchand',
+                      style: TextStyle(color: Colors.white, fontSize: 12,
+                          fontWeight: FontWeight.w500)),
+                  if (onNotifications != null) ...[
+                    const SizedBox(width: 10),
+                    NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications!),
+                  ],
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 12),

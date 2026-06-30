@@ -4,17 +4,22 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
+import '../../shared/widgets/notification_bell_button.dart';
 import 'orders_notifier.dart';
 import '../../shared/models/models.dart';
 
 class OrdersScreen extends StatefulWidget {
   final VoidCallback onGoToDashboard;
+  final int unreadCount;
+  final VoidCallback? onGoToNotifications;
   final int currentNavIndex;
   final ValueChanged<int> onNavTap;
 
   const OrdersScreen({
     super.key,
     required this.onGoToDashboard,
+    this.unreadCount = 0,
+    this.onGoToNotifications,
     required this.currentNavIndex,
     required this.onNavTap,
   });
@@ -120,6 +125,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
           _OrdersHeader(
             topPadding: top,
             onBack: widget.onGoToDashboard,
+            unreadCount: widget.unreadCount,
+            onNotifications: widget.onGoToNotifications,
           ),
 
           // ── ONGLETS ─────────────────────────────────────
@@ -244,8 +251,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
 class _OrdersHeader extends StatelessWidget {
   final double topPadding;
   final VoidCallback onBack;
+  final int unreadCount;
+  final VoidCallback? onNotifications;
 
-  const _OrdersHeader({required this.topPadding, required this.onBack});
+  const _OrdersHeader({
+    required this.topPadding,
+    required this.onBack,
+    this.unreadCount = 0,
+    this.onNotifications,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -276,9 +290,20 @@ class _OrdersHeader extends StatelessWidget {
                   child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
                 ),
               ),
-              const Text(
-                'Temps réel',
-                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+              Row(
+                children: [
+                  const Text(
+                    'Temps réel',
+                    style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                  if (onNotifications != null) ...[
+                    const SizedBox(width: 10),
+                    NotificationBellButton(
+                      unreadCount: unreadCount,
+                      onTap: onNotifications!,
+                    ),
+                  ],
+                ],
               ),
             ],
           ),

@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
+import '../../shared/widgets/notification_bell_button.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -130,9 +131,12 @@ class PrescriptionsNotifier extends ChangeNotifier {
 class PrescriptionsScreen extends StatefulWidget {
   final int currentNavIndex;
   final ValueChanged<int> onNavTap;
+  final int unreadCount;
+  final VoidCallback? onGoToNotifications;
 
   const PrescriptionsScreen({
     super.key, required this.currentNavIndex, required this.onNavTap,
+    this.unreadCount = 0, this.onGoToNotifications,
   });
 
   @override
@@ -176,15 +180,29 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(20, top + 24, 20, 8),
-              child: Column(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Ordonnances',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700,
-                          fontFamily: 'Sora', color: AppColors.foreground)),
-                  const SizedBox(height: 4),
-                  const Text('Espace pharmacien — chiffrez les demandes reçues.',
-                      style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Ordonnances',
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700,
+                                fontFamily: 'Sora', color: AppColors.foreground)),
+                        const SizedBox(height: 4),
+                        const Text('Espace pharmacien — chiffrez les demandes reçues.',
+                            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                      ],
+                    ),
+                  ),
+                  if (widget.onGoToNotifications != null)
+                    NotificationBellButton(
+                      unreadCount: widget.unreadCount,
+                      onTap: widget.onGoToNotifications!,
+                      iconColor: AppColors.foreground,
+                      backgroundColor: AppColors.secondary,
+                    ),
                 ],
               ),
             ),

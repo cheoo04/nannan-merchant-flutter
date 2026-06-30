@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
+import '../../shared/widgets/notification_bell_button.dart';
 import '../../shared/models/models.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
@@ -84,12 +85,16 @@ class FinanceScreen extends StatefulWidget {
   final VoidCallback onGoToDashboard;
   final int currentNavIndex;
   final ValueChanged<int> onNavTap;
+  final int unreadCount;
+  final VoidCallback? onGoToNotifications;
 
   const FinanceScreen({
     super.key,
     required this.onGoToDashboard,
     required this.currentNavIndex,
     required this.onNavTap,
+    this.unreadCount = 0,
+    this.onGoToNotifications,
   });
 
   @override
@@ -125,6 +130,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
               totalSales: _n.totalSales,
               totalOrders: _n.totalOrders,
               netRevenue: _n.netRevenue,
+              unreadCount: widget.unreadCount,
+              onNotifications: widget.onGoToNotifications,
             ),
           ),
 
@@ -373,10 +380,13 @@ class _FinanceHeader extends StatelessWidget {
   final int totalSales;
   final int totalOrders;
   final int netRevenue;
+  final int unreadCount;
+  final VoidCallback? onNotifications;
 
   const _FinanceHeader({
     required this.topPadding, required this.onBack,
     required this.totalSales, required this.totalOrders, required this.netRevenue,
+    this.unreadCount = 0, this.onNotifications,
   });
 
   @override
@@ -404,8 +414,16 @@ class _FinanceHeader extends StatelessWidget {
                   child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
                 ),
               ),
-              const Text('Données temps réel',
-                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500)),
+              Row(
+                children: [
+                  const Text('Données temps réel',
+                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500)),
+                  if (onNotifications != null) ...[
+                    const SizedBox(width: 10),
+                    NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications!),
+                  ],
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -481,6 +499,14 @@ class _SalesBarChart extends StatelessWidget {
 
   const _SalesBarChart({required this.data});
 
+  // Format compact pour l'axe Y (ex: 12000 -> "12k") — recharts affiche les
+  // valeurs brutes de l'axe sans formatXOF, on reste lisible sur peu d'espace.
+  static String _compactXOF(double v) {
+    if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
+    if (v >= 1000) return '${(v / 1000).round()}k';
+    return v.round().toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     return BarChart(
@@ -494,7 +520,16 @@ class _SalesBarChart extends StatelessWidget {
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
-          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 38,
+              getTitlesWidget: (v, _) => Text(
+                _compactXOF(v),
+                style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground),
+              ),
+            ),
+          ),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           bottomTitles: AxisTitles(

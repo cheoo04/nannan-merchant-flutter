@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
+import '../../shared/widgets/notification_bell_button.dart';
 import '../../shared/models/models.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
@@ -59,21 +60,33 @@ class ProductsNotifier extends ChangeNotifier {
   bool loadingProducts = true;
   String query = '';
   RealtimeChannel? _channel;
+  RealtimeChannel? _merchantChannel;
+  String? _userId;
 
   ProductsNotifier() { _init(); }
 
   Future<void> _init() async {
     final user = _db.auth.currentUser;
     if (user == null) { loadingMerchant = false; notifyListeners(); return; }
+    _userId = user.id;
 
-    final m = await _db.from('merchants').select().eq('owner_id', user.id).maybeSingle();
+    await _loadMerchant();
+    _subscribeMerchant();
+  }
+
+  Future<void> _loadMerchant() async {
+    if (_userId == null) return;
+    final m = await _db.from('merchants').select().eq('owner_id', _userId!).maybeSingle();
     if (m == null) { loadingMerchant = false; notifyListeners(); return; }
+    final wasNull = merchant == null;
     merchant = MerchantModel.fromJson(m);
     loadingMerchant = false;
     notifyListeners();
 
-    await _loadProducts();
-    _subscribe();
+    if (wasNull) {
+      await _loadProducts();
+      _subscribeProducts();
+    }
   }
 
   Future<void> _loadProducts() async {
@@ -88,7 +101,28 @@ class ProductsNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _subscribe() {
+  // Réplique exactement useMyMerchant() (merchant-availability.ts) : une
+  // souscription realtime sur merchants filtrée par owner_id, présente sur
+  // chaque écran qui affiche le statut ouvert/fermé — pas seulement Dashboard.
+  void _subscribeMerchant() {
+    if (_userId == null) return;
+    _merchantChannel = _db
+        .channel('my-merchant-$_userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'merchants',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'owner_id',
+            value: _userId,
+          ),
+          callback: (_) => _loadMerchant(),
+        )
+        .subscribe();
+  }
+
+  void _subscribeProducts() {
     _channel = _db.channel('products-${merchant!.id}')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
@@ -149,7 +183,7 @@ class ProductsNotifier extends ChangeNotifier {
 
   Future<String?> uploadImage(String path, Uint8List bytes) async {
     if (merchant == null) return null;
-    final userId = _db.auth.currentUser!.id;           
+    final userId = _db.auth.currentUser!.id;
     final filePath = '$userId/$path';
     await _db.storage.from('products').uploadBinary(filePath, bytes,
         fileOptions: const FileOptions(upsert: true));
@@ -191,6 +225,7 @@ class ProductsNotifier extends ChangeNotifier {
   @override
   void dispose() {
     if (_channel != null) _db.removeChannel(_channel!);
+    if (_merchantChannel != null) _db.removeChannel(_merchantChannel!);
     super.dispose();
   }
 }
@@ -200,12 +235,16 @@ class ProductsScreen extends StatefulWidget {
   final int currentNavIndex;
   final ValueChanged<int> onNavTap;
   final VoidCallback onGoToDashboard;
+  final int unreadCount;
+  final VoidCallback? onGoToNotifications;
 
   const ProductsScreen({
     super.key,
     required this.currentNavIndex,
     required this.onNavTap,
     required this.onGoToDashboard,
+    this.unreadCount = 0,
+    this.onGoToNotifications,
   });
 
   @override
@@ -272,7 +311,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
           CustomScrollView(
             slivers: [
               // ── HEADER ────────────────────────────────────
-              SliverToBoxAdapter(child: _ProductsHeader(topPadding: top, notifier: _n, onBack: widget.onGoToDashboard)),
+              SliverToBoxAdapter(child: _ProductsHeader(
+                topPadding: top, notifier: _n, onBack: widget.onGoToDashboard,
+                unreadCount: widget.unreadCount, onNotifications: widget.onGoToNotifications,
+              )),
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
               // ── STATUT BOUTIQUE ───────────────────────────
@@ -430,8 +472,16 @@ class _ProductsHeader extends StatelessWidget {
   final double topPadding;
   final ProductsNotifier notifier;
   final VoidCallback onBack;
+  final int unreadCount;
+  final VoidCallback? onNotifications;
 
-  const _ProductsHeader({required this.topPadding, required this.notifier, required this.onBack});
+  const _ProductsHeader({
+    required this.topPadding,
+    required this.notifier,
+    required this.onBack,
+    this.unreadCount = 0,
+    this.onNotifications,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -458,9 +508,17 @@ class _ProductsHeader extends StatelessWidget {
                   child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
                 ),
               ),
-              Text(
-                notifier.merchant?.name ?? '—',
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+              Row(
+                children: [
+                  Text(
+                    notifier.merchant?.name ?? '—',
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                  if (onNotifications != null) ...[
+                    const SizedBox(width: 10),
+                    NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications!),
+                  ],
+                ],
               ),
             ],
           ),
@@ -486,6 +544,7 @@ class _ProductsHeader extends StatelessWidget {
                 Expanded(
                   child: TextField(
                     onChanged: notifier.setQuery,
+                    autofillHints: const [],
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                     decoration: const InputDecoration(
                       hintText: 'Rechercher un produit...',
@@ -816,7 +875,11 @@ class _ProductRow extends StatelessWidget {
                       width: 64, height: 64,
                       color: AppColors.secondary,
                       alignment: Alignment.center,
-                      child: Text(p.name.substring(0, 2).toUpperCase(),
+                      child: Text(
+                          p.name.trim().isEmpty
+                              ? '?'
+                              : p.name.trim().substring(
+                                  0, p.name.trim().length >= 2 ? 2 : 1).toUpperCase(),
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
                               color: AppColors.mutedForeground)),
                     ),

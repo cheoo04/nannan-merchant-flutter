@@ -7,6 +7,8 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
+import '../../shared/widgets/city_switcher_chip.dart';
+import '../../shared/widgets/notification_bell_button.dart';
 import 'dashboard_notifier.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -15,6 +17,7 @@ class DashboardScreen extends StatefulWidget {
   final VoidCallback onGoToProducts;
   final VoidCallback onGoToFinance;
   final VoidCallback onGoToNotifications;
+  final int unreadCount;
   final VoidCallback onGoToBecomesMerchant;
   final int currentNavIndex;
   final ValueChanged<int> onNavTap;
@@ -25,6 +28,7 @@ class DashboardScreen extends StatefulWidget {
     required this.onGoToProducts,
     required this.onGoToFinance,
     required this.onGoToNotifications,
+    this.unreadCount = 0,
     required this.onGoToBecomesMerchant,
     required this.currentNavIndex,
     required this.onNavTap,
@@ -98,6 +102,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   isOpen: isOpen,
                   statusLabel: statusLabel,
                   pendingCount: _notifier.pendingCount,
+                  unreadCount: widget.unreadCount,
+                  cityCode: merchant?.cityCode ?? 'oume',
                   revenueDay: _notifier.revenueDay,
                   totalCount: _notifier.totalCount,
                   pendingCountKpi: _notifier.pendingCount,
@@ -280,6 +286,8 @@ class _GradientHeader extends StatelessWidget {
   final bool isOpen;
   final String statusLabel;
   final int pendingCount;
+  final int unreadCount;
+  final String cityCode;
   final int revenueDay;
   final int totalCount;
   final int pendingCountKpi;
@@ -293,6 +301,8 @@ class _GradientHeader extends StatelessWidget {
     required this.isOpen,
     required this.statusLabel,
     required this.pendingCount,
+    required this.unreadCount,
+    required this.cityCode,
     required this.revenueDay,
     required this.totalCount,
     required this.pendingCountKpi,
@@ -315,7 +325,7 @@ class _GradientHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row : retour + notifications
+          // Top row : retour + ville + notifications
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -327,32 +337,9 @@ class _GradientHeader extends StatelessWidget {
               ),
               Row(
                 children: [
-                  // TODO: CitySwitcher — ville active
+                  CitySwitcherChip(cityCode: cityCode),
                   const SizedBox(width: 8),
-                  // Notifications
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      _HeaderIconButton(
-                        icon: Icons.notifications_rounded,
-                        semanticLabel: 'Notifications',
-                        onTap: onNotifications,
-                      ),
-                      if (pendingCount > 0)
-                        Positioned(
-                          right: 6,
-                          top: 6,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: AppColors.warm,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                  NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications),
                 ],
               ),
             ],
