@@ -1,13 +1,68 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/models.dart';
 import 'notifications_notifier.dart';
 
+// Port fidèle de _app.notifications.tsx (React).
+// Placé dans _set_aside/ car FE-14 est côté Client, pas Marchand.
+// À déplacer dans lib/features/notifications/ quand la partie Client
+// sera construite.
+
+// Équivalent de ICONS (React)
+({IconData icon, Color color, Color bg}) _iconForType(String type) {
+  switch (type) {
+    case 'order':
+      return (
+        icon: Icons.shopping_bag_rounded,
+        color: AppColors.primary,
+        bg: AppColors.primarySoft,
+      );
+    case 'delivery':
+      return (
+        icon: Icons.two_wheeler_rounded,
+        color: AppColors.warm,
+        bg: AppColors.warm.withOpacity(0.2),
+      );
+    case 'payment':
+      return (
+        icon: Icons.credit_card_rounded,
+        color: const Color(0xFF047857), // emerald-700
+        bg: const Color(0xFFD1FAE5),    // emerald-100
+      );
+    default:
+      return (
+        icon: Icons.shield_rounded,
+        color: const Color(0xFF1D4ED8), // blue-700
+        bg: const Color(0xFFDBEAFE),    // blue-100
+      );
+  }
+}
+
+// Équivalent de LABELS (React)
+String _labelForType(String type) {
+  switch (type) {
+    case 'order':    return 'Commande';
+    case 'delivery': return 'Livraison';
+    case 'payment':  return 'Paiement';
+    default:         return 'Système';
+  }
+}
+
+// Port exact de timeAgo() React (mêmes seuils, mêmes libellés)
+String _timeAgo(DateTime createdAt) {
+  final diff = DateTime.now().difference(createdAt);
+  final m = diff.inMinutes;
+  if (m < 1)  return "à l'instant";
+  if (m < 60) return 'il y a $m min';
+  final h = diff.inHours;
+  if (h < 24) return 'il y a $h h';
+  return 'il y a ${diff.inDays} j';
+}
+
 class NotificationsScreen extends StatefulWidget {
   final NotificationsNotifier notifier;
-  final VoidCallback onGoToOrders;
+  final VoidCallback onGoToOrders; // navigate({ to: "/orders" })
 
   const NotificationsScreen({
     super.key,
@@ -36,118 +91,144 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   void _onUpdate() => setState(() {});
 
-  Future<void> _handleTap(NotificationRow n) async {
-    await _n.markAsRead(n.id);
+  void _handleTap(NotificationRow n) {
+    if (n.isUnread) _n.markAsRead(n.id);
     if (n.orderId != null) {
-      if (mounted) Navigator.of(context).pop();
+      Navigator.of(context).maybePop();
       widget.onGoToOrders();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final items = _n.filtered;
+    final items  = _n.filtered;
+    final unread = _n.unreadCount;
+    final all    = _n.notifications;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Column(
-          children: [
-            // ── Header ─────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Row(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 32, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+
+              // ── Header row (= ligne bouton retour + titre + CheckCheck) ──
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Bouton retour — bg-card shadow-card, 40×40 (h-10 w-10)
                   GestureDetector(
                     onTap: () => Navigator.of(context).maybePop(),
                     child: Container(
                       width: 40, height: 40,
                       decoration: BoxDecoration(
-                        color: AppColors.secondary,
-                        borderRadius: BorderRadius.circular(20),
+                        color: AppColors.card,
+                        shape: BoxShape.circle,
+                        boxShadow: const [
+                          BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 2)),
+                        ],
                       ),
                       child: const Icon(Icons.arrow_back_rounded, size: 20),
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text('Notifications',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, fontFamily: 'Sora')),
-                  ),
-                  if (_n.unreadCount > 0)
-                    TextButton(
-                      onPressed: () => _n.markAllAsRead(),
-                      child: const Text('Tout marquer comme lu', style: TextStyle(fontSize: 12)),
-                    ),
-                ],
-              ),
-            ),
-
-            // ── Filtres ────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  _FilterChip(
-                    label: 'Toutes',
-                    selected: _n.filter == NotificationFilter.all,
-                    onTap: () => _n.setFilter(NotificationFilter.all),
-                  ),
-                  const SizedBox(width: 8),
-                  _FilterChip(
-                    label: _n.unreadCount > 0 ? 'Non lues (${_n.unreadCount})' : 'Non lues',
-                    selected: _n.filter == NotificationFilter.unread,
-                    onTap: () => _n.setFilter(NotificationFilter.unread),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // ── Liste ──────────────────────────────────────────
-            Expanded(
-              child: _n.loading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                  : items.isEmpty
-                      ? _EmptyState(unreadOnly: _n.filter == NotificationFilter.unread)
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                          itemCount: items.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
-                          itemBuilder: (context, i) => _NotificationTile(
-                            notification: items[i],
-                            onTap: () => _handleTap(items[i]),
-                          ),
+                  // Titre + sous-titre (unread count ou "Tout est à jour ✨")
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Notifications',
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, fontFamily: 'Sora')),
+                        Text(
+                          unread > 0
+                              ? '$unread non lue${unread > 1 ? "s" : ""}'
+                              : 'Tout est à jour ✨',
+                          style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground),
                         ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+                      ],
+                    ),
+                  ),
+                  // Bouton CheckCheck — désactivé si unread == 0
+                  GestureDetector(
+                    onTap: unread > 0 ? () => _n.markAllAsRead() : null,
+                    child: Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        shape: BoxShape.circle,
+                        boxShadow: const [
+                          BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 2)),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.done_all_rounded, // = CheckCheck
+                        size: 20,
+                        color: unread > 0 ? AppColors.primary : AppColors.mutedForeground.withOpacity(0.4),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
 
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _FilterChip({required this.label, required this.selected, required this.onTap});
+              // ── Filtres pleine largeur en grid-cols-2 (= React) ──────────
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: AppColors.secondary,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  children: [
+                    _FilterTab(
+                      // "Toutes · 5"
+                      label: 'Toutes · ${all.length}',
+                      selected: _n.filter == NotificationFilter.all,
+                      onTap: () => _n.setFilter(NotificationFilter.all),
+                    ),
+                    _FilterTab(
+                      // "Non lues · 2"
+                      label: 'Non lues · $unread',
+                      selected: _n.filter == NotificationFilter.unread,
+                      onTap: () => _n.setFilter(NotificationFilter.unread),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
 
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.primary : AppColors.secondary,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12, fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : AppColors.mutedForeground,
+              // ── Liste ────────────────────────────────────────────────────
+              Expanded(
+                child: _n.loading
+                    ? Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: AppColors.card.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Text('Chargement…',
+                              style: TextStyle(fontSize: 14, color: AppColors.mutedForeground)),
+                        ),
+                      )
+                    : items.isEmpty
+                        ? _EmptyState(
+                            unreadOnly: _n.filter == NotificationFilter.unread,
+                            onBack: () => Navigator.of(context).maybePop(),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.only(bottom: 120),
+                            itemCount: items.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 8),
+                            itemBuilder: (context, i) => _NotificationTile(
+                              n: items[i],
+                              onTap: () => _handleTap(items[i]),
+                            ),
+                          ),
+              ),
+            ],
           ),
         ),
       ),
@@ -155,87 +236,125 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _NotificationTile extends StatelessWidget {
-  final NotificationRow notification;
+// ── _FilterTab : pleine largeur dans un Row, actif = bg-card shadow ──────────
+class _FilterTab extends StatelessWidget {
+  final String label;
+  final bool selected;
   final VoidCallback onTap;
-  const _NotificationTile({required this.notification, required this.onTap});
-
-  ({IconData icon, Color color}) get _iconForType {
-    switch (notification.type) {
-      case 'order':
-        return (icon: Icons.shopping_bag_rounded, color: AppColors.primary);
-      case 'delivery':
-        return (icon: Icons.two_wheeler_rounded, color: AppColors.warm);
-      case 'payment':
-        return (icon: Icons.credit_card_rounded, color: AppColors.success);
-      default:
-        return (icon: Icons.shield_rounded, color: AppColors.mutedForeground);
-    }
-  }
-
-  String get _timeAgo {
-    final diff = DateTime.now().difference(notification.createdAt);
-    if (diff.inMinutes < 1) return 'À l\'instant';
-    if (diff.inMinutes < 60) return 'Il y a ${diff.inMinutes} min';
-    if (diff.inHours < 24) return 'Il y a ${diff.inHours} h';
-    if (diff.inDays < 7) return 'Il y a ${diff.inDays} j';
-    return DateFormat('dd/MM/yyyy').format(notification.createdAt);
-  }
+  const _FilterTab({required this.label, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final style = _iconForType;
-    final unread = notification.isUnread;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.card : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: selected
+                ? const [BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 2))]
+                : null,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: selected ? AppColors.primary : AppColors.mutedForeground,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-    return InkWell(
+// ── _NotificationTile ─────────────────────────────────────────────────────────
+class _NotificationTile extends StatelessWidget {
+  final NotificationRow n;
+  final VoidCallback onTap;
+  const _NotificationTile({required this.n, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isRead = !n.isUnread;
+    final meta   = _iconForType(n.type);
+
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.all(12), // p-3
         decoration: BoxDecoration(
-          color: unread ? AppColors.primarySoft.withOpacity(0.4) : AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border, width: 0.6),
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(16), // rounded-2xl
+          border: !isRead
+              ? Border.all(color: AppColors.primary.withOpacity(0.3), width: 1) // ring-1 ring-primary/30
+              : Border.all(color: Colors.transparent, width: 1),
+          boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 4, offset: Offset(0, 1))],
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Icône (40×40, rounded-xl)
             Container(
-              width: 38, height: 38,
+              width: 40, height: 40,
               decoration: BoxDecoration(
-                color: style.color.withOpacity(0.12),
+                color: meta.bg,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(style.icon, size: 18, color: style.color),
+              child: Icon(meta.icon, size: 20, color: meta.color),
             ),
             const SizedBox(width: 12),
+            // Contenu
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(notification.title,
-                      style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: unread ? FontWeight.w700 : FontWeight.w600)),
-                  if (notification.body != null && notification.body!.isNotEmpty) ...[
+                  // Titre + point non-lu
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(n.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                      ),
+                      if (!isRead) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 8, height: 8,
+                          decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                        ),
+                      ],
+                    ],
+                  ),
+                  // Body (line-clamp-2)
+                  if (n.body != null && n.body!.isNotEmpty) ...[
                     const SizedBox(height: 2),
-                    Text(notification.body!,
+                    Text(n.body!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
                   ],
+                  // "COMMANDE · il y a 5 min" — text-[10px] uppercase tracking-wide
                   const SizedBox(height: 4),
-                  Text(_timeAgo,
-                      style: const TextStyle(fontSize: 10.5, color: AppColors.mutedForeground)),
+                  Text(
+                    '${_labelForType(n.type)} · ${_timeAgo(n.createdAt)}',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
+                      color: AppColors.mutedForeground,
+                    ),
+                  ),
                 ],
               ),
             ),
-            if (unread)
-              Container(
-                width: 8, height: 8,
-                margin: const EdgeInsets.only(top: 4),
-                decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-              ),
           ],
         ),
       ),
@@ -243,26 +362,55 @@ class _NotificationTile extends StatelessWidget {
   }
 }
 
+// ── _EmptyState ───────────────────────────────────────────────────────────────
 class _EmptyState extends StatelessWidget {
   final bool unreadOnly;
-  const _EmptyState({required this.unreadOnly});
+  final VoidCallback onBack; // = <Link to="/" /> React
+  const _EmptyState({required this.unreadOnly, required this.onBack});
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.notifications_none_rounded, size: 40, color: AppColors.mutedForeground.withOpacity(0.5)),
-            const SizedBox(height: 12),
-            Text(
-              unreadOnly ? 'Aucune notification non lue' : 'Aucune notification pour le moment',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: AppColors.mutedForeground, fontWeight: FontWeight.w600),
+        padding: const EdgeInsets.all(32),
+        child: Container(
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: AppColors.card.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: AppColors.border,
+              style: BorderStyle.solid,
+              width: 2,
             ),
-          ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.notifications_off_rounded, // BellOff
+                  size: 32, color: AppColors.mutedForeground),
+              const SizedBox(height: 8),
+              Text(
+                unreadOnly ? 'Aucune notification non lue.' : 'Aucune notification.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: AppColors.mutedForeground),
+              ),
+              const SizedBox(height: 12),
+              // Lien "Retour à l'accueil" = <Link to="/" ...>
+              GestureDetector(
+                onTap: onBack,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Text("Retour à l'accueil",
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

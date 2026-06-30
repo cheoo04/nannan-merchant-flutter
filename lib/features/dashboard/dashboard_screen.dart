@@ -59,21 +59,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ── Toggle ouvert/fermé ───────────────────────────────────
   Future<void> _handleToggle() async {
-    await _notifier.toggleOpen();
-    if (!mounted) return;
-    final isOpen = _notifier.merchant?.isOpenNow ?? false;
-    _showSnack(isOpen ? 'Boutique ouverte' : 'Boutique fermée');
-  }
-
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    try {
+      await _notifier.toggleOpen();
+      if (!mounted) return;
+      final isOpen = _notifier.merchant?.isOpenNow ?? false;
+      toast.success(isOpen ? 'Boutique ouverte' : 'Boutique fermée');
+    } catch (e) {
+      toast.error(e.toString());
+    }
   }
 
   @override
@@ -873,9 +866,11 @@ class _ShopImagePickerState extends State<_ShopImagePicker> {
     if (mounted) setState(() => _uploading = false);
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(url != null ? 'Photo mise à jour' : "Échec de l'envoi de la photo"),
-      ));
+      if (url != null) {
+        toast.success('Photo mise à jour');
+      } else {
+        toast.error("Échec de l'envoi de la photo");
+      }
     }
   }
 
