@@ -219,7 +219,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
           // ── GRAPHIQUE BARRES ─────────────────────────────
-          if (!_n.loading && _n.orders.isNotEmpty)
+          // Affiché systématiquement, même sans données (miroir React :
+          // BarChart rendu toujours, le bloc "Pas encore de ventes" est
+          // affiché EN PLUS, pas à la place).
+          if (!_n.loading)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -327,13 +330,16 @@ class _FinanceScreenState extends State<FinanceScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
           // ── HISTORIQUE PAIEMENTS ─────────────────────────
-          if (!_n.loading && _n.delivered.isNotEmpty)
+          if (!_n.loading)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _FinanceCard(
                   title: 'Historique des paiements',
-                  child: Column(
+                  child: _n.delivered.isEmpty
+                      ? const Text('Aucune vente livrée pour le moment.',
+                          style: TextStyle(fontSize: 12, color: AppColors.mutedForeground))
+                      : Column(
                     children: _n.delivered.take(20).map((o) => Padding(
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Row(
@@ -512,7 +518,14 @@ class _SalesBarChart extends StatelessWidget {
     return BarChart(
       BarChartData(
         alignment: BarChartAlignment.spaceAround,
-        maxY: data.isEmpty ? 100 : data.map((d) => d.sales.toDouble()).reduce((a, b) => a > b ? a : b) * 1.2,
+        maxY: () {
+          if (data.isEmpty) return 100.0;
+          final maxSales = data.map((d) => d.sales.toDouble()).reduce((a, b) => a > b ? a : b);
+          // Évite maxY = 0 (toutes ventes à 0) qui casse l'axe Y de fl_chart :
+          // recharts (React) garde un axe gradué 0→4 même sans données, on
+          // reproduit ce comportement avec un plancher arbitraire.
+          return maxSales > 0 ? maxSales * 1.2 : 4.0;
+        }(),
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,

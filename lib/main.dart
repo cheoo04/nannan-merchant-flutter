@@ -13,8 +13,8 @@ import 'features/finances/finance_screen.dart';
 import 'features/prescriptions/prescriptions_screen.dart';
 import 'features/stories/stories_screen.dart';
 import 'features/become_merchant/become_merchant_screen.dart';
-import 'features/notifications/notifications_notifier.dart';
-import 'features/notifications/notifications_screen.dart';
+// ⚠️ Notifications mises de côté le 30/06/2026 — voir _set_aside/notifications/
+// (périmètre FE-14, assigné à la partie Client, pas Marchand).
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -126,32 +126,15 @@ class MerchantShell extends StatefulWidget {
 class _MerchantShellState extends State<MerchantShell> {
   int _index = 0;
   bool _showBecomeMerchant = false;
-  late final NotificationsNotifier _notifNotifier = NotificationsNotifier();
 
-  @override
-  void initState() {
-    super.initState();
-    // Une seule souscription pour toute l'app — le badge de la cloche
-    // (sur les 6 écrans) se met à jour automatiquement.
-    _notifNotifier.addListener(_onNotifUpdate);
-  }
-
-  @override
-  void dispose() {
-    _notifNotifier.removeListener(_onNotifUpdate);
-    _notifNotifier.dispose();
-    super.dispose();
-  }
-
-  void _onNotifUpdate() => setState(() {});
-
+  // ⚠️ Notifications mises de côté le 30/06/2026 — voir _set_aside/notifications/
+  // (périmètre FE-14, assigné à la partie Client). En attendant une
+  // implémentation partagée par l'équipe, la cloche est un stub désactivé
+  // (unreadCount toujours à 0, tap sans effet visible pour le moment).
   void _openNotifications() {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => NotificationsScreen(
-        notifier: _notifNotifier,
-        onGoToOrders: () => setState(() => _index = 1),
-      ),
-    ));
+    // No-op volontaire : ne pas ouvrir un écran qui appartient à un autre
+    // périmètre. Remettre l'appel à NotificationsScreen une fois la
+    // version commune validée par l'équipe.
   }
 
   @override
@@ -172,7 +155,7 @@ class _MerchantShellState extends State<MerchantShell> {
           onGoToOrders: () => setState(() => _index = 1),
           onGoToProducts: () => setState(() => _index = 2),
           onGoToFinance: () => setState(() => _index = 5),
-          unreadCount: _notifNotifier.unreadCount,
+          unreadCount: 0 /* notif mise de côté */,
           onGoToNotifications: _openNotifications,
           onGoToBecomesMerchant: () => setState(() => _showBecomeMerchant = true),
         ),
@@ -182,7 +165,7 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
-          unreadCount: _notifNotifier.unreadCount,
+          unreadCount: 0 /* notif mise de côté */,
           onGoToNotifications: _openNotifications,
         ),
 
@@ -191,7 +174,7 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
-          unreadCount: _notifNotifier.unreadCount,
+          unreadCount: 0 /* notif mise de côté */,
           onGoToNotifications: _openNotifications,
         ),
 
@@ -200,7 +183,7 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
-          unreadCount: _notifNotifier.unreadCount,
+          unreadCount: 0 /* notif mise de côté */,
           onGoToNotifications: _openNotifications,
         ),
 
@@ -208,7 +191,7 @@ class _MerchantShellState extends State<MerchantShell> {
         PrescriptionsScreen(
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
-          unreadCount: _notifNotifier.unreadCount,
+          unreadCount: 0 /* notif mise de côté */,
           onGoToNotifications: _openNotifications,
         ),
 
@@ -217,7 +200,7 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
-          unreadCount: _notifNotifier.unreadCount,
+          unreadCount: 0 /* notif mise de côté */,
           onGoToNotifications: _openNotifications,
         ),
       ],
