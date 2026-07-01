@@ -633,20 +633,20 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
               GestureDetector(
                 onTap: () async {
                   try {
+                    // Lire AVANT le toggle (même logique que le React: !merchant.is_open)
+                    final wasOpen = widget.notifier.merchant?.isOpen ?? false;
                     await widget.notifier.toggleOpen();
-                    // Lire l'état APRÈS le toggle (notifier rechargé)
-                    final nowOpen = widget.notifier.merchant?.isOpenNow ?? false;
-                    toast.success(nowOpen ? 'Boutique ouverte' : 'Boutique fermée');
+                    toast.success(!wasOpen ? 'Boutique ouverte' : 'Boutique fermée');
                   } catch (e) { toast.error(e.toString()); }
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: m.isOpenNow ? AppColors.destructive : AppColors.success,
+                    color: m.isOpen ? AppColors.destructive : AppColors.success,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    m.isOpenNow ? 'Fermer' : 'Ouvrir',
+                    m.isOpen ? 'Fermer' : 'Ouvrir',
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
                   ),
                 ),

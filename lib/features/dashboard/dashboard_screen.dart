@@ -59,10 +59,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ── Toggle ouvert/fermé ───────────────────────────────────
   Future<void> _handleToggle() async {
+    // Lire AVANT le toggle (même logique que le React: !merchant.is_open)
+    final wasOpen = _notifier.merchant?.isOpen ?? false;
     await _notifier.toggleOpen();
     if (!mounted) return;
-    final isOpen = _notifier.merchant?.isOpenNow ?? false;
-    toast.success(isOpen ? 'Boutique ouverte' : 'Boutique fermée');
+    toast.success(!wasOpen ? 'Boutique ouverte' : 'Boutique fermée');
   }
 
   @override
