@@ -147,20 +147,20 @@ class ProductsNotifier extends ChangeNotifier {
   Future<void> toggleOpen() async {
     if (merchant == null) return;
     await _db.from('merchants').update({'is_open': !merchant!.isOpen}).eq('id', merchant!.id);
-    await _init();
+    await _loadMerchant();
   }
 
   Future<void> pauseMerchant(int minutes) async {
     if (merchant == null) return;
     final until = DateTime.now().add(Duration(minutes: minutes));
     await _db.from('merchants').update({'pause_until': until.toIso8601String()}).eq('id', merchant!.id);
-    await _init();
+    await _loadMerchant();
   }
 
   Future<void> resumeMerchant() async {
     if (merchant == null) return;
     await _db.from('merchants').update({'pause_until': null}).eq('id', merchant!.id);
-    await _init();
+    await _loadMerchant();
   }
 
   Future<void> saveSchedule({required bool enabled, String? opening, String? closing}) async {
@@ -170,7 +170,7 @@ class ProductsNotifier extends ChangeNotifier {
       'opening_time': enabled ? opening : null,
       'closing_time': enabled ? closing : null,
     }).eq('id', merchant!.id);
-    await _init();
+    await _loadMerchant();
   }
 
   Future<void> toggleAvailability(DbProduct p) async {
