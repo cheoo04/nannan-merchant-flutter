@@ -9,7 +9,7 @@ import '../../shared/widgets/notification_bell_button.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
-// ── Modèle prescription ───────────────────────────────────────────────────────
+// ── Modèle ────────────────────────────────────────────────────────────────────
 class PrescriptionRow {
   final String id;
   final String clientId;
@@ -53,11 +53,11 @@ class PrescriptionRow {
 }
 
 const _statusLabel = {
-  'received': 'Reçue',
+  'received':  'Reçue',
   'analyzing': 'En analyse',
-  'quoted': 'Devis envoyé',
-  'accepted': 'Accepté',
-  'paid': 'Payée',
+  'quoted':    'Devis envoyé',
+  'accepted':  'Accepté',
+  'paid':      'Payée',
   'cancelled': 'Annulée',
 };
 
@@ -67,21 +67,55 @@ class PrescriptionsNotifier extends ChangeNotifier {
   bool loading = true;
   String? merchantId;
 
+  // CORRECTION 4 — canal Realtime (même pattern que OrdersNotifier)
+  RealtimeChannel? _channel;
+
   PrescriptionsNotifier() { _init(); }
 
   Future<void> _init() async {
     final user = _db.auth.currentUser;
     if (user == null) { loading = false; notifyListeners(); return; }
-    final m = await _db.from('merchants').select('id').eq('owner_id', user.id).maybeSingle();
+    final m = await _db.from('merchants')
+        .select('id').eq('owner_id', user.id).maybeSingle();
     if (m == null) { loading = false; notifyListeners(); return; }
     merchantId = m['id'] as String;
     await load();
+    _subscribe(); // brancher le Realtime après le premier chargement
+  }
+
+  // CORRECTION 4 — souscription Realtime sur prescriptions
+  // Déclenché quand le client accepte le devis (accepted) ou paie (paid)
+  // depuis son app — le pharmacien voit le changement sans refresh manuel.
+  void _subscribe() {
+    _channel = _db
+        .channel('prescriptions-merchant-$merchantId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'prescriptions',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'merchant_id',
+            value: merchantId!,
+          ),
+          callback: (_) => load(),
+        )
+        .subscribe();
+  }
+
+  @override
+  void dispose() {
+    if (_channel != null) _db.removeChannel(_channel!);
+    super.dispose();
   }
 
   Future<void> load() async {
     if (merchantId == null) return;
-    final data = await _db.from('prescriptions').select()
-        .eq('merchant_id', merchantId!).order('created_at', ascending: false);
+    final data = await _db
+        .from('prescriptions')
+        .select()
+        .eq('merchant_id', merchantId!)
+        .order('created_at', ascending: false);
     prescriptions = (data as List).map((e) => PrescriptionRow.fromJson(e)).toList();
     loading = false;
     notifyListeners();
@@ -96,8 +130,7 @@ class PrescriptionsNotifier extends ChangeNotifier {
 
   Future<String?> getSignedUrl(String path) async {
     try {
-      final url = await _db.storage.from('prescriptions').createSignedUrl(path, 3600);
-      return url;
+      return await _db.storage.from('prescriptions').createSignedUrl(path, 3600);
     } catch (_) { return null; }
   }
 
@@ -112,7 +145,9 @@ class PrescriptionsNotifier extends ChangeNotifier {
     required int readyMin,
     String? note,
   }) async {
-    final subtotal = items.fold<int>(0, (s, i) => s + (i['qty'] as int) * (i['unit_price_xof'] as int));
+    final subtotal = items.fold<int>(
+      0, (s, i) => s + (i['qty'] as int) * (i['unit_price_xof'] as int),
+    );
     await _db.from('prescriptions').update({
       'status': 'quoted',
       'quote_items': items,
@@ -127,7 +162,7 @@ class PrescriptionsNotifier extends ChangeNotifier {
   }
 }
 
-// ── PRESCRIPTIONS SCREEN ──────────────────────────────────────────────────────
+// ── ÉCRAN PRINCIPAL ───────────────────────────────────────────────────────────
 class PrescriptionsScreen extends StatefulWidget {
   final int currentNavIndex;
   final ValueChanged<int> onNavTap;
@@ -176,26 +211,28 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
-          // ── Header simple (pas de gradient hero ici — miroir React) ──
+          // ── Header (miroir React : pas de gradient, juste titre + sous-titre)
           SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(20, top + 24, 20, 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
+                  const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Ordonnances',
+                        Text('Ordonnances',
                             style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700,
                                 fontFamily: 'Sora', color: AppColors.foreground)),
-                        const SizedBox(height: 4),
-                        const Text('Espace pharmacien — chiffrez les demandes reçues.',
+                        SizedBox(height: 4),
+                        Text('Espace pharmacien — chiffrez les demandes reçues.',
                             style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
                       ],
                     ),
                   ),
+                  // Cloche optionnelle (non passée depuis main.dart = jamais affichée,
+                  // miroir React où cet écran n'a pas de cloche)
                   if (widget.onGoToNotifications != null)
                     NotificationBellButton(
                       unreadCount: widget.unreadCount,
@@ -208,31 +245,26 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
             ),
           ),
 
-          // ── À traiter ────────────────────────────────────
+          // ── Sections ─────────────────────────────────────────────────────────
           if (_n.inbox.isNotEmpty)
             _Section(
-              title: 'À traiter',
-              items: _n.inbox,
+              title: 'À traiter', items: _n.inbox,
               openId: _openId,
               onToggle: (id) => setState(() => _openId = _openId == id ? null : id),
               notifier: _n,
             ),
 
-          // ── Devis envoyés ────────────────────────────────
           if (_n.quoted.isNotEmpty)
             _Section(
-              title: 'Devis envoyés',
-              items: _n.quoted,
+              title: 'Devis envoyés', items: _n.quoted,
               openId: _openId,
               onToggle: (id) => setState(() => _openId = _openId == id ? null : id),
               notifier: _n,
             ),
 
-          // ── Payées ───────────────────────────────────────
           if (_n.done.isNotEmpty)
             _Section(
-              title: 'Payées',
-              items: _n.done,
+              title: 'Payées', items: _n.done,
               openId: _openId,
               onToggle: (id) => setState(() => _openId = _openId == id ? null : id),
               notifier: _n,
@@ -241,10 +273,16 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
           if (_n.prescriptions.isEmpty)
             const SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Text('Aucune ordonnance reçue pour le moment.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                padding: EdgeInsets.all(40),
+                child: Column(
+                  children: [
+                    Icon(Icons.medication_outlined, size: 48, color: AppColors.mutedForeground),
+                    SizedBox(height: 12),
+                    Text('Aucune ordonnance reçue pour le moment.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
+                  ],
+                ),
               ),
             ),
 
@@ -257,6 +295,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
   }
 }
 
+// ── Section ───────────────────────────────────────────────────────────────────
 class _Section extends StatelessWidget {
   final String title;
   final List<PrescriptionRow> items;
@@ -273,7 +312,7 @@ class _Section extends StatelessWidget {
   Widget build(BuildContext context) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -297,7 +336,7 @@ class _Section extends StatelessWidget {
   }
 }
 
-// ── PRESCRIPTION CARD ─────────────────────────────────────────────────────────
+// ── Carte ordonnance ──────────────────────────────────────────────────────────
 class _PrescriptionCard extends StatefulWidget {
   final PrescriptionRow p;
   final bool open;
@@ -329,12 +368,15 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
         ? List<Map<String, dynamic>>.from(p.quoteItems!)
         : [{'name': '', 'qty': 1, 'unit_price_xof': 0}];
     _deliveryFee = TextEditingController(text: '${p.deliveryFeeXof ?? 500}');
-    _readyMin = TextEditingController(text: '${p.estimatedReadyMinutes ?? 20}');
-    _note = TextEditingController(text: p.pharmacistNote ?? '');
+    _readyMin    = TextEditingController(text: '${p.estimatedReadyMinutes ?? 20}');
+    _note        = TextEditingController(text: p.pharmacistNote ?? '');
   }
 
   @override
-  void dispose() { _deliveryFee.dispose(); _readyMin.dispose(); _note.dispose(); super.dispose(); }
+  void dispose() {
+    _deliveryFee.dispose(); _readyMin.dispose(); _note.dispose();
+    super.dispose();
+  }
 
   Future<void> _loadUrls() async {
     final urls = await Future.wait(
@@ -359,9 +401,7 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
         (i['name'] as String?)?.trim().isNotEmpty == true &&
         (i['unit_price_xof'] as int? ?? 0) > 0 &&
         (i['qty'] as int? ?? 0) > 0).toList();
-    if (cleaned.isEmpty) {
-      toast.error('Ajoutez au moins un produit'); return;
-    }
+    if (cleaned.isEmpty) { toast.error('Ajoutez au moins un produit'); return; }
     setState(() => _submitting = true);
     try {
       await widget.notifier.submitQuote(widget.p.id,
@@ -370,23 +410,51 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
           readyMin: int.tryParse(_readyMin.text) ?? 20,
           note: _note.text.trim().isEmpty ? null : _note.text.trim());
       toast.success(widget.p.status == 'quoted' ? 'Devis mis à jour' : 'Devis envoyé au client');
-    } catch (e) { toast.error('Échec d\'envoi'); }
-    finally { if (mounted) setState(() => _submitting = false); }
+    } catch (_) {
+      toast.error("Échec d'envoi");
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  // CORRECTION 1 — ouvrir une photo en plein écran (comme <a target="_blank"> en React)
+  void _openPhoto(BuildContext context, String url) {
+    Navigator.of(context).push(MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: const Text('Ordonnance', style: TextStyle(fontSize: 14)),
+        ),
+        body: InteractiveViewer(
+          minScale: 0.5,
+          maxScale: 5,
+          child: Center(
+            child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
     final p = widget.p;
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 2),
-            BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4))],
+        boxShadow: const [
+          BoxShadow(color: Color(0x0A000000), blurRadius: 2),
+          BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+        ],
       ),
       child: Column(
         children: [
-          // ── Titre card ────────────────────────────────────
+          // ── En-tête carte (toujours visible) ─────────────────────────────
           GestureDetector(
             onTap: widget.onToggle,
             child: Padding(
@@ -407,11 +475,14 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Ordonnance #${p.id.substring(0, 6)}',
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w700,
+                                color: AppColors.foreground)),
                         Text(
                           '${p.imagePaths.length} photo${p.imagePaths.length > 1 ? 's' : ''} · '
                           '${formatDateShort(p.createdAt)} ${formatTime(p.createdAt)}',
-                          style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
+                          style: const TextStyle(
+                              fontSize: 11, color: AppColors.mutedForeground),
                         ),
                       ],
                     ),
@@ -424,7 +495,8 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                     ),
                     child: Text(
                       (_statusLabel[p.status] ?? p.status).toUpperCase(),
-                      style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+                      style: const TextStyle(
+                          fontSize: 9, fontWeight: FontWeight.w700,
                           color: AppColors.foreground, letterSpacing: 0.5),
                     ),
                   ),
@@ -433,7 +505,7 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
             ),
           ),
 
-          // ── Contenu expandé ───────────────────────────────
+          // ── Contenu déplié ────────────────────────────────────────────────
           if (widget.open) ...[
             Container(
               decoration: const BoxDecoration(
@@ -443,7 +515,8 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Note client
+
+                  // Note du client
                   if (p.clientNote != null && p.clientNote!.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -453,70 +526,100 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text('"${p.clientNote}"',
-                          style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic,
+                          style: const TextStyle(
+                              fontSize: 12, fontStyle: FontStyle.italic,
                               color: AppColors.foreground)),
                     ),
 
-                  // Photos ordonnance
-                  if (_signedUrls.isNotEmpty)
+                  // CORRECTION 1 — Photos cliquables (plein écran au tap)
+                  if (_signedUrls.isNotEmpty) ...[
                     GridView.count(
-                      crossAxisCount: 3, shrinkWrap: true,
+                      crossAxisCount: 3,
+                      shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      crossAxisSpacing: 6, mainAxisSpacing: 6,
-                      children: _signedUrls.map((url) => ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: url != null
-                            ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
-                                placeholder: (_, __) => Container(color: AppColors.secondary))
-                            : Container(color: AppColors.secondary,
+                      crossAxisSpacing: 6,
+                      mainAxisSpacing: 6,
+                      children: _signedUrls.map((url) {
+                        if (url == null) {
+                          return ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              color: AppColors.secondary,
+                              child: const Icon(Icons.broken_image_rounded,
+                                  color: AppColors.mutedForeground),
+                            ),
+                          );
+                        }
+                        return GestureDetector(
+                          onTap: () => _openPhoto(context, url),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: CachedNetworkImage(
+                              imageUrl: url,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) =>
+                                  Container(color: AppColors.secondary),
+                              errorWidget: (_, __, ___) => Container(
+                                color: AppColors.secondary,
                                 child: const Icon(Icons.broken_image_rounded,
-                                    color: AppColors.mutedForeground)),
-                      )).toList(),
+                                    color: AppColors.mutedForeground),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
+                    const SizedBox(height: 4),
+                    // Hint discret pour guider le pharmacien
+                    const Text('Appuyez sur une photo pour agrandir',
+                        style: TextStyle(
+                            fontSize: 10, color: AppColors.mutedForeground)),
+                    const SizedBox(height: 12),
+                  ],
 
+                  // Spinner photos en cours de chargement
                   if (_signedUrls.isEmpty && p.imagePaths.isNotEmpty)
                     const Center(
                       child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.primary),
                       ),
                     ),
 
-                  const SizedBox(height: 12),
-
-                  // Bouton démarrer analyse
+                  // Bouton "Démarrer l'analyse" (statut received)
                   if (p.status == 'received') ...[
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton(
-                        onPressed: () async {
-                          await widget.notifier.setStatus(p.id, 'analyzing');
-                        },
+                        onPressed: () => widget.notifier.setStatus(p.id, 'analyzing'),
                         style: OutlinedButton.styleFrom(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999)),
                           side: const BorderSide(color: AppColors.border),
                         ),
                         child: const Text("Démarrer l'analyse",
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700,
                                 color: AppColors.foreground)),
                       ),
                     ),
                     const SizedBox(height: 12),
                   ],
 
-                  // Formulaire devis
+                  // Formulaire devis (tout sauf paid et cancelled)
                   if (p.status != 'paid' && p.status != 'cancelled') ...[
                     const Text('PRODUITS',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                        style: TextStyle(
+                            fontSize: 10, fontWeight: FontWeight.w700,
                             color: AppColors.mutedForeground, letterSpacing: 0.8)),
                     const SizedBox(height: 8),
 
-                    // Lignes médicaments
                     ...List.generate(_items.length, (idx) => Padding(
-                      key: ValueKey('quote_item_$idx'),
+                      key: ValueKey('item_$idx'),
                       padding: const EdgeInsets.only(bottom: 8),
                       child: _QuoteItemRow(
-                        key: ValueKey('quote_item_field_$idx'),
+                        key: ValueKey('field_$idx'),
                         item: _items[idx],
                         onChanged: (updated) => setState(() => _items[idx] = updated),
                         onDelete: () => setState(() => _items.removeAt(idx)),
@@ -530,35 +633,34 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                         Icon(Icons.add_rounded, size: 14, color: AppColors.primary),
                         SizedBox(width: 4),
                         Text('Ajouter un produit',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700,
                                 color: AppColors.primary)),
                       ]),
                     ),
-
                     const SizedBox(height: 12),
 
                     // Frais livraison + délai
-                    Row(
-                      children: [
-                        Expanded(child: _QuoteField(
-                          label: 'Frais livraison', controller: _deliveryFee,
-                          type: TextInputType.number,
-                        )),
-                        const SizedBox(width: 8),
-                        Expanded(child: _QuoteField(
-                          label: 'Prêt sous (min)', controller: _readyMin,
-                          type: TextInputType.number,
-                        )),
-                      ],
-                    ),
-
+                    Row(children: [
+                      Expanded(child: _QuoteField(
+                        label: 'Frais livraison', controller: _deliveryFee,
+                        type: TextInputType.number,
+                      )),
+                      const SizedBox(width: 8),
+                      Expanded(child: _QuoteField(
+                        label: 'Prêt sous (min)', controller: _readyMin,
+                        type: TextInputType.number,
+                      )),
+                    ]),
                     const SizedBox(height: 8),
 
+                    // CORRECTION 2 — note pharmacien limitée à 200 caractères
                     _QuoteField(
                       label: 'Note pour le client (optionnel)',
-                      controller: _note, maxLines: 2,
+                      controller: _note,
+                      maxLines: 2,
+                      maxLength: 200,
                     ),
-
                     const SizedBox(height: 12),
 
                     // Total devis
@@ -575,35 +677,54 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
                                   color: AppColors.primary)),
                           Text(formatXOF(_total),
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
+                              style: const TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w700,
                                   fontFamily: 'Sora', color: AppColors.primary)),
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 12),
 
-                    // Bouton envoyer devis
+                    // CORRECTION 3 — bouton avec gradient (miroir React bg-gradient-primary)
                     SizedBox(
-                      width: double.infinity, height: 48,
-                      child: ElevatedButton.icon(
-                        onPressed: _submitting ? null : _sendQuote,
-                        icon: _submitting
-                            ? const SizedBox(width: 16, height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.send_rounded, size: 16),
-                        label: Text(
-                          p.status == 'quoted' ? 'Mettre à jour le devis' : 'Envoyer le devis',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                      width: double.infinity,
+                      height: 48,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: _submitting
+                              ? null
+                              : AppColors.gradientPrimary,
+                          color: _submitting ? AppColors.primary.withOpacity(0.5) : null,
+                          borderRadius: BorderRadius.circular(999),
                         ),
-                        style: ElevatedButton.styleFrom(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                        child: ElevatedButton.icon(
+                          onPressed: _submitting ? null : _sendQuote,
+                          icon: _submitting
+                              ? const SizedBox(
+                                  width: 16, height: 16,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.send_rounded, size: 16, color: Colors.white),
+                          label: Text(
+                            p.status == 'quoted'
+                                ? 'Mettre à jour le devis'
+                                : 'Envoyer le devis',
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700,
+                                color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(999)),
+                          ),
                         ),
                       ),
                     ),
                   ],
 
-                  // Payée
+                  // Statut payée
                   if (p.status == 'paid')
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -612,11 +733,15 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Row(children: [
-                        Icon(Icons.check_circle_rounded, size: 16, color: AppColors.success),
+                        Icon(Icons.check_circle_rounded,
+                            size: 16, color: AppColors.success),
                         SizedBox(width: 8),
-                        Text('Paiement reçu — préparer la commande.',
-                            style: TextStyle(fontSize: 12, color: AppColors.success,
-                                fontWeight: FontWeight.w700)),
+                        Expanded(
+                          child: Text('Paiement reçu — préparer la commande.',
+                              style: TextStyle(
+                                  fontSize: 12, color: AppColors.success,
+                                  fontWeight: FontWeight.w700)),
+                        ),
                       ]),
                     ),
                 ],
@@ -629,7 +754,7 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
   }
 }
 
-// ── PETITS WIDGETS ────────────────────────────────────────────────────────────
+// ── Ligne médicament dans le formulaire devis ─────────────────────────────────
 class _QuoteItemRow extends StatefulWidget {
   final Map<String, dynamic> item;
   final ValueChanged<Map<String, dynamic>> onChanged;
@@ -653,18 +778,13 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
   @override
   void initState() {
     super.initState();
-    // Créés UNE SEULE FOIS ici — plus jamais recréés pendant la frappe.
-    _nameCtrl = TextEditingController(text: widget.item['name'] as String? ?? '');
+    _nameCtrl  = TextEditingController(text: widget.item['name'] as String? ?? '');
     final price = widget.item['unit_price_xof'] as int? ?? 0;
     _priceCtrl = TextEditingController(text: price != 0 ? '$price' : '');
   }
 
   @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _priceCtrl.dispose();
-    super.dispose();
-  }
+  void dispose() { _nameCtrl.dispose(); _priceCtrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -677,13 +797,12 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
       ),
       child: Row(
         children: [
-          // Nom médicament
           Expanded(
             child: TextField(
               controller: _nameCtrl,
               onChanged: (v) => widget.onChanged({...item, 'name': v}),
               decoration: const InputDecoration(
-                hintText: 'Nom du médicament',
+                hintText: 'Médicament',
                 contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 isDense: true,
               ),
@@ -691,48 +810,43 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
             ),
           ),
           const SizedBox(width: 6),
-          // Quantité
+          // Stepper quantité
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              GestureDetector(
+              _StepBtn(
+                icon: Icons.remove_rounded,
+                color: AppColors.card,
+                iconColor: AppColors.foreground,
                 onTap: () => widget.onChanged({
                   ...item,
                   'qty': ((item['qty'] as int? ?? 1) - 1).clamp(1, 99),
                 }),
-                child: Container(
-                  width: 28, height: 28,
-                  decoration: BoxDecoration(color: AppColors.card,
-                      borderRadius: BorderRadius.circular(999)),
-                  child: const Icon(Icons.remove_rounded, size: 12),
-                ),
               ),
               SizedBox(
                 width: 24,
-                child: Text(
-                  '${item['qty'] ?? 1}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                ),
+                child: Text('${item['qty'] ?? 1}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
               ),
-              GestureDetector(
-                onTap: () => widget.onChanged({...item, 'qty': (item['qty'] as int? ?? 1) + 1}),
-                child: Container(
-                  width: 28, height: 28,
-                  decoration: BoxDecoration(color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(999)),
-                  child: const Icon(Icons.add_rounded, size: 12, color: Colors.white),
-                ),
+              _StepBtn(
+                icon: Icons.add_rounded,
+                color: AppColors.primary,
+                iconColor: Colors.white,
+                onTap: () => widget.onChanged({
+                  ...item, 'qty': (item['qty'] as int? ?? 1) + 1,
+                }),
               ),
             ],
           ),
           const SizedBox(width: 6),
-          // Prix
           SizedBox(
-            width: 72,
+            width: 68,
             child: TextField(
               controller: _priceCtrl,
-              onChanged: (v) => widget.onChanged({...item, 'unit_price_xof': int.tryParse(v) ?? 0}),
+              onChanged: (v) => widget.onChanged({
+                ...item, 'unit_price_xof': int.tryParse(v) ?? 0,
+              }),
               keyboardType: TextInputType.number,
               textAlign: TextAlign.right,
               decoration: const InputDecoration(
@@ -744,10 +858,10 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
             ),
           ),
           const SizedBox(width: 6),
-          // Supprimer
           GestureDetector(
             onTap: widget.onDelete,
-            child: const Icon(Icons.delete_rounded, size: 16, color: AppColors.destructive),
+            child: const Icon(Icons.delete_rounded,
+                size: 16, color: AppColors.destructive),
           ),
         ],
       ),
@@ -755,15 +869,45 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
   }
 }
 
+class _StepBtn extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final Color iconColor;
+  final VoidCallback onTap;
+
+  const _StepBtn({
+    required this.icon, required this.color,
+    required this.iconColor, required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 28, height: 28,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        child: Icon(icon, size: 12, color: iconColor),
+      ),
+    );
+  }
+}
+
+// ── Champ générique du formulaire devis ───────────────────────────────────────
 class _QuoteField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
   final TextInputType type;
   final int maxLines;
+  // CORRECTION 2 — paramètre maxLength pour limiter la note à 200 chars
+  final int? maxLength;
 
   const _QuoteField({
-    required this.label, required this.controller,
-    this.type = TextInputType.text, this.maxLines = 1,
+    required this.label,
+    required this.controller,
+    this.type = TextInputType.text,
+    this.maxLines = 1,
+    this.maxLength,
   });
 
   @override
@@ -772,13 +916,23 @@ class _QuoteField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label.toUpperCase(),
-            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+            style: const TextStyle(
+                fontSize: 9, fontWeight: FontWeight.w700,
                 color: AppColors.mutedForeground, letterSpacing: 0.8)),
         const SizedBox(height: 4),
         TextField(
           controller: controller,
           keyboardType: type,
           maxLines: maxLines,
+          maxLength: maxLength,            // ← limite 200 chars sur la note
+          buildCounter: maxLength != null  // compteur discret en bas à droite
+              ? (_, {required currentLength, required isFocused, maxLength}) =>
+                  isFocused
+                      ? Text('$currentLength/$maxLength',
+                          style: const TextStyle(
+                              fontSize: 10, color: AppColors.mutedForeground))
+                      : null
+              : null,
           decoration: const InputDecoration(
             contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             isDense: true,
