@@ -56,18 +56,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
     super.dispose();
   }
 
-  void _showSnack(String msg, {bool error = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: error ? AppColors.destructive : null,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
   Future<void> _handleRefuse(String orderId) async {
     final confirm = await showDialog<bool>(
       context: context,

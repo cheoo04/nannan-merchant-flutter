@@ -369,18 +369,9 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
           deliveryFee: int.tryParse(_deliveryFee.text) ?? 0,
           readyMin: int.tryParse(_readyMin.text) ?? 20,
           note: _note.text.trim().isEmpty ? null : _note.text.trim());
-      _snack(widget.p.status == 'quoted' ? 'Devis mis à jour' : 'Devis envoyé au client');
+      toast.success(widget.p.status == 'quoted' ? 'Devis mis à jour' : 'Devis envoyé au client');
     } catch (e) { toast.error('Échec d\'envoi'); }
     finally { if (mounted) setState(() => _submitting = false); }
-  }
-
-  void _snack(String msg, {bool error = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: error ? AppColors.destructive : null,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    ));
   }
 
   @override

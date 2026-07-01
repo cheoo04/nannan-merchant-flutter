@@ -237,16 +237,6 @@ class _StoriesScreenState extends State<StoriesScreen> {
   @override
   void dispose() { _n.dispose(); super.dispose(); }
 
-  void _snack(String msg, {bool error = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: error ? AppColors.destructive : null,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      duration: const Duration(seconds: 3),
-    ));
-  }
-
   // ── Picker image ──────────────────────────────────────────
   Future<void> _pickImage() async {
     final picker = ImagePicker();
@@ -259,8 +249,8 @@ class _StoriesScreenState extends State<StoriesScreen> {
     final bytes = await file.readAsBytes();
     final ext = file.name.split('.').last.toLowerCase();
     final err = await _n.uploadImage(bytes, ext.isEmpty ? 'jpg' : ext);
-    if (err != null) _snack(err, error: true);
-    else _snack('Photo ajoutée');
+    if (err != null) toast.error(err);
+    else toast.success('Photo ajoutée');
   }
 
   // ── Picker vidéo ──────────────────────────────────────────
@@ -287,9 +277,8 @@ class _StoriesScreenState extends State<StoriesScreen> {
     }
 
     if (duration != null && duration.inSeconds > _maxVideoSeconds) {
-      _snack(
+      toast.error(
         'Vidéo trop longue (${duration.inSeconds}s) — maximum ${_maxVideoSeconds}s (1min30).',
-        error: true,
       );
       return;
     }
@@ -297,8 +286,8 @@ class _StoriesScreenState extends State<StoriesScreen> {
     final bytes = await file.readAsBytes();
     final ext = file.name.split('.').last.toLowerCase();
     final err = await _n.uploadVideo(bytes, ext.isEmpty ? 'mp4' : ext);
-    if (err != null) _snack(err, error: true);
-    else _snack('Vidéo ajoutée');
+    if (err != null) toast.error(err);
+    else toast.success('Vidéo ajoutée');
   }
 
   // ── Confirmer suppression ─────────────────────────────────
@@ -321,8 +310,8 @@ class _StoriesScreenState extends State<StoriesScreen> {
     );
     if (ok != true) return;
     final err = await _n.deleteImage(index);
-    if (err != null) _snack(err, error: true);
-    else _snack('Photo supprimée');
+    if (err != null) toast.error(err);
+    else toast.success('Photo supprimée');
   }
 
   Future<void> _confirmDeleteVideo() async {
@@ -344,8 +333,8 @@ class _StoriesScreenState extends State<StoriesScreen> {
     );
     if (ok != true) return;
     final err = await _n.deleteVideo();
-    if (err != null) _snack(err, error: true);
-    else _snack('Vidéo supprimée');
+    if (err != null) toast.error(err);
+    else toast.success('Vidéo supprimée');
   }
 
   @override

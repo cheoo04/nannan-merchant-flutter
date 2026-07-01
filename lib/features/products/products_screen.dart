@@ -266,16 +266,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
   @override
   void dispose() { _n.dispose(); super.dispose(); }
 
-  void _showSnack(String msg, {bool error = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: error ? AppColors.destructive : null,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      duration: const Duration(seconds: 2),
-    ));
-  }
-
   Future<void> _confirmDelete(DbProduct p) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -296,8 +286,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
     if (ok != true) return;
     try {
       await _n.deleteProduct(p.id);
-      _showSnack('Produit supprimé');
-    } catch (e) { _showSnack(e.toString(), error: true); }
+      toast.success('Produit supprimé');
+    } catch (e) { toast.error(e.toString()); }
   }
 
   @override
@@ -325,7 +315,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                       : _n.merchant == null
                           ? _EmptyMerchant()
-                          : _ShopAvailability(notifier: _n, onSnack: _showSnack),
+                          : _ShopAvailability(notifier: _n),
                 ),
               ),
 
@@ -433,8 +423,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         onToggle: () async {
                           try {
                             await _n.toggleAvailability(p);
-                            _showSnack(p.isAvailable ? 'Produit masqué' : 'Produit visible');
-                          } catch (e) { _showSnack(e.toString(), error: true); }
+                            toast.success(p.isAvailable ? 'Produit masqué' : 'Produit visible');
+                          } catch (e) { toast.error(e.toString()); }
                         },
                         onEdit: () { _editing = p; setState(() => _showEditor = true); },
                         onDelete: () => _confirmDelete(p),
@@ -456,8 +446,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
               initial: _editing,
               notifier: _n,
               onClose: () => setState(() { _showEditor = false; _editing = null; }),
-              onSaved: (msg) => _showSnack(msg),
-              onError: (msg) => _showSnack(msg, error: true),
             ),
         ],
       ),
@@ -569,9 +557,8 @@ class _ProductsHeader extends StatelessWidget {
 // ── STATUT BOUTIQUE ───────────────────────────────────────────────────────────
 class _ShopAvailability extends StatefulWidget {
   final ProductsNotifier notifier;
-  final void Function(String msg, {bool error}) onSnack;
 
-  const _ShopAvailability({required this.notifier, required this.onSnack});
+  const _ShopAvailability({required this.notifier});
 
   @override
   State<_ShopAvailability> createState() => _ShopAvailabilityState();
@@ -974,12 +961,10 @@ class _ProductEditor extends StatefulWidget {
   final DbProduct? initial;
   final ProductsNotifier notifier;
   final VoidCallback onClose;
-  final void Function(String) onSaved;
-  final void Function(String) onError;
 
   const _ProductEditor({
     required this.merchantId, this.initial, required this.notifier,
-    required this.onClose, required this.onSaved, required this.onError,
+    required this.onClose,
   });
 
   @override
@@ -1023,9 +1008,9 @@ class _ProductEditorState extends State<_ProductEditor> {
   }
 
   Future<void> _submit() async {
-    if (_name.text.trim().isEmpty) { widget.onError('Nom requis'); return; }
+    if (_name.text.trim().isEmpty) { toast.error('Nom requis'); return; }
     final price = int.tryParse(_price.text);
-    if (price == null || price <= 0) { widget.onError('Prix invalide'); return; }
+    if (price == null || price <= 0) { toast.error('Prix invalide'); return; }
     final stock = _stock.text.isEmpty ? null : int.tryParse(_stock.text);
 
     setState(() => _saving = true);
@@ -1034,16 +1019,16 @@ class _ProductEditorState extends State<_ProductEditor> {
         await widget.notifier.updateProduct(widget.initial!.id,
             name: _name.text.trim(), description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
             priceXof: price, imageUrl: _imageUrl, stock: stock);
-        widget.onSaved('Produit mis à jour');
+        toast.success('Produit mis à jour');
       } else {
         await widget.notifier.createProduct(
             name: _name.text.trim(), description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
             priceXof: price, imageUrl: _imageUrl, stock: stock);
-        widget.onSaved('Produit créé');
+        toast.success('Produit créé');
       }
       widget.onClose();
     } catch (e) {
-      widget.onError(e.toString());
+      toast.error(e.toString());
     } finally {
       setState(() => _saving = false);
     }

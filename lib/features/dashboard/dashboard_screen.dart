@@ -59,14 +59,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ── Toggle ouvert/fermé ───────────────────────────────────
   Future<void> _handleToggle() async {
-    try {
-      await _notifier.toggleOpen();
-      if (!mounted) return;
-      final isOpen = _notifier.merchant?.isOpenNow ?? false;
-      toast.success(isOpen ? 'Boutique ouverte' : 'Boutique fermée');
-    } catch (e) {
-      toast.error(e.toString());
-    }
+    await _notifier.toggleOpen();
+    if (!mounted) return;
+    final isOpen = _notifier.merchant?.isOpen ?? false;
+    toast.success(isOpen ? 'Boutique ouverte' : 'Boutique fermée');
   }
 
   @override
@@ -80,7 +76,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         listenable: _notifier,
         builder: (context, _) {
           final merchant = _notifier.merchant;
-          final isOpen = merchant?.isOpenNow ?? false;
+          final isOpen = merchant?.isOpen ?? false; // bool brut, identique à Produits
           final statusLabel = merchant?.statusLabel.label ?? '—';
           final merchantName = merchant?.name ?? 'Mon commerce';
           final hasData = _notifier.totalCount > 0;
@@ -865,13 +861,8 @@ class _ShopImagePickerState extends State<_ShopImagePicker> {
     final url = await widget.onPick(File(file.path));
     if (mounted) setState(() => _uploading = false);
 
-    if (mounted) {
-      if (url != null) {
-        toast.success('Photo mise à jour');
-      } else {
-        toast.error("Échec de l'envoi de la photo");
-      }
-    }
+    if (url != null) toast.success('Photo mise à jour');
+    else toast.error("Échec de l'envoi de la photo");
   }
 
   @override
