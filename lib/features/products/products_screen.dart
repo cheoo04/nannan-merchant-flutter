@@ -577,6 +577,18 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
     _opening = m.openingTime ?? '08:00';
     _closing = m.closingTime ?? '22:00';
     _schedEnabled = m.autoScheduleEnabled;
+    // Écouter le notifier pour se rebuilder quand le merchant change
+    widget.notifier.addListener(_onNotifierChange);
+  }
+
+  void _onNotifierChange() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.notifier.removeListener(_onNotifierChange);
+    super.dispose();
   }
 
   Color get _toneBg {
