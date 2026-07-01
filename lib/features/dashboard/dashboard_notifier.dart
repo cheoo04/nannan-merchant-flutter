@@ -194,7 +194,9 @@ class DashboardNotifier extends ChangeNotifier {
       final patch = <String, dynamic>{'is_open': !merchant!.isOpen};
       if (!merchant!.isOpen) patch['pause_until'] = null;
       await _db.from('merchants').update(patch).eq('id', merchant!.id);
-      // Le realtime va déclencher _loadMerchant et notifyListeners
+      // Rechargement explicite — ne pas attendre uniquement le realtime
+      final userId = _db.auth.currentUser?.id;
+      if (userId != null) await _loadMerchant(userId);
     } catch (e) {
       error = e.toString();
       notifyListeners();

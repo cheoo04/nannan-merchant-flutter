@@ -634,7 +634,9 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
                 onTap: () async {
                   try {
                     await widget.notifier.toggleOpen();
-                    toast.success(m.isOpen ? 'Boutique fermée' : 'Boutique ouverte');
+                    // Lire l'état APRÈS le toggle (notifier rechargé)
+                    final nowOpen = widget.notifier.merchant?.isOpen ?? false;
+                    toast.success(nowOpen ? 'Boutique ouverte' : 'Boutique fermée');
                   } catch (e) { toast.error(e.toString()); }
                 },
                 child: Container(
