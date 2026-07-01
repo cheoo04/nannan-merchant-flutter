@@ -61,7 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _handleToggle() async {
     await _notifier.toggleOpen();
     if (!mounted) return;
-    final isOpen = _notifier.merchant?.isOpen ?? false;
+    final isOpen = _notifier.merchant?.isOpenNow ?? false;
     toast.success(isOpen ? 'Boutique ouverte' : 'Boutique fermée');
   }
 
@@ -76,7 +76,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         listenable: _notifier,
         builder: (context, _) {
           final merchant = _notifier.merchant;
-          final isOpen = merchant?.isOpen ?? false; // bool brut, identique à Produits
+          final isOpen = merchant?.isOpenNow ?? false;
           final statusLabel = merchant?.statusLabel.label ?? '—';
           final merchantName = merchant?.name ?? 'Mon commerce';
           final hasData = _notifier.totalCount > 0;
