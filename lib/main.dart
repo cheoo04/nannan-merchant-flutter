@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_colors.dart';
@@ -17,7 +18,10 @@ import 'features/become_merchant/become_merchant_screen.dart';
 // (périmètre FE-14, assigné à la partie Client, pas Marchand).
 
 Future<void> main() async {
+  // Initialiser les données de locale pour intl (DateFormat 'fr_FR')
+  // Sans ça : LocaleDataException au premier formatage de date.
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('fr_FR');
 
   // Barre de statut transparente — rendu immersif
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(

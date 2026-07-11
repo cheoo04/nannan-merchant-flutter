@@ -688,55 +688,13 @@ class _RulesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.primarySoft,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.info_outline_rounded, size: 14, color: AppColors.primary),
-              SizedBox(width: 6),
-              Text('Règles de publication',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                      color: AppColors.primary)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _Rule(text: hasVideo
-              ? '5 images maximum avec une vidéo'
-              : '7 images maximum sans vidéo'),
-          _Rule(text: '1 vidéo maximum, durée max 1min30'),
-          _Rule(text: 'Vous pouvez réordonner les photos en les glissant'),
-          _Rule(text: 'Les publications sont visibles immédiatement sur votre fiche'),
-        ],
-      ),
-    );
-  }
-}
-
-class _Rule extends StatelessWidget {
-  final String text;
-  const _Rule({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('·  ', style: TextStyle(color: AppColors.primary, fontSize: 12)),
-          Expanded(
-            child: Text(text,
-                style: const TextStyle(fontSize: 11, color: AppColors.primary)),
-          ),
-        ],
+    return Text(
+      hasVideo
+          ? '5 images max · 1 vidéo max (1min30) · glisser pour réordonner'
+          : '7 images max · 1 vidéo max (1min30) · glisser pour réordonner',
+      style: const TextStyle(
+        fontSize: 11,
+        color: AppColors.mutedForeground,
       ),
     );
   }
