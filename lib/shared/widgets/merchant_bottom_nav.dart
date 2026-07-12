@@ -1,22 +1,66 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 
-/// Miroir exact du MerchantTabBar React
-/// 5 onglets : Accueil / Cmd / Produits / Ord. / Finance
+/// Barre de navigation marchand — dynamique selon le métier.
+///
+/// - Tout commerçant : Accueil / Commandes / Produits / Finance (4 onglets).
+/// - Pharmacie uniquement : + Ordonnances, inséré avant Finance (5 onglets).
+/// - "Stories" n'est PAS un onglet fixe : usage occasionnel, il vit comme
+///   action rapide sur le Dashboard (voir _NavCard "Publications").
+///
+/// Règle produit : jamais plus de 5 onglets dans cette barre.
+///
+/// Pour éviter tout décalage d'index entre écrans, ne pas coder les indices
+/// en dur ailleurs : utiliser [MerchantBottomNav.indexFor].
+enum MerchantTab { home, orders, products, prescriptions, finance }
+
 class MerchantBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final bool isPharmacy;
 
   const MerchantBottomNav({
     super.key,
     required this.currentIndex,
     required this.onTap,
+    required this.isPharmacy,
   });
+
+  /// Ordre canonique des onglets pour ce type de commerce.
+  static List<MerchantTab> tabsFor({required bool isPharmacy}) => [
+        MerchantTab.home,
+        MerchantTab.orders,
+        MerchantTab.products,
+        if (isPharmacy) MerchantTab.prescriptions,
+        MerchantTab.finance,
+      ];
+
+  /// Index à passer à [currentIndex] pour un onglet donné, selon le métier.
+  /// Ex: MerchantBottomNav.indexFor(MerchantTab.finance, isPharmacy: true) == 4
+  static int indexFor(MerchantTab tab, {required bool isPharmacy}) =>
+      tabsFor(isPharmacy: isPharmacy).indexOf(tab);
+
+  static const _iconByTab = <MerchantTab, IconData>{
+    MerchantTab.home: Icons.grid_view_rounded,
+    MerchantTab.orders: Icons.receipt_long_rounded,
+    MerchantTab.products: Icons.inventory_2_rounded,
+    MerchantTab.prescriptions: Icons.medication_rounded,
+    MerchantTab.finance: Icons.bar_chart_rounded,
+  };
+
+  static const _labelByTab = <MerchantTab, String>{
+    MerchantTab.home: 'Accueil',
+    MerchantTab.orders: 'Cmd',
+    MerchantTab.products: 'Produits',
+    MerchantTab.prescriptions: 'Ord.',
+    MerchantTab.finance: 'Finance',
+  };
 
   @override
   Widget build(BuildContext context) {
-    // safe-area-inset-bottom respecté via padding
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final tabs = tabsFor(isPharmacy: isPharmacy);
+    assert(tabs.length <= 5, 'MerchantBottomNav ne doit jamais dépasser 5 onglets');
 
     return Container(
       decoration: BoxDecoration(
@@ -39,42 +83,13 @@ class MerchantBottomNav extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _NavItem(
-              icon: Icons.grid_view_rounded,
-              label: 'Accueil',
-              active: currentIndex == 0,
-              onTap: () => onTap(0),
-            ),
-            _NavItem(
-              icon: Icons.receipt_long_rounded,
-              label: 'Cmd',
-              active: currentIndex == 1,
-              onTap: () => onTap(1),
-            ),
-            _NavItem(
-              icon: Icons.inventory_2_rounded,
-              label: 'Produits',
-              active: currentIndex == 2,
-              onTap: () => onTap(2),
-            ),
-            _NavItem(
-              icon: Icons.collections_rounded,
-              label: 'Stories',
-              active: currentIndex == 3,
-              onTap: () => onTap(3),
-            ),
-            _NavItem(
-              icon: Icons.image_rounded,
-              label: 'Ord.',
-              active: currentIndex == 4,
-              onTap: () => onTap(4),
-            ),
-            _NavItem(
-              icon: Icons.bar_chart_rounded,
-              label: 'Finance',
-              active: currentIndex == 5,
-              onTap: () => onTap(5),
-            ),
+            for (var i = 0; i < tabs.length; i++)
+              _NavItem(
+                icon: _iconByTab[tabs[i]]!,
+                label: _labelByTab[tabs[i]]!,
+                active: currentIndex == i,
+                onTap: () => onTap(i),
+              ),
           ],
         ),
       ),

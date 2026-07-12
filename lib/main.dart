@@ -14,6 +14,8 @@ import 'features/finances/finance_screen.dart';
 import 'features/prescriptions/prescriptions_screen.dart';
 import 'features/stories/stories_screen.dart';
 import 'features/become_merchant/become_merchant_screen.dart';
+import 'shared/widgets/merchant_bottom_nav.dart';
+import 'shared/merchant_category.dart';
 // ⚠️ Notifications mises de côté le 30/06/2026 — voir _set_aside/notifications/
 // (périmètre FE-14, assigné à la partie Client, pas Marchand).
 
@@ -109,17 +111,17 @@ class _AuthGateState extends State<_AuthGate> {
 }
 
 // ── MERCHANT SHELL ────────────────────────────────────────────────────────────
-// Gère la navigation entre les 6 onglets de l'espace marchand.
+// Gère la navigation entre les onglets de l'espace marchand.
 // Utilise IndexedStack pour garder l'état de chaque onglet en mémoire
 // (le realtime reste actif même quand on change d'onglet).
 //
-// Index :
-//   0 → Dashboard
-//   1 → Commandes
-//   2 → Produits
-//   3 → Stories / Publications  ← nouveau
-//   4 → Ordonnances
-//   5 → Finances
+// La barre est DYNAMIQUE selon le métier (voir MerchantBottomNav.tabsFor) :
+//   - Tout commerçant : Dashboard / Commandes / Produits / Finances (4 onglets)
+//   - Pharmacie en plus : Ordonnances, insérée avant Finances (5 onglets)
+// Ne jamais recoder un index en dur ici : utiliser MerchantBottomNav.indexFor.
+//
+// "Stories / Publications" n'est plus un onglet (usage occasionnel) : c'est
+// une sous-page ouverte en push depuis le Dashboard, avec retour au tap arrière.
 class MerchantShell extends StatefulWidget {
   const MerchantShell({super.key});
 
@@ -130,6 +132,35 @@ class MerchantShell extends StatefulWidget {
 class _MerchantShellState extends State<MerchantShell> {
   int _index = 0;
   bool _showBecomeMerchant = false;
+  bool _loadingCategory = true;
+  bool _isPharmacy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMerchantCategory();
+  }
+
+  Future<void> _loadMerchantCategory() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _loadingCategory = false);
+      return;
+    }
+    try {
+      final m = await Supabase.instance.client
+          .from('merchants')
+          .select('category')
+          .eq('owner_id', user.id)
+          .maybeSingle();
+      _isPharmacy = categoryNeedsPrescriptionFlow(m?['category'] as String?);
+    } catch (_) {
+      // Si la requête échoue on ne bloque pas le marchand : il retombe
+      // simplement sur la barre standard à 4 onglets (pas d'Ordonnances).
+      _isPharmacy = false;
+    }
+    if (mounted) setState(() => _loadingCategory = false);
+  }
 
   // ⚠️ Notifications mises de côté le 30/06/2026 — voir _set_aside/notifications/
   // (périmètre FE-14, assigné à la partie Client). En attendant une
@@ -141,57 +172,77 @@ class _MerchantShellState extends State<MerchantShell> {
     // version commune validée par l'équipe.
   }
 
+  void _openStories() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => StoriesScreen(onGoToDashboard: () => Navigator.of(context).pop()),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_loadingCategory) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
+        ),
+      );
+    }
+
     if (_showBecomeMerchant) {
       return BecomeMerchantScreen(
         onBack: () => setState(() => _showBecomeMerchant = false),
       );
     }
 
+    final ordersIndex = MerchantBottomNav.indexFor(MerchantTab.orders, isPharmacy: _isPharmacy);
+    final productsIndex = MerchantBottomNav.indexFor(MerchantTab.products, isPharmacy: _isPharmacy);
+    final financeIndex = MerchantBottomNav.indexFor(MerchantTab.finance, isPharmacy: _isPharmacy);
+    final prescriptionsIndex = _isPharmacy
+        ? MerchantBottomNav.indexFor(MerchantTab.prescriptions, isPharmacy: true)
+        : null;
+
     return IndexedStack(
       index: _index,
       children: [
-        // 0 — Dashboard
+        // Dashboard — toujours index 0
         DashboardScreen(
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
-          onGoToOrders: () => setState(() => _index = 1),
-          onGoToProducts: () => setState(() => _index = 2),
-          onGoToFinance: () => setState(() => _index = 5),
+          onGoToOrders: () => setState(() => _index = ordersIndex),
+          onGoToProducts: () => setState(() => _index = productsIndex),
+          onGoToFinance: () => setState(() => _index = financeIndex),
+          onGoToStories: _openStories,
+          onGoToPrescriptions: prescriptionsIndex == null
+              ? () {} // ne devrait jamais être appelé (bouton masqué si non-pharmacie)
+              : () => setState(() => _index = prescriptionsIndex),
           unreadCount: 0 /* notif mise de côté */,
           onGoToNotifications: _openNotifications,
           onGoToBecomesMerchant: () => setState(() => _showBecomeMerchant = true),
         ),
 
-        // 1 — Commandes
+        // Commandes
         OrdersScreen(
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
         ),
 
-        // 2 — Produits
+        // Produits
         ProductsScreen(
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
         ),
 
-        // 3 — Stories / Publications
-        StoriesScreen(
-          currentNavIndex: _index,
-          onNavTap: (i) => setState(() => _index = i),
-          onGoToDashboard: () => setState(() => _index = 0),
-        ),
+        // Ordonnances — uniquement pour les pharmacies
+        if (_isPharmacy)
+          PrescriptionsScreen(
+            currentNavIndex: _index,
+            onNavTap: (i) => setState(() => _index = i),
+          ),
 
-        // 4 — Ordonnances
-        PrescriptionsScreen(
-          currentNavIndex: _index,
-          onNavTap: (i) => setState(() => _index = i),
-        ),
-
-        // 5 — Finances
+        // Finances
         FinanceScreen(
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),

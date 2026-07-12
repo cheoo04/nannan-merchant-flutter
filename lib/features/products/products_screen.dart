@@ -9,6 +9,7 @@ import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/widgets/notification_bell_button.dart';
 import '../../shared/models/models.dart';
+import '../../shared/merchant_category.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -59,6 +60,8 @@ class ProductsNotifier extends ChangeNotifier {
   bool loadingMerchant = true;
   bool loadingProducts = true;
   String query = '';
+  String categoryFilter = 'all';
+  String availFilter = 'all'; // all | visible | hidden
   RealtimeChannel? _channel;
   RealtimeChannel? _merchantChannel;
   String? _userId;
@@ -138,11 +141,29 @@ class ProductsNotifier extends ChangeNotifier {
         .subscribe();
   }
 
-  List<DbProduct> get filtered => query.isEmpty
-      ? products
-      : products.where((p) => p.name.toLowerCase().contains(query.toLowerCase())).toList();
+  /// Sous-catégories réellement utilisées par ce commerce (ex: "Antidouleur",
+  /// "Vitamines"...). Indispensable dès qu'il y a beaucoup de produits — une
+  /// pharmacie ne peut pas se contenter d'un simple scroll.
+  List<String> get categories {
+    final set = products.map((p) => p.category).where((c) => c.isNotEmpty).toSet();
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  List<DbProduct> get filtered {
+    final q = query.trim().toLowerCase();
+    return products.where((p) {
+      if (q.isNotEmpty && !p.name.toLowerCase().contains(q)) return false;
+      if (categoryFilter != 'all' && p.category != categoryFilter) return false;
+      if (availFilter == 'visible' && !p.isAvailable) return false;
+      if (availFilter == 'hidden' && p.isAvailable) return false;
+      return true;
+    }).toList();
+  }
 
   void setQuery(String v) { query = v; notifyListeners(); }
+  void setCategoryFilter(String v) { categoryFilter = v; notifyListeners(); }
+  void setAvailFilter(String v) { availFilter = v; notifyListeners(); }
 
   Future<void> toggleOpen() async {
     if (merchant == null) return;
@@ -192,7 +213,7 @@ class ProductsNotifier extends ChangeNotifier {
 
   Future<void> createProduct({
     required String name, String? description, required int priceXof,
-    String? imageUrl, int? stock,
+    String? imageUrl, int? stock, String? category,
   }) async {
     if (merchant == null) return;
     final user = _db.auth.currentUser!;
@@ -204,14 +225,18 @@ class ProductsNotifier extends ChangeNotifier {
       'price_xof': priceXof,
       'image_url': imageUrl,
       'stock': stock,
-      'category': merchant!.category,
+      // Sous-catégorie choisie par le marchand ; on retombe sur la catégorie
+      // du commerce seulement si rien n'est saisi (compat. anciens flux).
+      'category': (category != null && category.trim().isNotEmpty)
+          ? category.trim()
+          : merchant!.category,
       'city_code': merchant!.cityCode,
     });
   }
 
   Future<void> updateProduct(String id, {
     required String name, String? description,
-    required int priceXof, String? imageUrl, int? stock,
+    required int priceXof, String? imageUrl, int? stock, String? category,
   }) async {
     await _db.from('products').update({
       'name': name,
@@ -219,6 +244,7 @@ class ProductsNotifier extends ChangeNotifier {
       'price_xof': priceXof,
       'image_url': imageUrl,
       'stock': stock,
+      if (category != null && category.trim().isNotEmpty) 'category': category.trim(),
     }).eq('id', id);
   }
 
@@ -366,6 +392,69 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
+              // ── FILTRES CATÉGORIE (utile dès que le catalogue est gros,
+              // typiquement une pharmacie avec des dizaines de sous-familles) ─
+              if (_n.categories.length > 1)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 6),
+                          child: Text('CATÉGORIES',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.4, color: AppColors.mutedForeground)),
+                        ),
+                        SizedBox(
+                          height: 34,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            children: [
+                              _FilterChip(
+                                label: 'Toutes (${_n.products.length})',
+                                active: _n.categoryFilter == 'all',
+                                onTap: () => _n.setCategoryFilter('all'),
+                              ),
+                              for (final c in _n.categories)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8),
+                                  child: _FilterChip(
+                                    label: '$c (${_n.products.where((p) => p.category == c).length})',
+                                    active: _n.categoryFilter == c,
+                                    onTap: () => _n.setCategoryFilter(c),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              if (_n.products.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                    child: Row(
+                      children: [
+                        _FilterChip(label: 'Tous', active: _n.availFilter == 'all',
+                            onTap: () => _n.setAvailFilter('all')),
+                        const SizedBox(width: 8),
+                        _FilterChip(label: 'Visibles', active: _n.availFilter == 'visible',
+                            onTap: () => _n.setAvailFilter('visible')),
+                        const SizedBox(width: 8),
+                        _FilterChip(label: 'Masqués', active: _n.availFilter == 'hidden',
+                            onTap: () => _n.setAvailFilter('hidden')),
+                      ],
+                    ),
+                  ),
+                ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
               // ── CATALOGUE ────────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
@@ -450,7 +539,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
         ],
       ),
       bottomNavigationBar: MerchantBottomNav(
-          currentIndex: widget.currentNavIndex, onTap: widget.onNavTap),
+          currentIndex: widget.currentNavIndex,
+          onTap: widget.onNavTap,
+          isPharmacy: categoryNeedsPrescriptionFlow(_n.merchant?.category)),
     );
   }
 }
@@ -836,6 +927,40 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
   }
 }
 
+// ── FILTRES CATALOGUE ─────────────────────────────────────────────────────────
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _FilterChip({required this.label, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? AppColors.primary : AppColors.card,
+          borderRadius: BorderRadius.circular(999),
+          boxShadow: active
+              ? null
+              : const [BoxShadow(color: Color(0x0F000000), blurRadius: 8, offset: Offset(0, 2))],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: active ? Colors.white : AppColors.mutedForeground,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── PRODUCT ROW ───────────────────────────────────────────────────────────────
 class _ProductRow extends StatelessWidget {
   final DbProduct product;
@@ -896,6 +1021,19 @@ class _ProductRow extends StatelessWidget {
                   Text(formatXOF(p.priceXof),
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
                           color: AppColors.primary)),
+                  if (p.category.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primarySoft,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(p.category,
+                          style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+                              color: AppColors.primary)),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 6, runSpacing: 4,
@@ -990,8 +1128,22 @@ class _ProductEditorState extends State<_ProductEditor> {
   late final TextEditingController _desc;
   late final TextEditingController _price;
   late final TextEditingController _stock;
+  late final TextEditingController _category;
   String? _imageUrl;
   bool _saving = false;
+
+  /// Suggestions de sous-catégories : celles déjà utilisées par ce commerce,
+  /// + un jeu de départ propre aux pharmacies pour amorcer le tri.
+  List<String> get _categorySuggestions {
+    final used = widget.notifier.categories;
+    if (used.isNotEmpty) return used;
+    final isPharmacy = categoryNeedsPrescriptionFlow(widget.notifier.merchant?.category);
+    if (!isPharmacy) return const [];
+    return const [
+      'Antidouleur', 'Antibiotique', 'Vitamines & Compléments',
+      'Hygiène & Beauté', 'Bébé & Maman', 'Premiers secours', 'Dispositifs médicaux',
+    ];
+  }
 
   @override
   void initState() {
@@ -1001,12 +1153,13 @@ class _ProductEditorState extends State<_ProductEditor> {
     _desc = TextEditingController(text: p?.description ?? '');
     _price = TextEditingController(text: p != null ? '${p.priceXof}' : '');
     _stock = TextEditingController(text: p?.stock != null ? '${p!.stock}' : '');
+    _category = TextEditingController(text: p?.category ?? '');
     _imageUrl = p?.imageUrl;
   }
 
   @override
   void dispose() {
-    _name.dispose(); _desc.dispose(); _price.dispose(); _stock.dispose();
+    _name.dispose(); _desc.dispose(); _price.dispose(); _stock.dispose(); _category.dispose();
     super.dispose();
   }
 
@@ -1032,12 +1185,12 @@ class _ProductEditorState extends State<_ProductEditor> {
       if (widget.initial != null) {
         await widget.notifier.updateProduct(widget.initial!.id,
             name: _name.text.trim(), description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
-            priceXof: price, imageUrl: _imageUrl, stock: stock);
+            priceXof: price, imageUrl: _imageUrl, stock: stock, category: _category.text.trim());
         toast.success('Produit mis à jour');
       } else {
         await widget.notifier.createProduct(
             name: _name.text.trim(), description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
-            priceXof: price, imageUrl: _imageUrl, stock: stock);
+            priceXof: price, imageUrl: _imageUrl, stock: stock, category: _category.text.trim());
         toast.success('Produit créé');
       }
       widget.onClose();
@@ -1114,6 +1267,35 @@ class _ProductEditorState extends State<_ProductEditor> {
                     const SizedBox(height: 4),
                     TextField(controller: _desc, maxLines: 2,
                         decoration: const InputDecoration(hintText: 'Ingrédients, détails…')),
+
+                    const SizedBox(height: 12),
+
+                    // Catégorie (sous-famille) — clé pour un catalogue lisible
+                    // dès qu'il y a beaucoup de produits (ex. pharmacie).
+                    _FieldLabel(label: 'Catégorie'),
+                    const SizedBox(height: 4),
+                    TextField(controller: _category,
+                        decoration: const InputDecoration(hintText: 'Ex: Antidouleur, Vitamines…')),
+                    if (_categorySuggestions.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6, runSpacing: 6,
+                        children: [
+                          for (final c in _categorySuggestions)
+                            GestureDetector(
+                              onTap: () => setState(() => _category.text = c),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondary,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(c, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
 
                     const SizedBox(height: 12),
 

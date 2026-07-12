@@ -9,6 +9,7 @@ import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/widgets/city_switcher_chip.dart';
 import '../../shared/widgets/notification_bell_button.dart';
+import '../../shared/merchant_category.dart';
 import 'dashboard_notifier.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -16,6 +17,8 @@ class DashboardScreen extends StatefulWidget {
   final VoidCallback onGoToOrders;
   final VoidCallback onGoToProducts;
   final VoidCallback onGoToFinance;
+  final VoidCallback onGoToStories;
+  final VoidCallback onGoToPrescriptions;
   final VoidCallback onGoToNotifications;
   final int unreadCount;
   final VoidCallback onGoToBecomesMerchant;
@@ -27,6 +30,8 @@ class DashboardScreen extends StatefulWidget {
     required this.onGoToOrders,
     required this.onGoToProducts,
     required this.onGoToFinance,
+    required this.onGoToStories,
+    required this.onGoToPrescriptions,
     required this.onGoToNotifications,
     this.unreadCount = 0,
     required this.onGoToBecomesMerchant,
@@ -40,6 +45,9 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   late final DashboardNotifier _notifier;
+
+  bool get _isPharmacy =>
+      categoryNeedsPrescriptionFlow(_notifier.merchant?.category);
 
   @override
   void initState() {
@@ -194,6 +202,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
 
+              const SliverToBoxAdapter(child: SizedBox(height: 8)),
+
+              // ── ACTIONS SECONDAIRES (Publications toujours, Ordonnances
+              // uniquement pour les pharmacies) — pas d'onglet fixe pour ces
+              // usages occasionnels ou spécifiques à un métier.
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _NavCard(
+                          icon: Icons.collections_rounded,
+                          label: 'Publications',
+                          hint: 'Stories',
+                          onTap: widget.onGoToStories,
+                        ),
+                      ),
+                      if (_isPharmacy) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _NavCard(
+                            icon: Icons.medication_rounded,
+                            label: 'Ordonnances',
+                            hint: 'À traiter',
+                            onTap: widget.onGoToPrescriptions,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+
               const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
               // ── REVENUS JOUR / SEMAINE / MOIS ──────────────
@@ -263,6 +305,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       bottomNavigationBar: MerchantBottomNav(
         currentIndex: widget.currentNavIndex,
         onTap: widget.onNavTap,
+        isPharmacy: _isPharmacy,
       ),
     );
   }

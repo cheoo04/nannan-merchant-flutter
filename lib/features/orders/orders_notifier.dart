@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/models/models.dart';
+import '../../shared/merchant_category.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -18,6 +19,9 @@ class OrdersNotifier extends ChangeNotifier {
 
   RealtimeChannel? _channel;
   String? _merchantId;
+  String _merchantCategory = '';
+
+  bool get isPharmacy => categoryNeedsPrescriptionFlow(_merchantCategory);
 
   OrdersNotifier() {
     _init();
@@ -27,10 +31,11 @@ class OrdersNotifier extends ChangeNotifier {
     final user = _db.auth.currentUser;
     if (user == null) { loading = false; notifyListeners(); return; }
 
-    final m = await _db.from('merchants').select('id').eq('owner_id', user.id).maybeSingle();
+    final m = await _db.from('merchants').select('id, category').eq('owner_id', user.id).maybeSingle();
     if (m == null) { loading = false; notifyListeners(); return; }
 
     _merchantId = m['id'] as String;
+    _merchantCategory = (m['category'] as String?) ?? '';
     await _load();
     _subscribe();
   }

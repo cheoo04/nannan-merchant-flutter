@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
+import '../../shared/merchant_category.dart';
 import '../../shared/widgets/notification_bell_button.dart';
 import '../../shared/models/models.dart';
 
@@ -17,14 +18,18 @@ class FinanceNotifier extends ChangeNotifier {
   List<OrderModel> orders = [];
   bool loading = true;
   String range = 'week'; // week | month | quarter
+  String _merchantCategory = '';
+
+  bool get isPharmacy => categoryNeedsPrescriptionFlow(_merchantCategory);
 
   FinanceNotifier() { _init(); }
 
   Future<void> _init() async {
     final user = _db.auth.currentUser;
     if (user == null) { loading = false; notifyListeners(); return; }
-    final m = await _db.from('merchants').select('id').eq('owner_id', user.id).maybeSingle();
+    final m = await _db.from('merchants').select('id, category').eq('owner_id', user.id).maybeSingle();
     if (m == null) { loading = false; notifyListeners(); return; }
+    _merchantCategory = (m['category'] as String?) ?? '';
 
     final data = await _db.from('orders').select()
         .eq('merchant_id', m['id'] as String)
@@ -374,7 +379,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
         ],
       ),
       bottomNavigationBar: MerchantBottomNav(
-          currentIndex: widget.currentNavIndex, onTap: widget.onNavTap),
+          currentIndex: widget.currentNavIndex,
+          onTap: widget.onNavTap,
+          isPharmacy: _n.isPharmacy),
     );
   }
 }

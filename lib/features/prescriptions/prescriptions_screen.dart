@@ -23,6 +23,7 @@ class PrescriptionRow {
   final int? totalXof;
   final int? estimatedReadyMinutes;
   final String? pharmacistNote;
+  final String? orderId;
   final DateTime createdAt;
 
   const PrescriptionRow({
@@ -30,7 +31,7 @@ class PrescriptionRow {
     required this.status, required this.imagePaths,
     this.clientNote, this.deliveryAddress, this.quoteItems,
     this.deliveryFeeXof, this.totalXof, this.estimatedReadyMinutes,
-    this.pharmacistNote, required this.createdAt,
+    this.pharmacistNote, this.orderId, required this.createdAt,
   });
 
   factory PrescriptionRow.fromJson(Map<String, dynamic> j) => PrescriptionRow(
@@ -48,6 +49,7 @@ class PrescriptionRow {
     totalXof: j['total_xof'] as int?,
     estimatedReadyMinutes: j['estimated_ready_minutes'] as int?,
     pharmacistNote: j['pharmacist_note'] as String?,
+    orderId: j['order_id'] as String?,
     createdAt: DateTime.parse(j['created_at'] as String),
   );
 }
@@ -203,7 +205,9 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
           child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
         ),
         bottomNavigationBar: MerchantBottomNav(
-            currentIndex: widget.currentNavIndex, onTap: widget.onNavTap),
+            currentIndex: widget.currentNavIndex,
+            onTap: widget.onNavTap,
+            isPharmacy: true),
       );
     }
 
@@ -252,6 +256,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
               openId: _openId,
               onToggle: (id) => setState(() => _openId = _openId == id ? null : id),
               notifier: _n,
+              onGoToOrders: () => widget.onNavTap(1),
             ),
 
           if (_n.quoted.isNotEmpty)
@@ -260,6 +265,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
               openId: _openId,
               onToggle: (id) => setState(() => _openId = _openId == id ? null : id),
               notifier: _n,
+              onGoToOrders: () => widget.onNavTap(1),
             ),
 
           if (_n.done.isNotEmpty)
@@ -268,6 +274,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
               openId: _openId,
               onToggle: (id) => setState(() => _openId = _openId == id ? null : id),
               notifier: _n,
+              onGoToOrders: () => widget.onNavTap(1),
             ),
 
           if (_n.prescriptions.isEmpty)
@@ -290,7 +297,9 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
         ],
       ),
       bottomNavigationBar: MerchantBottomNav(
-          currentIndex: widget.currentNavIndex, onTap: widget.onNavTap),
+          currentIndex: widget.currentNavIndex,
+          onTap: widget.onNavTap,
+          isPharmacy: true),
     );
   }
 }
@@ -302,10 +311,11 @@ class _Section extends StatelessWidget {
   final String? openId;
   final ValueChanged<String> onToggle;
   final PrescriptionsNotifier notifier;
+  final VoidCallback onGoToOrders;
 
   const _Section({
     required this.title, required this.items, required this.openId,
-    required this.onToggle, required this.notifier,
+    required this.onToggle, required this.notifier, required this.onGoToOrders,
   });
 
   @override
@@ -327,6 +337,7 @@ class _Section extends StatelessWidget {
                 open: openId == p.id,
                 onToggle: () => onToggle(p.id),
                 notifier: notifier,
+                onGoToOrders: onGoToOrders,
               ),
             )),
           ],
@@ -342,10 +353,11 @@ class _PrescriptionCard extends StatefulWidget {
   final bool open;
   final VoidCallback onToggle;
   final PrescriptionsNotifier notifier;
+  final VoidCallback onGoToOrders;
 
   const _PrescriptionCard({
     required this.p, required this.open,
-    required this.onToggle, required this.notifier,
+    required this.onToggle, required this.notifier, required this.onGoToOrders,
   });
 
   @override
@@ -732,17 +744,41 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                         color: AppColors.success.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Row(children: [
-                        Icon(Icons.check_circle_rounded,
-                            size: 16, color: AppColors.success),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text('Paiement reçu — préparer la commande.',
-                              style: TextStyle(
-                                  fontSize: 12, color: AppColors.success,
-                                  fontWeight: FontWeight.w700)),
-                        ),
-                      ]),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(children: [
+                            Icon(Icons.check_circle_rounded,
+                                size: 16, color: AppColors.success),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text('Paiement reçu — préparer la commande.',
+                                  style: TextStyle(
+                                      fontSize: 12, color: AppColors.success,
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ]),
+                          // Lien vers la commande créée après paiement.
+                          // N'apparaît que si order_id a été renseigné — ce
+                          // remplissage se fait côté paiement (hors périmètre
+                          // marchand), pas automatique pour l'instant.
+                          if (p.orderId != null) ...[
+                            const SizedBox(height: 8),
+                            GestureDetector(
+                              onTap: widget.onGoToOrders,
+                              child: Row(children: [
+                                Text(
+                                  'Commande #${p.orderId!.substring(0, 8).toUpperCase()}',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                                      color: AppColors.success, decoration: TextDecoration.underline),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.arrow_forward_rounded, size: 12, color: AppColors.success),
+                              ]),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                 ],
               ),

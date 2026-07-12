@@ -230,6 +230,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       bottomNavigationBar: MerchantBottomNav(
         currentIndex: widget.currentNavIndex,
         onTap: widget.onNavTap,
+        isPharmacy: _notifier.isPharmacy,
       ),
     );
   }

@@ -10,7 +10,6 @@ import 'package:video_player/video_player.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
-import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/widgets/notification_bell_button.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
@@ -203,16 +202,12 @@ class StoriesNotifier extends ChangeNotifier {
 
 // ── STORIES SCREEN ────────────────────────────────────────────────────────────
 class StoriesScreen extends StatefulWidget {
-  final int currentNavIndex;
-  final ValueChanged<int> onNavTap;
   final VoidCallback onGoToDashboard;
   final int unreadCount;
   final VoidCallback? onGoToNotifications;
 
   const StoriesScreen({
     super.key,
-    required this.currentNavIndex,
-    required this.onNavTap,
     required this.onGoToDashboard,
     this.unreadCount = 0,
     this.onGoToNotifications,
@@ -547,10 +542,6 @@ class _StoriesScreenState extends State<StoriesScreen> {
               onClose: () => setState(() => _lightboxIndex = null),
             ),
         ],
-      ),
-      bottomNavigationBar: MerchantBottomNav(
-        currentIndex: widget.currentNavIndex,
-        onTap: widget.onNavTap,
       ),
     );
   }
