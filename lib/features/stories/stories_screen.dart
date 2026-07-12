@@ -9,7 +9,6 @@ import 'package:video_player/video_player.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
-import '../../core/utils/formatters.dart';
 import '../../shared/widgets/notification_bell_button.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
