@@ -397,7 +397,7 @@ class _OrderCardState extends State<_OrderCard> {
                       ),
                     ),
                     Text(
-                      formatXOF(o.totalXof),
+                      formatXOF(o.totalAmount),
                       style: const TextStyle(
                         fontSize: 13, fontWeight: FontWeight.w700,
                         color: AppColors.primary,
@@ -486,27 +486,36 @@ class _OrderCardState extends State<_OrderCard> {
                   ),
                 ],
 
-                // Adresse de livraison
-                if (o.deliveryAddress != null && o.deliveryAddress!.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on_rounded,
-                          size: 12, color: AppColors.mutedForeground),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          'Livraison: ${o.deliveryAddress}',
-                          style: const TextStyle(
-                            fontSize: 11, color: AppColors.mutedForeground,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                // Adresse de livraison — toujours affichée
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(Icons.location_on_rounded,
+                        size: 12,
+                        color: o.deliveryAddressText != null
+                            ? AppColors.mutedForeground
+                            : AppColors.mutedForeground.withOpacity(0.4)),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        o.deliveryAddressText != null && o.deliveryAddressText!.isNotEmpty
+                            ? 'Livraison: ${o.deliveryAddressText}'
+                            : 'Adresse non renseignée',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: o.deliveryAddressText != null
+                              ? AppColors.mutedForeground
+                              : AppColors.mutedForeground.withOpacity(0.5),
+                          fontStyle: o.deliveryAddressText == null
+                              ? FontStyle.italic
+                              : FontStyle.normal,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ],
             ),
           ),

@@ -138,7 +138,7 @@ class DashboardNotifier extends ChangeNotifier {
         .where((o) =>
             o.status == OrderStatus.delivered &&
             (o.deliveredAt ?? o.createdAt).isAfter(startOfDay))
-        .fold(0, (s, o) => s + o.totalXof);
+        .fold(0, (s, o) => s + o.totalAmount);
   }
 
   int get revenueWeek {
@@ -147,7 +147,7 @@ class DashboardNotifier extends ChangeNotifier {
         .where((o) =>
             o.status == OrderStatus.delivered &&
             (o.deliveredAt ?? o.createdAt).isAfter(start))
-        .fold(0, (s, o) => s + o.totalXof);
+        .fold(0, (s, o) => s + o.totalAmount);
   }
 
   int get revenueMonth {
@@ -156,7 +156,7 @@ class DashboardNotifier extends ChangeNotifier {
         .where((o) =>
             o.status == OrderStatus.delivered &&
             (o.deliveredAt ?? o.createdAt).isAfter(start))
-        .fold(0, (s, o) => s + o.totalXof);
+        .fold(0, (s, o) => s + o.totalAmount);
   }
 
   /// Alertes à afficher (même logique que le React, max 3)

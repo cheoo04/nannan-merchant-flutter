@@ -125,13 +125,17 @@ class OrderModel {
   final String merchantId;
   final String? courierId;
   final OrderStatus status;
-  final int totalXof;
+  final int totalAmount;       // anciennement total_xof → total_amount
   final String paymentMethod;
   final String paymentStatus;
-  final String? deliveryAddress;
+  final String? deliveryAddressId;  // FK vers user_addresses
+  final String? deliveryAddressText;  // résolu via join user_addresses (label + detail)
+  final double? deliveryLat;
+  final double? deliveryLng;
   final String? clientComment;
   final String deliveryMode;
-  final int deliveryFeeXof;
+  final int deliveryFee;       // anciennement delivery_fee_xof → delivery_fee
+  final String? cashChangeNeeded;
   final String acceptCode;
   final String pickupCode;
   final String deliveryCode;
@@ -147,13 +151,17 @@ class OrderModel {
     required this.merchantId,
     this.courierId,
     required this.status,
-    required this.totalXof,
+    required this.totalAmount,
     required this.paymentMethod,
     required this.paymentStatus,
-    this.deliveryAddress,
+    this.deliveryAddressId,
+    this.deliveryAddressText,
+    this.deliveryLat,
+    this.deliveryLng,
     this.clientComment,
     required this.deliveryMode,
-    required this.deliveryFeeXof,
+    required this.deliveryFee,
+    this.cashChangeNeeded,
     required this.acceptCode,
     required this.pickupCode,
     required this.deliveryCode,
@@ -164,32 +172,55 @@ class OrderModel {
     this.merchantConfirmedAt,
   });
 
-  factory OrderModel.fromJson(Map<String, dynamic> j) => OrderModel(
-        id: j['id'] as String,
-        clientId: j['client_id'] as String,
-        merchantId: j['merchant_id'] as String,
-        courierId: j['courier_id'] as String?,
-        status: OrderStatus.fromString(j['status']?.toString() ?? 'pending'),
-        totalXof: j['total_xof'] as int? ?? 0,
-        paymentMethod: j['payment_method']?.toString() ?? 'cash',
-        paymentStatus: j['payment_status']?.toString() ?? 'pending',
-        deliveryAddress: j['delivery_address'] as String?,
-        clientComment: j['client_comment'] as String?,
-        deliveryMode: j['delivery_mode']?.toString() ?? 'standard',
-        deliveryFeeXof: j['delivery_fee_xof'] as int? ?? 0,
-        acceptCode: j['accept_code'] as String? ?? '----',
-        pickupCode: j['pickup_code'] as String? ?? '----',
-        deliveryCode: j['delivery_code'] as String? ?? '----',
-        scheduledAt: j['scheduled_at'] as String?,
-        cityCode: j['city_code'] as String? ?? 'oume',
-        createdAt: DateTime.parse(j['created_at'] as String),
-        deliveredAt: j['delivered_at'] != null
-            ? DateTime.parse(j['delivered_at'] as String)
-            : null,
-        merchantConfirmedAt: j['merchant_confirmed_at'] != null
-            ? DateTime.parse(j['merchant_confirmed_at'] as String)
-            : null,
-      );
+  factory OrderModel.fromJson(Map<String, dynamic> j) {
+    // Le join user_addresses est optionnel (présent si la query inclut
+    // '*, address:user_addresses!delivery_address_id(label,detail,lat,lng)')
+    final addr = j['address'] as Map<String, dynamic>?;
+    String? addrText;
+    if (addr != null) {
+      final label = addr['label'] as String? ?? '';
+      final detail = addr['detail'] as String? ?? '';
+      addrText = [label, detail].where((s) => s.isNotEmpty).join(' — ');
+    }
+
+    return OrderModel(
+      id: j['id'] as String,
+      clientId: j['client_id'] as String,
+      merchantId: j['merchant_id'] as String,
+      courierId: j['courier_id'] as String?,
+      status: OrderStatus.fromString(j['status']?.toString() ?? 'pending'),
+      totalAmount: j['total_amount'] as int? ?? 0,
+      paymentMethod: j['payment_method']?.toString() ?? 'cash',
+      paymentStatus: j['payment_status']?.toString() ?? 'pending',
+      deliveryAddressId: j['delivery_address_id'] as String?,
+      deliveryAddressText: addrText,
+      deliveryLat: (j['address'] as Map?)?.tryGet<double>('lat'),
+      deliveryLng: (j['address'] as Map?)?.tryGet<double>('lng'),
+      clientComment: j['client_comment'] as String?,
+      deliveryMode: j['delivery_mode']?.toString() ?? 'standard',
+      deliveryFee: j['delivery_fee'] as int? ?? 0,
+      cashChangeNeeded: j['cash_change_needed'] as String?,
+      acceptCode: j['accept_code'] as String? ?? '----',
+      pickupCode: j['pickup_code'] as String? ?? '----',
+      deliveryCode: j['delivery_code'] as String? ?? '----',
+      scheduledAt: j['scheduled_at'] as String?,
+      cityCode: j['city_code'] as String? ?? 'oume',
+      createdAt: DateTime.parse(j['created_at'] as String),
+      deliveredAt: j['delivered_at'] != null
+          ? DateTime.parse(j['delivered_at'] as String)
+          : null,
+      merchantConfirmedAt: j['merchant_confirmed_at'] != null
+          ? DateTime.parse(j['merchant_confirmed_at'] as String)
+          : null,
+    );
+  }
+}
+
+// Helper extension pour éviter les crashes sur les maps imbriquées
+extension _MapGet on Map {
+  T? tryGet<T>(String key) {
+    try { return this[key] as T?; } catch (_) { return null; }
+  }
 }
 
 // ── NotificationRow ───────────────────────────────────────────────────────────

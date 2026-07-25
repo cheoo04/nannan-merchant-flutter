@@ -44,7 +44,9 @@ class OrdersNotifier extends ChangeNotifier {
     try {
       final data = await _db
           .from('orders')
-          .select()
+          // Join sur user_addresses via delivery_address_id pour récupérer
+          // le texte de l'adresse (label + detail) et les coordonnées GPS.
+          .select('*, address:user_addresses!delivery_address_id(label,detail,lat,lng)')
           .eq('merchant_id', _merchantId!)
           .order('created_at', ascending: false)
           .limit(200);
