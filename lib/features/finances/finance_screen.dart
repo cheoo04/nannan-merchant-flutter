@@ -18,6 +18,12 @@ class FinanceNotifier extends ChangeNotifier {
   bool loading = true;
   String range = 'week'; // week | month | quarter
   String _merchantCategory = '';
+  String? _merchantId;
+
+  // Canal Realtime — même pattern que OrdersNotifier et PrescriptionsNotifier.
+  // Finance doit se mettre à jour quand une commande arrive/change de statut
+  // (ex: delivered → le CA du jour et le graphique changent immédiatement).
+  RealtimeChannel? _channel;
 
   bool get isPharmacy => categoryNeedsPrescriptionFlow(_merchantCategory);
 
@@ -26,16 +32,52 @@ class FinanceNotifier extends ChangeNotifier {
   Future<void> _init() async {
     final user = _db.auth.currentUser;
     if (user == null) { loading = false; notifyListeners(); return; }
-    final m = await _db.from('merchants').select('id, category').eq('owner_id', user.id).maybeSingle();
+    final m = await _db
+        .from('merchants')
+        .select('id, category')
+        .eq('owner_id', user.id)
+        .maybeSingle();
     if (m == null) { loading = false; notifyListeners(); return; }
+    _merchantId = m['id'] as String;
     _merchantCategory = (m['category'] as String?) ?? '';
+    await load();
+    _subscribe();
+  }
 
-    final data = await _db.from('orders').select()
-        .eq('merchant_id', m['id'] as String)
+  Future<void> load() async {
+    if (_merchantId == null) return;
+    final data = await _db
+        .from('orders')
+        .select()
+        .eq('merchant_id', _merchantId!)
         .order('created_at', ascending: false);
     orders = (data as List).map((e) => OrderModel.fromJson(e)).toList();
     loading = false;
     notifyListeners();
+  }
+
+  void _subscribe() {
+    if (_merchantId == null) return;
+    _channel = _db
+        .channel('finance-merchant-$_merchantId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'orders',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'merchant_id',
+            value: _merchantId!,
+          ),
+          callback: (_) => load(),
+        )
+        .subscribe();
+  }
+
+  @override
+  void dispose() {
+    if (_channel != null) _db.removeChannel(_channel!);
+    super.dispose();
   }
 
   void setRange(String r) { range = r; notifyListeners(); }
