@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../core/theme/app_colors.dart';
 
 /// Header avec gradient violet — identique au "bg-gradient-hero" du React
 /// Utilisé sur toutes les pages marchand

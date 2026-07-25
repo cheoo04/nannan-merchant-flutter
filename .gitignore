@@ -38,3 +38,4 @@ macos/Flutter/Flutter-Release.xcconfig
 
 # pubspec.lock (optionnel — certaines équipes le versionnent)
 # pubspec.lock
+mon_schema_actuel.sql
