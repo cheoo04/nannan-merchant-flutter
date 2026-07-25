@@ -112,7 +112,7 @@ class FinanceNotifier extends ChangeNotifier {
       final idx = ((ts - cutoff) / bucketMs).floor().clamp(0, buckets - 1);
       data[idx] = (
         label: data[idx].label,
-        sales: data[idx].sales + o.totalXof,
+        sales: data[idx].sales + o.totalAmount,
         count: data[idx].count + 1,
       );
     }
@@ -123,7 +123,7 @@ class FinanceNotifier extends ChangeNotifier {
   int get totalOrders => chartData.fold(0, (s, d) => s + d.count);
   int get commission => (totalSales * _commissionPct).round();
   int get netRevenue => totalSales - commission;
-  int get refundedTotal => refunded.fold(0, (s, o) => s + o.totalXof);
+  int get refundedTotal => refunded.fold(0, (s, o) => s + o.totalAmount);
 }
 
 // ── FINANCE SCREEN ────────────────────────────────────────────────────────────
@@ -361,7 +361,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                       ],
                                     ),
                                   ),
-                                  Text('-${formatXOF(o.totalXof)}',
+                                  Text('-${formatXOF(o.totalAmount)}',
                                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
                                           color: AppColors.destructive)),
                                 ],
@@ -405,7 +405,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               ],
                             ),
                           ),
-                          Text(formatXOF(o.totalXof),
+                          Text(formatXOF(o.totalAmount),
                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
                                   color: AppColors.primary)),
                         ],
