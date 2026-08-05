@@ -7,6 +7,7 @@ import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/merchant_category.dart';
 import '../../shared/widgets/notification_bell_button.dart';
 import '../../shared/models/models.dart';
+import '../orders/orders_repository.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -14,6 +15,8 @@ const _commissionPct = 0.1; // 10% — miroir de COMMISSION_PCT du React
 
 // ── Notifier ──────────────────────────────────────────────────────────────────
 class FinanceNotifier extends ChangeNotifier {
+  final OrdersRepository _repo;
+
   List<OrderModel> orders = [];
   bool loading = true;
   String range = 'week'; // week | month | quarter
@@ -27,56 +30,40 @@ class FinanceNotifier extends ChangeNotifier {
 
   bool get isPharmacy => categoryNeedsPrescriptionFlow(_merchantCategory);
 
-  FinanceNotifier() { _init(); }
+  FinanceNotifier({OrdersRepository repo = const OrdersRepository()}) : _repo = repo {
+    _init();
+  }
 
   Future<void> _init() async {
     final user = _db.auth.currentUser;
     if (user == null) { loading = false; notifyListeners(); return; }
-    final m = await _db
-        .from('merchants')
-        .select('id, category')
-        .eq('owner_id', user.id)
-        .maybeSingle();
-    if (m == null) { loading = false; notifyListeners(); return; }
-    _merchantId = m['id'] as String;
-    _merchantCategory = (m['category'] as String?) ?? '';
+    final merchant = await _repo.resolveMerchant(user.id);
+    if (merchant == null) { loading = false; notifyListeners(); return; }
+    _merchantId = merchant.id;
+    _merchantCategory = merchant.category;
     await load();
     _subscribe();
   }
 
   Future<void> load() async {
     if (_merchantId == null) return;
-    final data = await _db
-        .from('orders')
-        .select()
-        .eq('merchant_id', _merchantId!)
-        .order('created_at', ascending: false);
-    orders = (data as List).map((e) => OrderModel.fromJson(e)).toList();
+    orders = await _repo.fetchOrders(_merchantId!);
     loading = false;
     notifyListeners();
   }
 
   void _subscribe() {
     if (_merchantId == null) return;
-    _channel = _db
-        .channel('finance-merchant-$_merchantId')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'orders',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'merchant_id',
-            value: _merchantId!,
-          ),
-          callback: (_) => load(),
-        )
-        .subscribe();
+    _channel = _repo.subscribeOrders(
+      merchantId: _merchantId!,
+      channelName: 'finance-merchant-$_merchantId',
+      onChange: load,
+    );
   }
 
   @override
   void dispose() {
-    if (_channel != null) _db.removeChannel(_channel!);
+    if (_channel != null) _repo.removeChannel(_channel!);
     super.dispose();
   }
 

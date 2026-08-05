@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/models/models.dart';
+import '../orders/orders_repository.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -11,6 +12,8 @@ SupabaseClient get _db => Supabase.instance.client;
 /// - Ses commandes (via merchant_id)
 /// Se désabonne proprement dans dispose().
 class DashboardNotifier extends ChangeNotifier {
+  final OrdersRepository _ordersRepo;
+
   MerchantModel? merchant;
   List<OrderModel> orders = [];
   bool loadingMerchant = true;
@@ -20,7 +23,8 @@ class DashboardNotifier extends ChangeNotifier {
   RealtimeChannel? _merchantChannel;
   RealtimeChannel? _ordersChannel;
 
-  DashboardNotifier() {
+  DashboardNotifier({OrdersRepository ordersRepo = const OrdersRepository()})
+      : _ordersRepo = ordersRepo {
     _init();
   }
 
@@ -81,14 +85,7 @@ class DashboardNotifier extends ChangeNotifier {
 
   Future<void> _loadOrders(String merchantId) async {
     try {
-      final data = await _db
-          .from('orders')
-          .select()
-          .eq('merchant_id', merchantId)
-          .order('created_at', ascending: false)
-          .limit(200);
-
-      orders = (data as List).map((e) => OrderModel.fromJson(e)).toList();
+      orders = await _ordersRepo.fetchOrders(merchantId);
     } catch (e) {
       error = e.toString();
     } finally {
@@ -98,20 +95,11 @@ class DashboardNotifier extends ChangeNotifier {
   }
 
   void _subscribeOrders(String merchantId) {
-    _ordersChannel = _db
-        .channel('dashboard-orders-$merchantId')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'orders',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'merchant_id',
-            value: merchantId,
-          ),
-          callback: (_) => _loadOrders(merchantId),
-        )
-        .subscribe();
+    _ordersChannel = _ordersRepo.subscribeOrders(
+      merchantId: merchantId,
+      channelName: 'dashboard-orders-$merchantId',
+      onChange: () => _loadOrders(merchantId),
+    );
   }
 
   // ── KPIs calculés (même logique que le React) ─────────────
@@ -242,7 +230,7 @@ class DashboardNotifier extends ChangeNotifier {
   @override
   void dispose() {
     if (_merchantChannel != null) _db.removeChannel(_merchantChannel!);
-    if (_ordersChannel != null) _db.removeChannel(_ordersChannel!);
+    if (_ordersChannel != null) _ordersRepo.removeChannel(_ordersChannel!);
     super.dispose();
   }
 }

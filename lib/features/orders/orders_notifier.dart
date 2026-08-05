@@ -2,10 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/models/models.dart';
 import '../../shared/merchant_category.dart';
+import 'orders_repository.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
 class OrdersNotifier extends ChangeNotifier {
+  final OrdersRepository _repo;
+
   List<OrderModel> orders = [];
   Map<String, List<OrderItemModel>> itemsCache = {};
   bool loading = true;
@@ -23,7 +26,7 @@ class OrdersNotifier extends ChangeNotifier {
 
   bool get isPharmacy => categoryNeedsPrescriptionFlow(_merchantCategory);
 
-  OrdersNotifier() {
+  OrdersNotifier({OrdersRepository repo = const OrdersRepository()}) : _repo = repo {
     _init();
   }
 
@@ -31,26 +34,18 @@ class OrdersNotifier extends ChangeNotifier {
     final user = _db.auth.currentUser;
     if (user == null) { loading = false; notifyListeners(); return; }
 
-    final m = await _db.from('merchants').select('id, category').eq('owner_id', user.id).maybeSingle();
-    if (m == null) { loading = false; notifyListeners(); return; }
+    final merchant = await _repo.resolveMerchant(user.id);
+    if (merchant == null) { loading = false; notifyListeners(); return; }
 
-    _merchantId = m['id'] as String;
-    _merchantCategory = (m['category'] as String?) ?? '';
+    _merchantId = merchant.id;
+    _merchantCategory = merchant.category;
     await _load();
     _subscribe();
   }
 
   Future<void> _load() async {
     try {
-      final data = await _db
-          .from('orders')
-          // Join sur user_addresses via delivery_address_id pour récupérer
-          // le texte de l'adresse (label + detail) et les coordonnées GPS.
-          .select('*, address:user_addresses!delivery_address_id(label,detail,lat,lng)')
-          .eq('merchant_id', _merchantId!)
-          .order('created_at', ascending: false)
-          .limit(200);
-      orders = (data as List).map((e) => OrderModel.fromJson(e)).toList();
+      orders = await _repo.fetchOrders(_merchantId!);
     } catch (e) {
       error = e.toString();
     } finally {
@@ -60,20 +55,11 @@ class OrdersNotifier extends ChangeNotifier {
   }
 
   void _subscribe() {
-    _channel = _db
-        .channel('orders-merchant-$_merchantId')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'orders',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'merchant_id',
-            value: _merchantId!,
-          ),
-          callback: (_) => _load(),
-        )
-        .subscribe();
+    _channel = _repo.subscribeOrders(
+      merchantId: _merchantId!,
+      channelName: 'orders-merchant-$_merchantId',
+      onChange: _load,
+    );
   }
 
   // ── Counts par statut ─────────────────────────────────────
@@ -101,12 +87,7 @@ class OrdersNotifier extends ChangeNotifier {
   // ── Chargement items d'une commande ───────────────────────
   Future<List<OrderItemModel>> fetchItems(String orderId) async {
     if (itemsCache.containsKey(orderId)) return itemsCache[orderId]!;
-    final data = await _db
-        .from('order_items')
-        .select()
-        .eq('order_id', orderId)
-        .order('created_at');
-    final items = (data as List).map((e) => OrderItemModel.fromJson(e)).toList();
+    final items = await _repo.fetchOrderItems(orderId);
     itemsCache[orderId] = items;
     notifyListeners();
     return items;
@@ -144,14 +125,8 @@ class OrdersNotifier extends ChangeNotifier {
       final order = orders.firstWhere((o) => o.id == orderId);
       if (order.acceptCode != codeInput) return 'Code incorrect';
 
-      // .eq('status', 'pending') : garde-fou contre un double traitement
-      // (ex: deux onglets ouverts, ou commande déjà traitée entre-temps).
-      final updated = await _db.from('orders').update({
-        'status': 'accepted',
-        'merchant_confirmed_at': DateTime.now().toIso8601String(),
-      }).eq('id', orderId).eq('status', 'pending').select();
-
-      if ((updated as List).isEmpty) return 'Commande déjà traitée';
+      final ok = await _repo.acceptOrder(orderId);
+      if (!ok) return 'Commande déjà traitée';
 
       acceptingOrderId = null;
       codeInput = '';
@@ -168,12 +143,8 @@ class OrdersNotifier extends ChangeNotifier {
     busyOrderId = orderId;
     notifyListeners();
     try {
-      final updated = await _db.from('orders')
-          .update({'status': 'cancelled'})
-          .eq('id', orderId)
-          .eq('status', 'pending')
-          .select();
-      if ((updated as List).isEmpty) return 'Commande déjà traitée';
+      final ok = await _repo.refuseOrder(orderId);
+      if (!ok) return 'Commande déjà traitée';
       return null;
     } catch (e) {
       return e.toString();
@@ -185,40 +156,7 @@ class OrdersNotifier extends ChangeNotifier {
 
   @override
   void dispose() {
-    if (_channel != null) _db.removeChannel(_channel!);
+    if (_channel != null) _repo.removeChannel(_channel!);
     super.dispose();
   }
-}
-
-// ── OrderItemModel (ajout ici pour éviter import circulaire) ──
-class OrderItemModel {
-  final String id;
-  final String orderId;
-  final String? productId;
-  final String productName;
-  final String? productImage;
-  final int qty;
-  final int unitPrice;
-
-  const OrderItemModel({
-    required this.id,
-    required this.orderId,
-    this.productId,
-    required this.productName,
-    this.productImage,
-    required this.qty,
-    required this.unitPrice,
-  });
-
-  factory OrderItemModel.fromJson(Map<String, dynamic> j) => OrderItemModel(
-        id: j['id'] as String,
-        orderId: j['order_id'] as String,
-        productId: j['product_id'] as String?,
-        productName: j['product_name'] as String,
-        productImage: j['product_image'] as String?,
-        qty: j['qty'] as int,
-        unitPrice: j['unit_price'] as int,
-      );
-
-  int get subtotal => qty * unitPrice;
 }

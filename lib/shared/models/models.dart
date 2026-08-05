@@ -223,6 +223,39 @@ extension _MapGet on Map {
   }
 }
 
+// ── OrderItemModel ───────────────────────────────────────────────────────────
+class OrderItemModel {
+  final String id;
+  final String orderId;
+  final String? productId;
+  final String productName;
+  final String? productImage;
+  final int qty;
+  final int unitPrice;
+
+  const OrderItemModel({
+    required this.id,
+    required this.orderId,
+    this.productId,
+    required this.productName,
+    this.productImage,
+    required this.qty,
+    required this.unitPrice,
+  });
+
+  factory OrderItemModel.fromJson(Map<String, dynamic> j) => OrderItemModel(
+        id: j['id'] as String,
+        orderId: j['order_id'] as String,
+        productId: j['product_id'] as String?,
+        productName: j['product_name'] as String,
+        productImage: j['product_image'] as String?,
+        qty: j['qty'] as int,
+        unitPrice: j['unit_price'] as int,
+      );
+
+  int get subtotal => qty * unitPrice;
+}
+
 // ── NotificationRow ───────────────────────────────────────────────────────────
 class NotificationRow {
   final String id;
