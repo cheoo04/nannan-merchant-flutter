@@ -119,6 +119,15 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
 
     setState(() => _submitting = true);
     try {
+      // users_profiles.name est posé par le trigger handle_new_user à
+      // l'inscription (souvent avec l'email en valeur par défaut, faute de
+      // mieux à ce moment-là). Ici, c'est la première fois qu'on a le vrai
+      // nom saisi par le marchand — on le renvoie pour corriger ça.
+      await _db.from('users_profiles').update({
+        'name': _name.text.trim(),
+        'phone': _phone.text.trim(),
+      }).eq('id', user.id);
+
       await _db.from('partner_applications').insert({
         'user_id': user.id,
         'type': 'merchant',

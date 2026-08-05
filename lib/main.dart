@@ -14,6 +14,8 @@ import 'features/finances/finance_screen.dart';
 import 'features/prescriptions/prescriptions_screen.dart';
 import 'features/stories/stories_screen.dart';
 import 'features/become_merchant/become_merchant_screen.dart';
+import 'features/auth/signup_screen.dart';
+import 'core/utils/ci_phone.dart';
 import 'shared/widgets/merchant_bottom_nav.dart';
 import 'shared/merchant_category.dart';
 // ⚠️ Notifications mises de côté le 30/06/2026 — voir _set_aside/notifications/
@@ -274,8 +276,16 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     setState(() { _loading = true; _error = null; });
     try {
+      final input = _email.text.trim();
+      // Le champ accepte email OU téléphone : si l'entrée ressemble à un
+      // numéro ivoirien, on régénère le même email de secours généré à
+      // l'inscription (déterministe, pas besoin de lookup en base).
+      final effectiveEmail = CiPhone.isValid(input)
+          ? placeholderEmailForPhone(CiPhone.normalize(input))
+          : input;
+
       final res = await Supabase.instance.client.auth.signInWithPassword(
-        email: _email.text.trim(),
+        email: effectiveEmail,
         password: _password.text,
       );
       final userId = res.user?.id;
@@ -289,8 +299,30 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final role = profile?['role'] as String?;
       if (role != 'merchant') {
-        await Supabase.instance.client.auth.signOut();
-        setState(() => _error = "Ce compte n'est pas un compte marchand.");
+        // Ne pas rejeter tout de suite : un candidat qui a déjà soumis une
+        // demande (en attente ou déjà approuvée mais pas encore reflétée
+        // en session) doit pouvoir revoir l'écran de suivi, pas se faire
+        // déconnecter avec une erreur qui laisse penser à un mauvais compte.
+        final apps = await Supabase.instance.client
+            .from('partner_applications')
+            .select('status')
+            .eq('user_id', userId)
+            .eq('type', 'merchant');
+        final hasApplication = (apps as List).isNotEmpty;
+
+        if (!hasApplication) {
+          await Supabase.instance.client.auth.signOut();
+          setState(() => _error = "Ce compte n'est pas un compte marchand.");
+          return;
+        }
+
+        if (mounted) {
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => BecomeMerchantScreen(
+              onBack: () => Navigator.of(context).pop(),
+            ),
+          ));
+        }
         return;
       }
 
@@ -369,16 +401,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
                   const SizedBox(height: 24),
 
-                  // Email
-                  const _LoginLabel(text: 'Adresse email'),
+                  // Email ou téléphone
+                  const _LoginLabel(text: 'Email ou téléphone'),
                   const SizedBox(height: 4),
                   TextField(
                     controller: _email,
-                    keyboardType: TextInputType.emailAddress,
+                    keyboardType: TextInputType.text,
                     decoration: InputDecoration(
-                      hintText: 'votre@email.com',
+                      hintText: 'votre@email.com ou 01 02 03 04 05',
                       hintStyle: const TextStyle(color: AppColors.mutedForeground),
-                      prefixIcon: const Icon(Icons.mail_outline_rounded,
+                      prefixIcon: const Icon(Icons.person_outline_rounded,
                           color: AppColors.mutedForeground, size: 18),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16),
                           borderSide: const BorderSide(color: AppColors.border)),
@@ -463,14 +495,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 16),
 
-                  // Devenir marchand
+                  // Créer un compte
                   Center(
                     child: GestureDetector(
                       onTap: () {
                         Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => BecomeMerchantScreen(
-                            onBack: () => Navigator.of(context).pop(),
-                          ),
+                          builder: (_) => const SignupScreen(),
                         ));
                       },
                       child: const Text.rich(
@@ -479,7 +509,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
                           children: [
                             TextSpan(
-                              text: 'Faire une demande',
+                              text: 'Créer un compte',
                               style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
                             ),
                           ],
