@@ -16,10 +16,10 @@ import 'features/stories/stories_screen.dart';
 import 'features/become_merchant/become_merchant_screen.dart';
 import 'features/auth/signup_screen.dart';
 import 'core/utils/ci_phone.dart';
+import 'features/notifications/notifications_notifier.dart';
+import 'features/notifications/notifications_screen.dart';
 import 'shared/widgets/merchant_bottom_nav.dart';
 import 'shared/merchant_category.dart';
-// ⚠️ Notifications mises de côté le 30/06/2026 — voir _set_aside/notifications/
-// (périmètre FE-14, assigné à la partie Client, pas Marchand).
 
 Future<void> main() async {
   // Initialiser les données de locale pour intl (DateFormat 'fr_FR')
@@ -137,10 +137,29 @@ class _MerchantShellState extends State<MerchantShell> {
   bool _loadingCategory = true;
   bool _isPharmacy = false;
 
+  // Une seule instance partagée par tous les onglets — une seule
+  // souscription realtime pour toute l'app (voir commentaire dans
+  // NotificationsNotifier). Le badge "non lus" de chaque cloche et l'écran
+  // complet des notifications lisent tous cette même instance.
+  late final NotificationsNotifier _notifications;
+
   @override
   void initState() {
     super.initState();
+    _notifications = NotificationsNotifier();
+    _notifications.addListener(_onNotificationsChanged);
     _loadMerchantCategory();
+  }
+
+  void _onNotificationsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _notifications.removeListener(_onNotificationsChanged);
+    _notifications.dispose();
+    super.dispose();
   }
 
   Future<void> _loadMerchantCategory() async {
@@ -164,19 +183,23 @@ class _MerchantShellState extends State<MerchantShell> {
     if (mounted) setState(() => _loadingCategory = false);
   }
 
-  // ⚠️ Notifications mises de côté le 30/06/2026 — voir _set_aside/notifications/
-  // (périmètre FE-14, assigné à la partie Client). En attendant une
-  // implémentation partagée par l'équipe, la cloche est un stub désactivé
-  // (unreadCount toujours à 0, tap sans effet visible pour le moment).
   void _openNotifications() {
-    // No-op volontaire : ne pas ouvrir un écran qui appartient à un autre
-    // périmètre. Remettre l'appel à NotificationsScreen une fois la
-    // version commune validée par l'équipe.
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => NotificationsScreen(
+        notifier: _notifications,
+        onGoToOrders: () => setState(() => _index = MerchantBottomNav.indexFor(
+            MerchantTab.orders, isPharmacy: _isPharmacy)),
+      ),
+    ));
   }
 
   void _openStories() {
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => StoriesScreen(onGoToDashboard: () => Navigator.of(context).pop()),
+      builder: (_) => StoriesScreen(
+        onGoToDashboard: () => Navigator.of(context).pop(),
+        unreadCount: _notifications.unreadCount,
+        onGoToNotifications: _openNotifications,
+      ),
     ));
   }
 
@@ -218,7 +241,7 @@ class _MerchantShellState extends State<MerchantShell> {
           onGoToPrescriptions: prescriptionsIndex == null
               ? () {} // ne devrait jamais être appelé (bouton masqué si non-pharmacie)
               : () => setState(() => _index = prescriptionsIndex),
-          unreadCount: 0 /* notif mise de côté */,
+          unreadCount: _notifications.unreadCount,
           onGoToNotifications: _openNotifications,
           onGoToBecomesMerchant: () => setState(() => _showBecomeMerchant = true),
         ),
@@ -228,6 +251,8 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
+          unreadCount: _notifications.unreadCount,
+          onGoToNotifications: _openNotifications,
         ),
 
         // Produits
@@ -235,6 +260,8 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
+          unreadCount: _notifications.unreadCount,
+          onGoToNotifications: _openNotifications,
         ),
 
         // Ordonnances — uniquement pour les pharmacies
@@ -242,6 +269,8 @@ class _MerchantShellState extends State<MerchantShell> {
           PrescriptionsScreen(
             currentNavIndex: _index,
             onNavTap: (i) => setState(() => _index = i),
+            unreadCount: _notifications.unreadCount,
+            onGoToNotifications: _openNotifications,
           ),
 
         // Finances
@@ -249,6 +278,8 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
+          unreadCount: _notifications.unreadCount,
+          onGoToNotifications: _openNotifications,
         ),
       ],
     );

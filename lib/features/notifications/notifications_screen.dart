@@ -5,9 +5,8 @@ import '../../shared/models/models.dart';
 import 'notifications_notifier.dart';
 
 // Port fidèle de _app.notifications.tsx (React).
-// Placé dans _set_aside/ car FE-14 est côté Client, pas Marchand.
-// À déplacer dans lib/features/notifications/ quand la partie Client
-// sera construite.
+// Réactivé pour l'app Marchand (apps désormais séparées, FE-14 est donc
+// aussi à la charge de la partie Marchand).
 
 // Équivalent de ICONS (React)
 ({IconData icon, Color color, Color bg}) _iconForType(String type) {

@@ -358,23 +358,13 @@ class _GradientHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row : retour + ville + notifications
+          // Top row : ville + notifications
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              // Bouton retour (profil)
-              _HeaderIconButton(
-                icon: Icons.arrow_back_rounded,
-                semanticLabel: 'Retour',
-                onTap: () => Navigator.of(context).maybePop(),
-              ),
-              Row(
-                children: [
-                  CitySwitcherChip(cityCode: cityCode),
-                  const SizedBox(width: 8),
-                  NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications),
-                ],
-              ),
+              CitySwitcherChip(cityCode: cityCode),
+              const SizedBox(width: 8),
+              NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications),
             ],
           ),
 
@@ -483,39 +473,6 @@ class _GradientHeader extends StatelessWidget {
 }
 
 // ── PETITS WIDGETS ───────────────────────────────────────────────────────────
-
-/// Bouton icône dans le header (fond blanc/15, touch target 44×44)
-class _HeaderIconButton extends StatelessWidget {
-  final IconData icon;
-  final String semanticLabel;
-  final VoidCallback onTap;
-
-  const _HeaderIconButton({
-    required this.icon,
-    required this.semanticLabel,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: semanticLabel,
-      button: true,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: AppColors.headerOverlay,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: Colors.white, size: 20),
-        ),
-      ),
-    );
-  }
-}
 
 /// KPI card dans le header gradient
 class _KpiCard extends StatelessWidget {
