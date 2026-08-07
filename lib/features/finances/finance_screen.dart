@@ -6,6 +6,7 @@ import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/merchant_category.dart';
 import '../../shared/widgets/notification_bell_button.dart';
+import '../../shared/widgets/skeleton.dart';
 import '../../shared/models/models.dart';
 import '../orders/orders_repository.dart';
 
@@ -153,7 +154,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: CustomScrollView(
+      body: RefreshIndicator(
+        onRefresh: _n.load,
+        child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           // ── HEADER ──────────────────────────────────────
           SliverToBoxAdapter(
@@ -174,13 +178,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
           if (_n.loading)
             const SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  SizedBox(width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.mutedForeground)),
-                  SizedBox(width: 8),
-                  Text('Chargement…', style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
-                ]),
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: SkeletonList(count: 3),
               ),
             ),
 
@@ -405,6 +404,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
+        ),
       ),
       bottomNavigationBar: MerchantBottomNav(
           currentIndex: widget.currentNavIndex,
@@ -457,12 +457,8 @@ class _FinanceHeader extends StatelessWidget {
               ),
               Row(
                 children: [
-                  const Text('Données temps réel',
-                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500)),
-                  if (onNotifications != null) ...[
-                    const SizedBox(width: 10),
+                  if (onNotifications != null)
                     NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications!),
-                  ],
                 ],
               ),
             ],

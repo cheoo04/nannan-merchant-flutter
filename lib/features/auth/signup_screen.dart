@@ -139,7 +139,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Devenez partenaire Nan-Nan',
+                    'Devenez partenaire A Nan-Nan',
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],

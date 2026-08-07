@@ -9,6 +9,7 @@ import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/widgets/city_switcher_chip.dart';
 import '../../shared/widgets/notification_bell_button.dart';
+import '../../shared/widgets/skeleton.dart';
 import '../../shared/merchant_category.dart';
 import 'dashboard_notifier.dart';
 
@@ -90,7 +91,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final merchantName = merchant?.name ?? 'Mon commerce';
           final hasData = _notifier.totalCount > 0;
 
-          return CustomScrollView(
+          return RefreshIndicator(
+            onRefresh: _notifier.refresh,
+            child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               // ── HEADER GRADIENT ────────────────────────────
               SliverToBoxAdapter(
@@ -131,28 +135,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               if (_notifier.loadingOrders)
                 const SliverToBoxAdapter(
                   child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.mutedForeground,
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Chargement temps réel…',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppColors.mutedForeground,
-                          ),
-                        ),
-                      ],
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    child: SkeletonList(count: 3),
                   ),
                 ),
 
@@ -299,6 +283,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // Espace pour la bottom nav
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
+            ),
           );
         },
       ),
@@ -658,7 +643,7 @@ class _EmptyOrdersCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           const Text(
-            "Dès qu'un client commandera, vous le verrez ici en temps réel.",
+            "Dès qu'un client commandera, vous le verrez apparaître ici.",
             style: TextStyle(
               fontSize: 11,
               color: AppColors.mutedForeground,

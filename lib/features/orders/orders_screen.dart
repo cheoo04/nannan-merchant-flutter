@@ -5,6 +5,7 @@ import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/widgets/notification_bell_button.dart';
+import '../../shared/widgets/skeleton.dart';
 import 'orders_notifier.dart';
 import '../../shared/models/models.dart';
 
@@ -159,24 +160,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
           const SizedBox(height: 8),
 
-          // ── LOADING ─────────────────────────────────────
-          if (_notifier.loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 16, height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.mutedForeground),
-                  ),
-                  SizedBox(width: 8),
-                  Text('Connexion temps réel…',
-                      style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
-                ],
-              ),
-            ),
-
           // ── LISTE COMMANDES ──────────────────────────────
           Expanded(
             child: ListenableBuilder(
@@ -184,43 +167,63 @@ class _OrdersScreenState extends State<OrdersScreen> {
               builder: (context, _) {
                 final visible = _notifier.visibleOrders;
 
+                if (_notifier.loading) {
+                  return const SkeletonList(
+                    count: 4,
+                    padding: EdgeInsets.fromLTRB(20, 8, 20, 100),
+                  );
+                }
+
                 if (!_notifier.loading && visible.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: AppColors.card,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: AppColors.border,
-                            style: BorderStyle.solid,
+                  return RefreshIndicator(
+                    onRefresh: _notifier.refresh,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: AppColors.card,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: AppColors.border,
+                                  style: BorderStyle.solid,
+                                ),
+                              ),
+                              child: const Text(
+                                'Aucune commande dans cette section.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+                              ),
+                            ),
                           ),
                         ),
-                        child: const Text(
-                          'Aucune commande dans cette section.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
-                        ),
-                      ),
+                      ],
                     ),
                   );
                 }
 
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-                  itemCount: visible.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, i) {
-                    final order = visible[i];
-                    return _OrderCard(
-                      order: order,
-                      notifier: _notifier,
-                      onRefuse: () => _handleRefuse(order.id),
-                      onAcceptSubmit: () => _handleAccept(order.id),
-                    );
-                  },
+                return RefreshIndicator(
+                  onRefresh: _notifier.refresh,
+                  child: ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+                    itemCount: visible.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, i) {
+                      final order = visible[i];
+                      return _OrderCard(
+                        order: order,
+                        notifier: _notifier,
+                        onRefuse: () => _handleRefuse(order.id),
+                        onAcceptSubmit: () => _handleAccept(order.id),
+                      );
+                    },
+                  ),
                 );
               },
             ),
@@ -281,17 +284,11 @@ class _OrdersHeader extends StatelessWidget {
               ),
               Row(
                 children: [
-                  const Text(
-                    'Temps réel',
-                    style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-                  ),
-                  if (onNotifications != null) ...[
-                    const SizedBox(width: 10),
+                  if (onNotifications != null)
                     NotificationBellButton(
                       unreadCount: unreadCount,
                       onTap: onNotifications!,
                     ),
-                  ],
                 ],
               ),
             ],

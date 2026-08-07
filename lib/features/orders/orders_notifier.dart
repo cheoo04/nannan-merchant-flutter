@@ -54,6 +54,21 @@ class OrdersNotifier extends ChangeNotifier {
     }
   }
 
+  /// Rechargement manuel (pull-to-refresh) — filet de sécurité si le
+  /// realtime ne diffuse pas un changement pour une raison quelconque.
+  /// Ne repasse pas `loading` à true : on garde la liste actuelle visible
+  /// pendant le rechargement, pas de skeleton qui clignote.
+  Future<void> refresh() async {
+    if (_merchantId == null) return;
+    try {
+      orders = await _repo.fetchOrders(_merchantId!);
+      notifyListeners();
+    } catch (e) {
+      error = e.toString();
+      notifyListeners();
+    }
+  }
+
   void _subscribe() {
     _channel = _repo.subscribeOrders(
       merchantId: _merchantId!,

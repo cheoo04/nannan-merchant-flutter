@@ -94,6 +94,19 @@ class DashboardNotifier extends ChangeNotifier {
     }
   }
 
+  /// Rechargement manuel (pull-to-refresh) — filet de sécurité si le
+  /// realtime ne diffuse pas un changement.
+  Future<void> refresh() async {
+    if (merchant == null) return;
+    try {
+      orders = await _ordersRepo.fetchOrders(merchant!.id);
+      notifyListeners();
+    } catch (e) {
+      error = e.toString();
+      notifyListeners();
+    }
+  }
+
   void _subscribeOrders(String merchantId) {
     _ordersChannel = _ordersRepo.subscribeOrders(
       merchantId: merchantId,

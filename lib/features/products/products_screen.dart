@@ -8,6 +8,7 @@ import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/widgets/notification_bell_button.dart';
+import '../../shared/widgets/skeleton.dart';
 import '../../shared/models/models.dart';
 import '../../shared/merchant_category.dart';
 
@@ -471,16 +472,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
               if (_n.loadingProducts)
                 const SliverToBoxAdapter(
-                  child: Center(child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      SizedBox(width: 16, height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2)),
-                      SizedBox(width: 8),
-                      Text('Chargement temps réel…',
-                          style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
-                    ]),
-                  )),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    child: SkeletonList(count: 4),
+                  ),
                 ),
 
               if (!_n.loadingProducts && _n.filtered.isEmpty)
@@ -606,7 +601,7 @@ class _ProductsHeader extends StatelessWidget {
               style: TextStyle(color: Colors.white, fontSize: 24,
                   fontWeight: FontWeight.w700, fontFamily: 'Sora')),
           const SizedBox(height: 4),
-          const Text('Catalogue & disponibilité boutique en temps réel.',
+          const Text('Catalogue & disponibilité de votre boutique.',
               style: TextStyle(color: Colors.white, fontSize: 12)),
           const SizedBox(height: 12),
           // Barre de recherche

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -24,7 +25,17 @@ import 'shared/merchant_category.dart';
 Future<void> main() async {
   // Initialiser les données de locale pour intl (DateFormat 'fr_FR')
   // Sans ça : LocaleDataException au premier formatage de date.
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+
+  // Garde le splash natif (logo) affiché tant qu'on n'a pas explicitement
+  // appelé FlutterNativeSplash.remove() — sans ça, le splash natif
+  // disparaît dès la première image dessinée par Flutter, qui serait
+  // sinon l'écran de chargement générique de _AuthGate (spinner nu sur
+  // fond clair) le temps de vérifier la session. Avec preserve(), aucun
+  // écran intermédiaire n'est visible : le logo reste jusqu'à ce qu'on
+  // sache où rediriger (Login ou MerchantShell).
+  FlutterNativeSplash.preserve(widgetsBinding: binding);
+
   await initializeDateFormatting('fr_FR');
 
   // Barre de statut transparente — rendu immersif
@@ -49,7 +60,7 @@ class NanNanMerchantApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Nan-Nan — Marchand',
+      title: 'A Nan-Nan — Marchand',
       theme: AppTheme.light(),
       debugShowCheckedModeBanner: false,
       builder: (context, child) => ToastOverlay(child: child ?? const SizedBox()),
@@ -96,6 +107,10 @@ class _AuthGateState extends State<_AuthGate> {
       }
     }
     if (mounted) setState(() => _checking = false);
+    // Le logo natif reste affiché jusqu'ici — on ne le retire qu'une fois
+    // qu'on sait exactement où rediriger, pour ne jamais montrer d'écran
+    // de chargement intermédiaire.
+    FlutterNativeSplash.remove();
   }
 
   @override
