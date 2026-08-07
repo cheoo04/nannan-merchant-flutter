@@ -19,6 +19,7 @@ import 'features/auth/signup_screen.dart';
 import 'core/utils/ci_phone.dart';
 import 'features/notifications/notifications_notifier.dart';
 import 'features/notifications/notifications_screen.dart';
+import 'shared/widgets/skeleton.dart';
 import 'shared/widgets/merchant_bottom_nav.dart';
 import 'shared/merchant_category.dart';
 
@@ -70,9 +71,11 @@ class NanNanMerchantApp extends StatelessWidget {
 }
 
 // ── GATE AUTH ─────────────────────────────────────────────────────────────────
-// Vérifie la session Supabase au démarrage.
-// Si connecté + rôle merchant → MerchantShell
-// Sinon → LoginScreen
+// ── AUTH GATE ─────────────────────────────────────────────────────────────────
+// Vérifie la session + rôle + catégorie du commerce en UNE SEULE passe
+// avant de retirer le splash natif. Résultat : MerchantShell reçoit
+// isPharmacy dès sa construction → jamais d'état _loadingCategory →
+// jamais de skeleton → jamais de flash blanc entre splash et dashboard.
 class _AuthGate extends StatefulWidget {
   const _AuthGate();
 
@@ -83,6 +86,7 @@ class _AuthGate extends StatefulWidget {
 class _AuthGateState extends State<_AuthGate> {
   bool _checking = true;
   bool _isMerchant = false;
+  bool _isPharmacy = false;
 
   @override
   void initState() {
@@ -91,39 +95,46 @@ class _AuthGateState extends State<_AuthGate> {
   }
 
   Future<void> _check() async {
-    final session = Supabase.instance.client.auth.currentSession;
+    final client = Supabase.instance.client;
+    final session = client.auth.currentSession;
     if (session != null) {
       try {
-        final profile = await Supabase.instance.client
-            .from('users_profiles')
-            .select('role')
-            .eq('id', session.user.id)
-            .maybeSingle();
-        _isMerchant = profile?['role'] == 'merchant';
-      } catch (e) {
-        // Erreur réseau/serveur au démarrage : ne jamais rester bloqué sur
-        // le spinner — on renvoie vers Login où l'utilisateur peut réessayer.
+        // Requête unique : role + catégorie du commerce en parallèle
+        final results = await Future.wait([
+          client
+              .from('users_profiles')
+              .select('role')
+              .eq('id', session.user.id)
+              .maybeSingle(),
+          client
+              .from('merchants')
+              .select('category')
+              .eq('owner_id', session.user.id)
+              .maybeSingle(),
+        ]);
+        _isMerchant = results[0]?['role'] == 'merchant';
+        _isPharmacy = categoryNeedsPrescriptionFlow(
+            results[1]?['category'] as String?);
+      } catch (_) {
+        // Erreur réseau : ne jamais rester bloqué — retour vers Login.
         _isMerchant = false;
+        _isPharmacy = false;
       }
     }
     if (mounted) setState(() => _checking = false);
-    // Le logo natif reste affiché jusqu'ici — on ne le retire qu'une fois
-    // qu'on sait exactement où rediriger, pour ne jamais montrer d'écran
-    // de chargement intermédiaire.
+    // Splash retiré seulement ici : on a déjà tout ce qu'il faut pour
+    // afficher directement le bon écran sans aucun état intermédiaire.
     FlutterNativeSplash.remove();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_checking) {
-      return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
-        ),
-      );
-    }
-    return _isMerchant ? const MerchantShell() : const LoginScreen();
+    // Pendant _checking : splash natif toujours visible (preserve() actif)
+    // → ce Scaffold ne s'affiche jamais à l'écran.
+    if (_checking) return const SizedBox.shrink();
+    return _isMerchant
+        ? MerchantShell(isPharmacy: _isPharmacy)
+        : const LoginScreen();
   }
 }
 
@@ -140,7 +151,11 @@ class _AuthGateState extends State<_AuthGate> {
 // "Stories / Publications" n'est plus un onglet (usage occasionnel) : c'est
 // une sous-page ouverte en push depuis le Dashboard, avec retour au tap arrière.
 class MerchantShell extends StatefulWidget {
-  const MerchantShell({super.key});
+  // isPharmacy résolu dans _AuthGate avant le remove() du splash —
+  // MerchantShell n'a donc jamais à charger quoi que ce soit avant
+  // de s'afficher : zéro état intermédiaire, zéro flash.
+  final bool isPharmacy;
+  const MerchantShell({super.key, required this.isPharmacy});
 
   @override
   State<MerchantShell> createState() => _MerchantShellState();
@@ -149,8 +164,8 @@ class MerchantShell extends StatefulWidget {
 class _MerchantShellState extends State<MerchantShell> {
   int _index = 0;
   bool _showBecomeMerchant = false;
-  bool _loadingCategory = true;
-  bool _isPharmacy = false;
+
+  bool get _isPharmacy => widget.isPharmacy;
 
   // Une seule instance partagée par tous les onglets — une seule
   // souscription realtime pour toute l'app (voir commentaire dans
@@ -163,7 +178,6 @@ class _MerchantShellState extends State<MerchantShell> {
     super.initState();
     _notifications = NotificationsNotifier();
     _notifications.addListener(_onNotificationsChanged);
-    _loadMerchantCategory();
   }
 
   void _onNotificationsChanged() {
@@ -175,27 +189,6 @@ class _MerchantShellState extends State<MerchantShell> {
     _notifications.removeListener(_onNotificationsChanged);
     _notifications.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadMerchantCategory() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      if (mounted) setState(() => _loadingCategory = false);
-      return;
-    }
-    try {
-      final m = await Supabase.instance.client
-          .from('merchants')
-          .select('category')
-          .eq('owner_id', user.id)
-          .maybeSingle();
-      _isPharmacy = categoryNeedsPrescriptionFlow(m?['category'] as String?);
-    } catch (_) {
-      // Si la requête échoue on ne bloque pas le marchand : il retombe
-      // simplement sur la barre standard à 4 onglets (pas d'Ordonnances).
-      _isPharmacy = false;
-    }
-    if (mounted) setState(() => _loadingCategory = false);
   }
 
   void _openNotifications() {
@@ -220,15 +213,6 @@ class _MerchantShellState extends State<MerchantShell> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loadingCategory) {
-      return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
-        ),
-      );
-    }
-
     if (_showBecomeMerchant) {
       return BecomeMerchantScreen(
         onBack: () => setState(() => _showBecomeMerchant = false),
@@ -337,13 +321,25 @@ class _LoginScreenState extends State<LoginScreen> {
       final userId = res.user?.id;
       if (userId == null) throw Exception('Connexion échouée');
 
-      final profile = await Supabase.instance.client
-          .from('users_profiles')
-          .select('role')
-          .eq('id', userId)
-          .maybeSingle();
-
+      // Charger role + catégorie en parallèle — même logique que
+      // _AuthGate pour éviter tout état de chargement dans MerchantShell.
+      final results = await Future.wait([
+        Supabase.instance.client
+            .from('users_profiles')
+            .select('role')
+            .eq('id', userId)
+            .maybeSingle(),
+        Supabase.instance.client
+            .from('merchants')
+            .select('category')
+            .eq('owner_id', userId)
+            .maybeSingle(),
+      ]);
+      final profile = results[0];
+      final merchantData = results[1];
       final role = profile?['role'] as String?;
+      final isPharmacy = categoryNeedsPrescriptionFlow(
+          merchantData?['category'] as String?);
       if (role != 'merchant') {
         // Ne pas rejeter tout de suite : un candidat qui a déjà soumis une
         // demande (en attente ou déjà approuvée mais pas encore reflétée
@@ -374,7 +370,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MerchantShell()),
+          MaterialPageRoute(
+            builder: (_) => MerchantShell(isPharmacy: isPharmacy),
+          ),
         );
       }
     } on AuthException catch (_) {
