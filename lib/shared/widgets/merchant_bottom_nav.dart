@@ -12,7 +12,7 @@ import '../../core/theme/app_colors.dart';
 ///
 /// Pour éviter tout décalage d'index entre écrans, ne pas coder les indices
 /// en dur ailleurs : utiliser [MerchantBottomNav.indexFor].
-enum MerchantTab { home, orders, products, prescriptions, finance }
+enum MerchantTab { home, orders, products, prescriptions, finance, profile }
 
 class MerchantBottomNav extends StatelessWidget {
   final int currentIndex;
@@ -33,6 +33,7 @@ class MerchantBottomNav extends StatelessWidget {
         MerchantTab.products,
         if (isPharmacy) MerchantTab.prescriptions,
         MerchantTab.finance,
+        MerchantTab.profile,
       ];
 
   /// Index à passer à [currentIndex] pour un onglet donné, selon le métier.
@@ -46,6 +47,7 @@ class MerchantBottomNav extends StatelessWidget {
     MerchantTab.products: Icons.inventory_2_rounded,
     MerchantTab.prescriptions: Icons.medication_rounded,
     MerchantTab.finance: Icons.bar_chart_rounded,
+    MerchantTab.profile: Icons.person_rounded,
   };
 
   static const _labelByTab = <MerchantTab, String>{
@@ -54,6 +56,7 @@ class MerchantBottomNav extends StatelessWidget {
     MerchantTab.products: 'Produits',
     MerchantTab.prescriptions: 'Ord.',
     MerchantTab.finance: 'Finance',
+    MerchantTab.profile: 'Profil',
   };
 
   @override

@@ -18,6 +18,7 @@ import 'features/become_merchant/become_merchant_screen.dart';
 import 'features/auth/signup_screen.dart';
 import 'core/utils/ci_phone.dart';
 import 'features/notifications/notifications_notifier.dart';
+import 'features/profile/profile_screen.dart';
 import 'features/notifications/notifications_screen.dart';
 import 'shared/widgets/skeleton.dart';
 import 'shared/widgets/merchant_bottom_nav.dart';
@@ -222,6 +223,7 @@ class _MerchantShellState extends State<MerchantShell> {
     final ordersIndex = MerchantBottomNav.indexFor(MerchantTab.orders, isPharmacy: _isPharmacy);
     final productsIndex = MerchantBottomNav.indexFor(MerchantTab.products, isPharmacy: _isPharmacy);
     final financeIndex = MerchantBottomNav.indexFor(MerchantTab.finance, isPharmacy: _isPharmacy);
+    final profileIndex = MerchantBottomNav.indexFor(MerchantTab.profile, isPharmacy: _isPharmacy);
     final prescriptionsIndex = _isPharmacy
         ? MerchantBottomNav.indexFor(MerchantTab.prescriptions, isPharmacy: true)
         : null;
@@ -277,6 +279,20 @@ class _MerchantShellState extends State<MerchantShell> {
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
+          unreadCount: _notifications.unreadCount,
+          onGoToNotifications: _openNotifications,
+        ),
+
+        // Profil — déconnexion + infos compte
+        MerchantProfileScreen(
+          onSignOut: () {
+            // Après signOut Supabase, on revient au LoginScreen en
+            // effaçant tout l'historique de navigation.
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+              (_) => false,
+            );
+          },
           unreadCount: _notifications.unreadCount,
           onGoToNotifications: _openNotifications,
         ),
