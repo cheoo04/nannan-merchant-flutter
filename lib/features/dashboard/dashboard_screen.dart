@@ -14,6 +14,10 @@ import '../../shared/merchant_category.dart';
 import 'dashboard_notifier.dart';
 
 class DashboardScreen extends StatefulWidget {
+  /// Notifier partagé, levé au niveau du shell (même schéma que
+  /// NotificationsNotifier) — permet à MerchantProfileScreen de lire les
+  /// mêmes stats sans refaire de requête DB.
+  final DashboardNotifier notifier;
   /// Callbacks de navigation vers les autres onglets
   final VoidCallback onGoToOrders;
   final VoidCallback onGoToProducts;
@@ -28,6 +32,7 @@ class DashboardScreen extends StatefulWidget {
 
   const DashboardScreen({
     super.key,
+    required this.notifier,
     required this.onGoToOrders,
     required this.onGoToProducts,
     required this.onGoToFinance,
@@ -45,7 +50,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  late final DashboardNotifier _notifier;
+  DashboardNotifier get _notifier => widget.notifier;
 
   bool get _isPharmacy =>
       categoryNeedsPrescriptionFlow(_notifier.merchant?.category);
@@ -53,7 +58,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _notifier = DashboardNotifier();
     _notifier.addListener(_onUpdate);
   }
 
@@ -61,8 +65,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    // Ne PAS appeler _notifier.dispose() ici — il est partagé et possédé
+    // par _MerchantShellState, qui s'occupe de sa disposal (même règle
+    // que _notifications).
     _notifier.removeListener(_onUpdate);
-    _notifier.dispose();
     super.dispose();
   }
 

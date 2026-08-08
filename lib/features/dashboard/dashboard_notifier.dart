@@ -160,6 +160,16 @@ class DashboardNotifier extends ChangeNotifier {
         .fold(0, (s, o) => s + o.totalAmount);
   }
 
+  /// CA total, toutes dates confondues — pour le résumé du profil.
+  /// Distinct de revenueDay/Week/Month qui filtrent par période.
+  int get revenueTotal => orders
+      .where((o) => o.status == OrderStatus.delivered)
+      .fold(0, (s, o) => s + o.totalAmount);
+
+  /// Commandes pas encore terminées (ni livrées, ni annulées/remboursées) —
+  /// utilisé pour le résumé "en attente" du profil.
+  int get activeCount => pendingCount + acceptedCount + inDeliveryCount;
+
   /// Alertes à afficher (même logique que le React, max 3)
   List<({String id, String title, String body})> get alerts {
     final list = <({String id, String title, String body})>[];

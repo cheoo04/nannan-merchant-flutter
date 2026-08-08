@@ -9,6 +9,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/app_colors.dart';
 import 'core/utils/toast.dart';
 import 'features/dashboard/dashboard_screen.dart';
+import 'features/dashboard/dashboard_notifier.dart';
 import 'features/orders/orders_screen.dart';
 import 'features/products/products_screen.dart';
 import 'features/finances/finance_screen.dart';
@@ -20,7 +21,6 @@ import 'core/utils/ci_phone.dart';
 import 'features/notifications/notifications_notifier.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/notifications/notifications_screen.dart';
-import 'shared/widgets/skeleton.dart';
 import 'shared/widgets/merchant_bottom_nav.dart';
 import 'shared/merchant_category.dart';
 
@@ -174,14 +174,25 @@ class _MerchantShellState extends State<MerchantShell> {
   // complet des notifications lisent tous cette même instance.
   late final NotificationsNotifier _notifications;
 
+  // Même principe : une seule instance de DashboardNotifier, partagée entre
+  // DashboardScreen et MerchantProfileScreen — le profil affiche les mêmes
+  // stats (commandes livrées, en attente, CA total) sans refaire de requête.
+  late final DashboardNotifier _dashboard;
+
   @override
   void initState() {
     super.initState();
     _notifications = NotificationsNotifier();
     _notifications.addListener(_onNotificationsChanged);
+    _dashboard = DashboardNotifier();
+    _dashboard.addListener(_onDashboardChanged);
   }
 
   void _onNotificationsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onDashboardChanged() {
     if (mounted) setState(() {});
   }
 
@@ -189,6 +200,8 @@ class _MerchantShellState extends State<MerchantShell> {
   void dispose() {
     _notifications.removeListener(_onNotificationsChanged);
     _notifications.dispose();
+    _dashboard.removeListener(_onDashboardChanged);
+    _dashboard.dispose();
     super.dispose();
   }
 
@@ -223,7 +236,6 @@ class _MerchantShellState extends State<MerchantShell> {
     final ordersIndex = MerchantBottomNav.indexFor(MerchantTab.orders, isPharmacy: _isPharmacy);
     final productsIndex = MerchantBottomNav.indexFor(MerchantTab.products, isPharmacy: _isPharmacy);
     final financeIndex = MerchantBottomNav.indexFor(MerchantTab.finance, isPharmacy: _isPharmacy);
-    final profileIndex = MerchantBottomNav.indexFor(MerchantTab.profile, isPharmacy: _isPharmacy);
     final prescriptionsIndex = _isPharmacy
         ? MerchantBottomNav.indexFor(MerchantTab.prescriptions, isPharmacy: true)
         : null;
@@ -233,6 +245,7 @@ class _MerchantShellState extends State<MerchantShell> {
       children: [
         // Dashboard — toujours index 0
         DashboardScreen(
+          notifier: _dashboard,
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToOrders: () => setState(() => _index = ordersIndex),
@@ -285,6 +298,9 @@ class _MerchantShellState extends State<MerchantShell> {
 
         // Profil — déconnexion + infos compte
         MerchantProfileScreen(
+          deliveredCount: _dashboard.deliveredCount,
+          activeCount: _dashboard.activeCount,
+          revenueTotal: _dashboard.revenueTotal,
           onSignOut: () {
             // Après signOut Supabase, on revient au LoginScreen en
             // effaçant tout l'historique de navigation.

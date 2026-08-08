@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
+import '../../core/utils/formatters.dart';
+
+// ⚠️ PLACEHOLDER — même faux numéro que côté React (_app.profile.tsx),
+// à remplacer par le vrai numéro de support avant mise en production.
+const String _supportPhoneDisplay = '+225 07 00 00 00 00';
+const String _supportPhoneDial = '+22507000000'; // format tel: sans espaces
+const String _supportPhoneWa = '22507000000'; // format wa.me sans le +
+const String _supportEmail = 'support@nannan.ci';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -29,12 +39,20 @@ class MerchantProfileScreen extends StatefulWidget {
   final VoidCallback onSignOut;
   final VoidCallback? onGoToNotifications;
   final int unreadCount;
+  /// Stats lues depuis DashboardNotifier (partagé, voir main.dart) — pas de
+  /// requête DB dédiée pour cet écran.
+  final int deliveredCount;
+  final int activeCount;
+  final int revenueTotal;
 
   const MerchantProfileScreen({
     super.key,
     required this.onSignOut,
     this.onGoToNotifications,
     this.unreadCount = 0,
+    this.deliveredCount = 0,
+    this.activeCount = 0,
+    this.revenueTotal = 0,
   });
 
   @override
@@ -245,6 +263,31 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
 
           const SizedBox(height: 20),
 
+          // ── Quick stats — depuis DashboardNotifier, aucune requête ici ──────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _Stat(
+                      label: 'Livrées', value: '${widget.deliveredCount}'),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child:
+                      _Stat(label: 'En attente', value: '${widget.activeCount}'),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _Stat(
+                      label: 'CA total', value: formatXOF(widget.revenueTotal)),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
           // ── Lignes menu ───────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -324,44 +367,97 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
           const SizedBox(height: 24),
 
           // Footer
-          const Text(
-            'A Nan-Nan Livraison · Oumé, Côte d\'Ivoire',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: AppColors.mutedForeground),
-          ),
+          _AppFooter(),
           const SizedBox(height: 32),
         ],
       ),
     );
   }
 
+  Future<void> _launch(Uri uri) async {
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) toast.error('Impossible d\'ouvrir cette action');
+    }
+  }
+
   void _showSupport(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.fromLTRB(
+            24, 24, 24, 24 + MediaQuery.of(context).padding.bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text('Aide & support',
+          children: [
+            const Text('Aide & support',
                 style: TextStyle(
                     fontFamily: 'Sora',
                     fontSize: 18,
                     fontWeight: FontWeight.w700)),
-            SizedBox(height: 16),
-            Text('Pour toute question ou problème avec votre espace marchand,\n'
-                'contactez l\'équipe Nan-Nan via WhatsApp ou par email.',
+            const SizedBox(height: 16),
+            const Text(
+                'Pour toute question ou problème avec votre espace marchand, '
+                'contactez l\'équipe Nan-Nan :',
                 style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
-            SizedBox(height: 8),
-            Text('📞 WhatsApp : +225 07 00 00 00 00',
-                style: TextStyle(fontSize: 13)),
-            SizedBox(height: 4),
-            Text('✉️ support@nannan.ci',
-                style: TextStyle(fontSize: 13)),
-            SizedBox(height: 24),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _launch(Uri.parse('tel:$_supportPhoneDial')),
+                    icon: const Icon(Icons.call_rounded, size: 18),
+                    label: const Text('Appeler'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _launch(
+                        Uri.parse('https://wa.me/$_supportPhoneWa')),
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.success,
+                        side: const BorderSide(color: AppColors.success)),
+                    icon: const Icon(Icons.chat_rounded, size: 18),
+                    label: const Text('WhatsApp'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('📞 $_supportPhoneDisplay',
+                style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: () => _launch(Uri.parse('mailto:$_supportEmail')),
+              child: const Text('✉️ $_supportEmail',
+                  style: TextStyle(fontSize: 13)),
+            ),
+            const SizedBox(height: 20),
+            const Text('Questions fréquentes',
+                style: TextStyle(
+                    fontFamily: 'Sora',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            const _FaqItem(
+              q: 'Comment recevoir une nouvelle commande ?',
+              a: 'Vous êtes notifié dès qu\'un client commande. Acceptez-la '
+                  'avec le code affiché avant que le livreur ne passe.',
+            ),
+            const _FaqItem(
+              q: 'Le livreur n\'est pas encore passé ?',
+              a: 'Contactez-nous par appel ou WhatsApp, on intervient.',
+            ),
+            const _FaqItem(
+              q: 'Comment mettre ma boutique en pause ?',
+              a: 'Depuis le tableau de bord, utilisez le bouton Ouvert/Fermé '
+                  'en haut de l\'écran.',
+            ),
+            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -398,6 +494,134 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── FAQ dépliable, dans le bottom sheet support ─────────────────────────────
+class _FaqItem extends StatefulWidget {
+  final String q;
+  final String a;
+  const _FaqItem({required this.q, required this.a});
+
+  @override
+  State<_FaqItem> createState() => _FaqItemState();
+}
+
+class _FaqItemState extends State<_FaqItem> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => setState(() => _open = !_open),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(widget.q,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                ),
+                Icon(
+                  _open ? Icons.remove_rounded : Icons.add_rounded,
+                  size: 18,
+                  color: AppColors.mutedForeground,
+                ),
+              ],
+            ),
+            if (_open)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(widget.a,
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.mutedForeground)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Widget stat (mini-carte, "Quick stats" côté React) ──────────────────────
+class _Stat extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _Stat({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(color: Color(0x0A000000), blurRadius: 2),
+          BoxShadow(color: Color(0x0F000000), blurRadius: 8, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(value,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontFamily: 'Sora',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primary)),
+          const SizedBox(height: 2),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.mutedForeground)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Footer : nom + version app + date de build ──────────────────────────────
+// La date est codée en dur — Flutter n'a pas d'équivalent natif à
+// __BUILD_DATE__ (spécifique aux bundlers JS type Vite). À METTRE À JOUR
+// MANUELLEMENT à chaque nouvelle release.
+const String _buildDate = '26/07/2026';
+
+class _AppFooter extends StatelessWidget {
+  _AppFooter();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const Text(
+          'A Nan-Nan Livraison · Oumé, Côte d\'Ivoire',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 11, color: AppColors.mutedForeground),
+        ),
+        const SizedBox(height: 4),
+        FutureBuilder<PackageInfo>(
+          future: PackageInfo.fromPlatform(),
+          builder: (context, snapshot) {
+            final version = snapshot.data?.version ?? '';
+            return Text(
+              version.isEmpty
+                  ? 'build $_buildDate · Made in 🇨🇮'
+                  : 'v$version · build $_buildDate · Made in 🇨🇮',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 10, color: AppColors.mutedForeground),
+            );
+          },
+        ),
+      ],
     );
   }
 }
