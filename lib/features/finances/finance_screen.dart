@@ -79,15 +79,34 @@ class FinanceNotifier extends ChangeNotifier {
 
   // Données graphique barres — miroir exact du daily du React
   List<({String label, int sales, int count})> get chartData {
-    final (days, buckets, labels) = switch (range) {
-      'month' => (30, 4, ['S1', 'S2', 'S3', 'S4']),
-      'quarter' => (90, 3, ['M1', 'M2', 'M3']),
-      _ => (7, 7, ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']),
+    final (days, buckets) = switch (range) {
+      'month'   => (30, 4),
+      'quarter' => (90, 3),
+      _         => (7, 7),
     };
 
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final cutoff = now - days * 86400000;
+    final now = DateTime.now();
+    final nowMs = now.millisecondsSinceEpoch;
+    final cutoff = nowMs - days * 86400000;
     final bucketMs = (days * 86400000) / buckets;
+
+    // Labels dynamiques basés sur la date réelle — bug fix :
+    // les labels Lun→Dim étaient fixes (index 0 = toujours "Lun")
+    // alors que le bucket 0 est "il y a 7 jours", pas forcément un lundi.
+    final List<String> labels;
+    if (range == 'month') {
+      labels = ['S1', 'S2', 'S3', 'S4'];
+    } else if (range == 'quarter') {
+      labels = ['M1', 'M2', 'M3'];
+    } else {
+      // Pour la semaine : calculer le vrai jour de chaque bucket
+      const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+      labels = List.generate(7, (i) {
+        final bucketCenter = cutoff + (i + 0.5) * bucketMs;
+        final day = DateTime.fromMillisecondsSinceEpoch(bucketCenter.toInt()).weekday % 7;
+        return dayNames[day]; // weekday: 1=Lun…7=Dim, % 7 → 0=Dim…6=Sam
+      });
+    }
 
     final data = List.generate(
       buckets,
@@ -550,12 +569,14 @@ class _SalesBarChart extends StatelessWidget {
       BarChartData(
         alignment: BarChartAlignment.spaceAround,
         maxY: () {
-          if (data.isEmpty) return 100.0;
+          if (data.isEmpty) return 1000.0;
           final maxSales = data.map((d) => d.sales.toDouble()).reduce((a, b) => a > b ? a : b);
-          // Évite maxY = 0 (toutes ventes à 0) qui casse l'axe Y de fl_chart :
-          // recharts (React) garde un axe gradué 0→4 même sans données, on
-          // reproduit ce comportement avec un plancher arbitraire.
-          return maxSales > 0 ? maxSales * 1.2 : 4.0;
+          if (maxSales <= 0) return 1000.0;
+          // Arrondir maxY à un multiple de 500 (ou 1000 si > 5000) pour
+          // éviter que fl_chart génère des graduations Y qui se chevauchent.
+          final padded = maxSales * 1.25;
+          final step = padded > 5000 ? 1000.0 : 500.0;
+          return (padded / step).ceil() * step;
         }(),
         gridData: FlGridData(
           show: true,
