@@ -27,13 +27,14 @@ class MerchantBottomNav extends StatelessWidget {
   });
 
   /// Ordre canonique des onglets pour ce type de commerce.
+  /// "Profil" n'est PAS un onglet (même raison que Stories) : accessible
+  /// via l'icône dédiée du header Dashboard, pas la barre du bas.
   static List<MerchantTab> tabsFor({required bool isPharmacy}) => [
         MerchantTab.home,
         MerchantTab.orders,
         MerchantTab.products,
         if (isPharmacy) MerchantTab.prescriptions,
         MerchantTab.finance,
-        MerchantTab.profile,
       ];
 
   /// Index à passer à [currentIndex] pour un onglet donné, selon le métier.

@@ -225,6 +225,24 @@ class _MerchantShellState extends State<MerchantShell> {
     ));
   }
 
+  void _openProfile() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => MerchantProfileScreen(
+        deliveredCount: _dashboard.deliveredCount,
+        activeCount: _dashboard.activeCount,
+        revenueTotal: _dashboard.revenueTotal,
+        onSignOut: () {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+            (_) => false,
+          );
+        },
+        unreadCount: _notifications.unreadCount,
+        onGoToNotifications: _openNotifications,
+      ),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_showBecomeMerchant) {
@@ -257,6 +275,7 @@ class _MerchantShellState extends State<MerchantShell> {
               : () => setState(() => _index = prescriptionsIndex),
           unreadCount: _notifications.unreadCount,
           onGoToNotifications: _openNotifications,
+          onGoToProfile: _openProfile,
           onGoToBecomesMerchant: () => setState(() => _showBecomeMerchant = true),
         ),
 
@@ -296,22 +315,6 @@ class _MerchantShellState extends State<MerchantShell> {
           onGoToNotifications: _openNotifications,
         ),
 
-        // Profil — déconnexion + infos compte
-        MerchantProfileScreen(
-          deliveredCount: _dashboard.deliveredCount,
-          activeCount: _dashboard.activeCount,
-          revenueTotal: _dashboard.revenueTotal,
-          onSignOut: () {
-            // Après signOut Supabase, on revient au LoginScreen en
-            // effaçant tout l'historique de navigation.
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-              (_) => false,
-            );
-          },
-          unreadCount: _notifications.unreadCount,
-          onGoToNotifications: _openNotifications,
-        ),
       ],
     );
   }

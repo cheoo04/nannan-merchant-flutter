@@ -82,12 +82,14 @@ class MerchantModel {
   }
 
   /// Libellé + état (miroir de merchantStatusLabel du React)
+  /// Utilise isOpen (bool brut) et non isOpenNow pour rester cohérent
+  /// avec l'affichage de la couleur — les deux lisent la même source.
   ({String label, String tone}) get statusLabel {
     if (pauseUntil != null &&
         DateTime.parse(pauseUntil!).isAfter(DateTime.now())) {
       return (label: 'En pause', tone: 'paused');
     }
-    return isOpenNow
+    return isOpen
         ? (label: 'Boutique ouverte', tone: 'open')
         : (label: 'Boutique fermée', tone: 'closed');
   }

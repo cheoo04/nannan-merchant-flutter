@@ -25,6 +25,7 @@ class DashboardScreen extends StatefulWidget {
   final VoidCallback onGoToStories;
   final VoidCallback onGoToPrescriptions;
   final VoidCallback onGoToNotifications;
+  final VoidCallback onGoToProfile;
   final int unreadCount;
   final VoidCallback onGoToBecomesMerchant;
   final int currentNavIndex;
@@ -39,6 +40,7 @@ class DashboardScreen extends StatefulWidget {
     required this.onGoToStories,
     required this.onGoToPrescriptions,
     required this.onGoToNotifications,
+    required this.onGoToProfile,
     this.unreadCount = 0,
     required this.onGoToBecomesMerchant,
     required this.currentNavIndex,
@@ -118,6 +120,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   deliveredCount: _notifier.deliveredCount,
                   onToggle: _handleToggle,
                   onNotifications: widget.onGoToNotifications,
+                  onProfile: widget.onGoToProfile,
                 ),
               ),
 
@@ -318,6 +321,7 @@ class _GradientHeader extends StatelessWidget {
   final int deliveredCount;
   final VoidCallback onToggle;
   final VoidCallback onNotifications;
+  final VoidCallback onProfile;
 
   const _GradientHeader({
     required this.topPadding,
@@ -333,6 +337,7 @@ class _GradientHeader extends StatelessWidget {
     required this.deliveredCount,
     required this.onToggle,
     required this.onNotifications,
+    required this.onProfile,
   });
 
   @override
@@ -354,6 +359,18 @@ class _GradientHeader extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               CitySwitcherChip(cityCode: cityCode),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onProfile,
+                child: Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.person_rounded, color: Colors.white, size: 20),
+                ),
+              ),
               const SizedBox(width: 8),
               NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications),
             ],

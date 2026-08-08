@@ -189,12 +189,37 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Profil',
-                    style: TextStyle(
-                        fontFamily: 'Sora',
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.foreground)),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).maybePop(),
+                      child: Container(
+                        width: 40, height: 40,
+                        decoration: const BoxDecoration(
+                          color: AppColors.background,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 2)),
+                          ],
+                        ),
+                        child: const Icon(Icons.arrow_back_rounded, size: 20),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text('Profil',
+                            style: TextStyle(
+                                fontFamily: 'Sora',
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.foreground)),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 Row(
                   children: [
