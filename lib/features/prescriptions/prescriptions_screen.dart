@@ -168,11 +168,13 @@ class PrescriptionsNotifier extends ChangeNotifier {
 class PrescriptionsScreen extends StatefulWidget {
   final int currentNavIndex;
   final ValueChanged<int> onNavTap;
+  final VoidCallback onGoToDashboard;
   final int unreadCount;
   final VoidCallback? onGoToNotifications;
 
   const PrescriptionsScreen({
     super.key, required this.currentNavIndex, required this.onNavTap,
+    required this.onGoToDashboard,
     this.unreadCount = 0, this.onGoToNotifications,
   });
 
@@ -215,37 +217,13 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
-          // ── Header (miroir React : pas de gradient, juste titre + sous-titre)
+          // ── Header (gradient bleu, cohérent avec Dashboard/Commandes/Finances)
           SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(20, top + 24, 20, 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Ordonnances',
-                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700,
-                                fontFamily: 'Sora', color: AppColors.foreground)),
-                        SizedBox(height: 4),
-                        Text('Espace pharmacien — chiffrez les demandes reçues.',
-                            style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
-                      ],
-                    ),
-                  ),
-                  // Cloche optionnelle (non passée depuis main.dart = jamais affichée,
-                  // miroir React où cet écran n'a pas de cloche)
-                  if (widget.onGoToNotifications != null)
-                    NotificationBellButton(
-                      unreadCount: widget.unreadCount,
-                      onTap: widget.onGoToNotifications!,
-                      iconColor: AppColors.foreground,
-                      backgroundColor: AppColors.secondary,
-                    ),
-                ],
-              ),
+            child: _PrescriptionsHeader(
+              topPadding: top,
+              onBack: widget.onGoToDashboard,
+              unreadCount: widget.unreadCount,
+              onNotifications: widget.onGoToNotifications,
             ),
           ),
 
@@ -300,6 +278,71 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
           currentIndex: widget.currentNavIndex,
           onTap: widget.onNavTap,
           isPharmacy: true),
+    );
+  }
+}
+
+// ── Header ────────────────────────────────────────────────────────────────────
+class _PrescriptionsHeader extends StatelessWidget {
+  final double topPadding;
+  final VoidCallback onBack;
+  final int unreadCount;
+  final VoidCallback? onNotifications;
+
+  const _PrescriptionsHeader({
+    required this.topPadding,
+    required this.onBack,
+    this.unreadCount = 0,
+    this.onNotifications,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: AppColors.gradientHero,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
+        ),
+      ),
+      padding: EdgeInsets.fromLTRB(20, topPadding + 16, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GestureDetector(
+                onTap: onBack,
+                child: Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.headerOverlay,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                ),
+              ),
+              if (onNotifications != null)
+                NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications!),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Ordonnances',
+            style: TextStyle(
+              color: Colors.white, fontSize: 24,
+              fontWeight: FontWeight.w700, fontFamily: 'Sora',
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Espace pharmacien — chiffrez les demandes reçues.',
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+        ],
+      ),
     );
   }
 }

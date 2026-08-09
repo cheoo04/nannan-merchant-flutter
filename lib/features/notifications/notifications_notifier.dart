@@ -41,7 +41,7 @@ class NotificationsNotifier extends ChangeNotifier {
     try {
       final rows = await _db
           .from('notifications')
-          .select()
+          .select('*, orders(accept_code, total_amount, status)')
           .eq('user_id', userId)
           .order('created_at', ascending: false)
           .limit(200);
@@ -89,6 +89,8 @@ class NotificationsNotifier extends ChangeNotifier {
       notifications[idx] = NotificationRow(
         id: n.id, userId: n.userId, type: n.type, title: n.title,
         body: n.body, orderId: n.orderId, readAt: DateTime.now(), createdAt: n.createdAt,
+        orderAcceptCode: n.orderAcceptCode, orderTotalAmount: n.orderTotalAmount,
+        orderStatus: n.orderStatus,
       );
       notifyListeners();
     }

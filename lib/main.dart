@@ -303,6 +303,7 @@ class _MerchantShellState extends State<MerchantShell> {
           PrescriptionsScreen(
             currentNavIndex: _index,
             onNavTap: (i) => setState(() => _index = i),
+            onGoToDashboard: () => setState(() => _index = 0),
             unreadCount: _notifications.unreadCount,
             onGoToNotifications: _openNotifications,
           ),

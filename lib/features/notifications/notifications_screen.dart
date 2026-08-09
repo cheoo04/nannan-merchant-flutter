@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/formatters.dart';
 import '../../shared/models/models.dart';
 import 'notifications_notifier.dart';
 
@@ -339,6 +340,35 @@ class _NotificationTile extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
+                  ],
+                  // Contexte commande — répond à "cette notif appartient à
+                  // quelle commande ?" directement sur la carte, sans écran
+                  // dédié. N'apparaît que si la commande existe encore.
+                  if (n.orderId != null && n.orderAcceptCode != null) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.receipt_long_rounded, size: 12, color: AppColors.mutedForeground),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Commande #${n.orderAcceptCode}'
+                            '${n.orderTotalAmount != null ? ' · ${formatXOF(n.orderTotalAmount!)}' : ''}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.foreground,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                   // "COMMANDE · il y a 5 min" — text-[10px] uppercase tracking-wide
                   const SizedBox(height: 4),

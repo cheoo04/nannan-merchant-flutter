@@ -82,14 +82,12 @@ class MerchantModel {
   }
 
   /// Libellé + état (miroir de merchantStatusLabel du React)
-  /// Utilise isOpen (bool brut) et non isOpenNow pour rester cohérent
-  /// avec l'affichage de la couleur — les deux lisent la même source.
   ({String label, String tone}) get statusLabel {
     if (pauseUntil != null &&
         DateTime.parse(pauseUntil!).isAfter(DateTime.now())) {
       return (label: 'En pause', tone: 'paused');
     }
-    return isOpen
+    return isOpenNow
         ? (label: 'Boutique ouverte', tone: 'open')
         : (label: 'Boutique fermée', tone: 'closed');
   }
@@ -269,6 +267,13 @@ class NotificationRow {
   final DateTime? readAt;
   final DateTime createdAt;
 
+  // Contexte commande — permet d'afficher "Commande #1234 · 2 200 F" sur
+  // la notif sans écran dédié, alimenté par la jointure orders() du fetch.
+  // Restent null si orderId est null, ou si la commande n'existe plus.
+  final String? orderAcceptCode;
+  final int? orderTotalAmount;
+  final String? orderStatus;
+
   const NotificationRow({
     required this.id,
     required this.userId,
@@ -278,18 +283,27 @@ class NotificationRow {
     this.orderId,
     this.readAt,
     required this.createdAt,
+    this.orderAcceptCode,
+    this.orderTotalAmount,
+    this.orderStatus,
   });
 
   bool get isUnread => readAt == null;
 
-  factory NotificationRow.fromJson(Map<String, dynamic> j) => NotificationRow(
-        id: j['id'] as String,
-        userId: j['user_id'] as String,
-        type: j['type']?.toString() ?? 'system',
-        title: j['title'] as String? ?? '',
-        body: j['body'] as String?,
-        orderId: j['order_id'] as String?,
-        readAt: j['read_at'] != null ? DateTime.parse(j['read_at'] as String) : null,
-        createdAt: DateTime.parse(j['created_at'] as String),
-      );
+  factory NotificationRow.fromJson(Map<String, dynamic> j) {
+    final order = j['orders'] as Map<String, dynamic>?;
+    return NotificationRow(
+      id: j['id'] as String,
+      userId: j['user_id'] as String,
+      type: j['type']?.toString() ?? 'system',
+      title: j['title'] as String? ?? '',
+      body: j['body'] as String?,
+      orderId: j['order_id'] as String?,
+      readAt: j['read_at'] != null ? DateTime.parse(j['read_at'] as String) : null,
+      createdAt: DateTime.parse(j['created_at'] as String),
+      orderAcceptCode: order?['accept_code'] as String?,
+      orderTotalAmount: order?['total_amount'] as int?,
+      orderStatus: order?['status'] as String?,
+    );
+  }
 }
