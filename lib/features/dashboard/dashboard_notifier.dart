@@ -187,7 +187,7 @@ class DashboardNotifier extends ChangeNotifier {
         body: 'Préparez les colis',
       ));
     }
-    if (merchant != null && !merchant!.isOpenNow) {
+    if (merchant != null && !merchant!.isOpen) {
       list.add((
         id: 'n3',
         title: 'Votre boutique est fermée',
