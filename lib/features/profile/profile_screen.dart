@@ -102,87 +102,23 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
     final user = _db.auth.currentUser;
     if (user == null) return;
 
-    final nameCtrl = TextEditingController(text: _profile?.name ?? '');
-    final phoneCtrl = TextEditingController(text: _profile?.phone ?? '');
-    bool saving = false;
-
-    final saved = await showModalBottomSheet<bool>(
+    final result = await showModalBottomSheet<({String name, String phone})>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(24, 24, 24,
-              24 + MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Modifier mes informations',
-                  style: TextStyle(
-                      fontFamily: 'Sora',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameCtrl,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                    labelText: 'Nom complet', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: phoneCtrl,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                    labelText: 'Numéro de téléphone',
-                    hintText: '+225 07 00 00 00 00',
-                    border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: saving
-                      ? null
-                      : () async {
-                          if (nameCtrl.text.trim().isEmpty) {
-                            toast.error('Le nom ne peut pas être vide');
-                            return;
-                          }
-                          setSheetState(() => saving = true);
-                          try {
-                            await _db.from('users_profiles').update({
-                              'name': nameCtrl.text.trim(),
-                              'phone': phoneCtrl.text.trim(),
-                            }).eq('id', user.id);
-                            if (ctx.mounted) Navigator.of(ctx).pop(true);
-                          } catch (_) {
-                            setSheetState(() => saving = false);
-                            if (ctx.mounted) toast.error('Échec de la mise à jour');
-                          }
-                        },
-                  child: saving
-                      ? const SizedBox(
-                          width: 18, height: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Text('Enregistrer'),
-                ),
-              ),
-            ],
-          ),
-        ),
+      builder: (ctx) => _EditProfileSheet(
+        initialName: _profile?.name ?? '',
+        initialPhone: _profile?.phone ?? '',
+        userId: user.id,
       ),
     );
 
-    final newName = nameCtrl.text.trim();
-    final newPhone = phoneCtrl.text.trim();
-    nameCtrl.dispose();
-    phoneCtrl.dispose();
+    final saved = result != null;
+    final newName = result?.name ?? '';
+    final newPhone = result?.phone ?? '';
 
-    if (saved == true && mounted) {
+    if (saved && mounted) {
       setState(() {
         _profile = _ProfileData(
           name: newName.isNotEmpty ? newName : (_profile?.name ?? 'Marchand'),
@@ -832,6 +768,127 @@ class _ProfileRow extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── EDIT PROFILE SHEET ────────────────────────────────────────────────────────
+class _EditProfileSheet extends StatefulWidget {
+  final String initialName;
+  final String initialPhone;
+  final String userId;
+
+  const _EditProfileSheet({
+    required this.initialName,
+    required this.initialPhone,
+    required this.userId,
+  });
+
+  @override
+  State<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends State<_EditProfileSheet> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _phoneCtrl;
+  bool _saving = false;
+
+  SupabaseClient get _db => Supabase.instance.client;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.initialName);
+    _phoneCtrl = TextEditingController(text: widget.initialPhone);
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_nameCtrl.text.trim().isEmpty) {
+      toast.error('Le nom ne peut pas être vide');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await _db.from('users_profiles').update({
+        'name': _nameCtrl.text.trim(),
+        'phone': _phoneCtrl.text.trim(),
+      }).eq('id', widget.userId);
+      if (mounted) {
+        Navigator.of(context).pop((
+          name: _nameCtrl.text.trim(),
+          phone: _phoneCtrl.text.trim(),
+        ));
+      }
+    } catch (_) {
+      setState(() => _saving = false);
+      if (mounted) toast.error('Échec de la mise à jour');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        24, 24, 24,
+        24 + MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Modifier mes informations',
+            style: TextStyle(
+              fontFamily: 'Sora',
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _nameCtrl,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Nom complet',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _phoneCtrl,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Numéro de téléphone',
+              hintText: '+225 07 00 00 00 00',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Enregistrer'),
+            ),
+          ),
+        ],
       ),
     );
   }
