@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
+import '../../core/utils/error_message.dart';
 import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/widgets/notification_bell_button.dart';
@@ -270,7 +271,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     try {
       await _n.deleteProduct(p.id);
       toast.success('Produit supprimé');
-    } catch (e) { toast.error(e.toString()); }
+    } catch (e) { toast.error(friendlyError(e)); }
   }
 
   @override
@@ -464,7 +465,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           try {
                             await _n.toggleAvailability(p);
                             toast.success(p.isAvailable ? 'Produit masqué' : 'Produit visible');
-                          } catch (e) { toast.error(e.toString()); }
+                          } catch (e) { toast.error(friendlyError(e)); }
                         },
                         onEdit: () { _editing = p; setState(() => _showEditor = true); },
                         onDelete: () => _confirmDelete(p),
@@ -691,7 +692,7 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
                     final wasOpen = widget.notifier.merchant?.isOpen ?? false;
                     await widget.notifier.toggleOpen();
                     toast.success(!wasOpen ? 'Boutique ouverte' : 'Boutique fermée');
-                  } catch (e) { toast.error(e.toString()); }
+                  } catch (e) { toast.error(friendlyError(e)); }
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -728,7 +729,7 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
                     try {
                       await widget.notifier.pauseMerchant(min);
                       toast.success('Pause $min min');
-                    } catch (e) { toast.error(e.toString()); }
+                    } catch (e) { toast.error(friendlyError(e)); }
                   },
                   child: Container(
                     height: 40,
@@ -758,7 +759,7 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
             GestureDetector(
               onTap: () async {
                 try { await widget.notifier.resumeMerchant(); toast.success('Pause levée'); }
-                catch (e) { toast.error(e.toString()); }
+                catch (e) { toast.error(friendlyError(e)); }
               },
               child: Container(
                 height: 40, width: double.infinity,
@@ -859,7 +860,7 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
                           );
                           setState(() => _showSched = false);
                           toast.success('Horaires enregistrés');
-                        } catch (e) { toast.error(e.toString()); }
+                        } catch (e) { toast.error(friendlyError(e)); }
                       },
                       style: ElevatedButton.styleFrom(
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
@@ -1146,7 +1147,7 @@ class _ProductEditorState extends State<_ProductEditor> {
       }
       widget.onClose();
     } catch (e) {
-      toast.error(e.toString());
+      toast.error(friendlyError(e));
     } finally {
       setState(() => _saving = false);
     }

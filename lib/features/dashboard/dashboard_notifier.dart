@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/models/models.dart';
 import '../orders/orders_repository.dart';
+import '../../core/utils/error_message.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -57,7 +58,7 @@ class DashboardNotifier extends ChangeNotifier {
         _subscribeOrders(merchant!.id);
       }
     } catch (e) {
-      error = e.toString();
+      error = friendlyError(e);
     } finally {
       loadingMerchant = false;
       notifyListeners();
@@ -87,7 +88,7 @@ class DashboardNotifier extends ChangeNotifier {
     try {
       orders = await _ordersRepo.fetchOrders(merchantId);
     } catch (e) {
-      error = e.toString();
+      error = friendlyError(e);
     } finally {
       loadingOrders = false;
       notifyListeners();
@@ -102,7 +103,7 @@ class DashboardNotifier extends ChangeNotifier {
       orders = await _ordersRepo.fetchOrders(merchant!.id);
       notifyListeners();
     } catch (e) {
-      error = e.toString();
+      error = friendlyError(e);
       notifyListeners();
     }
   }
@@ -209,7 +210,7 @@ class DashboardNotifier extends ChangeNotifier {
       final userId = _db.auth.currentUser?.id;
       if (userId != null) await _loadMerchant(userId);
     } catch (e) {
-      error = e.toString();
+      error = friendlyError(e);
       notifyListeners();
     }
   }
@@ -224,7 +225,7 @@ class DashboardNotifier extends ChangeNotifier {
       final userId = _db.auth.currentUser?.id;
       if (userId != null) await _loadMerchant(userId);
     } catch (e) {
-      error = e.toString();
+      error = friendlyError(e);
       notifyListeners();
     }
   }
@@ -236,7 +237,7 @@ class DashboardNotifier extends ChangeNotifier {
       final userId = _db.auth.currentUser?.id;
       if (userId != null) await _loadMerchant(userId);
     } catch (e) {
-      error = e.toString();
+      error = friendlyError(e);
       notifyListeners();
     }
   }
@@ -252,7 +253,7 @@ class DashboardNotifier extends ChangeNotifier {
       final userId = _db.auth.currentUser?.id;
       if (userId != null) await _loadMerchant(userId);
     } catch (e) {
-      error = e.toString();
+      error = friendlyError(e);
       notifyListeners();
     }
   }
@@ -285,7 +286,7 @@ class DashboardNotifier extends ChangeNotifier {
       await updateImage(url);
       return url;
     } catch (e) {
-      error = e.toString();
+      error = friendlyError(e);
       notifyListeners();
       return null;
     }

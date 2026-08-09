@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
+import '../../core/utils/error_message.dart';
 import '../../main.dart' show LoginScreen, MerchantShell;
 import '../../shared/merchant_category.dart';
 
@@ -148,7 +149,7 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
       toast.success('Demande envoyée');
       setState(() { _step = _Step.pending; _existingPending = true; });
     } catch (e) {
-      toast.error(e.toString());
+      toast.error(friendlyError(e));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

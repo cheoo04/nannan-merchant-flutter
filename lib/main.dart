@@ -8,6 +8,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_colors.dart';
 import 'core/utils/toast.dart';
+import 'core/utils/error_message.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/dashboard/dashboard_notifier.dart';
 import 'features/orders/orders_screen.dart';
@@ -404,8 +405,9 @@ class _LoginScreenState extends State<LoginScreen> {
     } on AuthException catch (_) {
       setState(() => _error = 'Email ou mot de passe incorrect.');
     } catch (e) {
-      setState(() => _error =
-          'Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
+      setState(() => _error = friendlyError(e,
+          fallback:
+              'Erreur de connexion. Vérifiez votre connexion internet et réessayez.'));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

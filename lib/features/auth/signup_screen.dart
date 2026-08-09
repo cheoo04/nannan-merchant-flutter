@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/ci_phone.dart';
+import '../../core/utils/error_message.dart';
 import '../become_merchant/become_merchant_screen.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
@@ -98,12 +99,11 @@ class _SignupScreenState extends State<SignupScreen> {
         );
       }
     } on AuthException catch (e) {
-      setState(() => _error = e.message.contains('already registered')
-          ? 'Un compte existe déjà avec ces informations.'
-          : e.message);
+      setState(() => _error = friendlyError(e));
     } catch (e) {
-      setState(() => _error =
-          'Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
+      setState(() => _error = friendlyError(e,
+          fallback:
+              'Erreur de connexion. Vérifiez votre connexion internet et réessayez.'));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/models/models.dart';
 import '../../shared/merchant_category.dart';
+import '../../core/utils/error_message.dart';
 import 'orders_repository.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
@@ -47,7 +48,7 @@ class OrdersNotifier extends ChangeNotifier {
     try {
       orders = await _repo.fetchOrders(_merchantId!);
     } catch (e) {
-      error = e.toString();
+      error = friendlyError(e);
     } finally {
       loading = false;
       notifyListeners();
@@ -64,7 +65,7 @@ class OrdersNotifier extends ChangeNotifier {
       orders = await _repo.fetchOrders(_merchantId!);
       notifyListeners();
     } catch (e) {
-      error = e.toString();
+      error = friendlyError(e);
       notifyListeners();
     }
   }
@@ -147,7 +148,7 @@ class OrdersNotifier extends ChangeNotifier {
       codeInput = '';
       return null; // null = succès
     } catch (e) {
-      return e.toString();
+      return friendlyError(e);
     } finally {
       busyOrderId = null;
       notifyListeners();
@@ -162,7 +163,7 @@ class OrdersNotifier extends ChangeNotifier {
       if (!ok) return 'Commande déjà traitée';
       return null;
     } catch (e) {
-      return e.toString();
+      return friendlyError(e);
     } finally {
       busyOrderId = null;
       notifyListeners();

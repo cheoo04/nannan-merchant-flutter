@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/models/models.dart';
+import '../../core/utils/error_message.dart';
 
 enum NotificationFilter { all, unread }
 
@@ -50,7 +51,7 @@ class NotificationsNotifier extends ChangeNotifier {
           .toList();
       error = null;
     } catch (e) {
-      error = e.toString();
+      error = friendlyError(e);
     } finally {
       loading = false;
       notifyListeners();
@@ -113,7 +114,7 @@ class NotificationsNotifier extends ChangeNotifier {
           .eq('user_id', userId)
           .filter('read_at', 'is', null);
     } catch (e) {
-      error = e.toString();
+      error = friendlyError(e);
       notifyListeners();
     }
   }

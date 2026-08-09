@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
+import '../../core/utils/error_message.dart';
 import '../../shared/widgets/notification_bell_button.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
@@ -77,8 +78,9 @@ class StoriesNotifier extends ChangeNotifier {
       await _saveToDb();
       return null; // succès
     } catch (e) {
-      error = e.toString();
-      return e.toString();
+      final msg = friendlyError(e);
+      error = msg;
+      return msg;
     } finally {
       saving = false;
       notifyListeners();
@@ -109,8 +111,9 @@ class StoriesNotifier extends ChangeNotifier {
       await _saveToDb();
       return null;
     } catch (e) {
-      error = e.toString();
-      return e.toString();
+      final msg = friendlyError(e);
+      error = msg;
+      return msg;
     } finally {
       saving = false;
       notifyListeners();
@@ -134,8 +137,9 @@ class StoriesNotifier extends ChangeNotifier {
       await _saveToDb();
       return null;
     } catch (e) {
-      error = e.toString();
-      return e.toString();
+      final msg = friendlyError(e);
+      error = msg;
+      return msg;
     } finally {
       saving = false;
       notifyListeners();
@@ -157,8 +161,9 @@ class StoriesNotifier extends ChangeNotifier {
       await _saveToDb();
       return null;
     } catch (e) {
-      error = e.toString();
-      return e.toString();
+      final msg = friendlyError(e);
+      error = msg;
+      return msg;
     } finally {
       saving = false;
       notifyListeners();
@@ -1096,7 +1101,7 @@ class _VideoLightboxState extends State<_VideoLightbox> {
         _controller!.play();
       }).catchError((e) {
         if (!mounted) return;
-        setState(() => _error = e.toString());
+        setState(() => _error = friendlyError(e));
       });
   }
 
