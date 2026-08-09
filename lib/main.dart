@@ -378,23 +378,12 @@ class _LoginScreenState extends State<LoginScreen> {
       final isPharmacy = categoryNeedsPrescriptionFlow(
           merchantData?['category'] as String?);
       if (role != 'merchant') {
-        // Ne pas rejeter tout de suite : un candidat qui a déjà soumis une
-        // demande (en attente ou déjà approuvée mais pas encore reflétée
-        // en session) doit pouvoir revoir l'écran de suivi, pas se faire
-        // déconnecter avec une erreur qui laisse penser à un mauvais compte.
-        final apps = await Supabase.instance.client
-            .from('partner_applications')
-            .select('status')
-            .eq('user_id', userId)
-            .eq('type', 'merchant');
-        final hasApplication = (apps as List).isNotEmpty;
-
-        if (!hasApplication) {
-          await Supabase.instance.client.auth.signOut();
-          setState(() => _error = "Ce compte n'est pas un compte marchand.");
-          return;
-        }
-
+        // Tout compte non-marchand est redirigé vers le formulaire de
+        // candidature — que la personne n'ait encore rien soumis (l'écran
+        // affichera le formulaire vierge), soit déjà en attente, soit déjà
+        // approuvée. Jamais de blocage sec : sans ça, quelqu'un qui
+        // s'inscrit puis abandonne avant de soumettre sa candidature
+        // n'aurait plus aucun moyen de revenir sur ce compte.
         if (mounted) {
           Navigator.of(context).push(MaterialPageRoute(
             builder: (_) => BecomeMerchantScreen(

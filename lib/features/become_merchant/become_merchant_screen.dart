@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
+import '../../main.dart' show LoginScreen, MerchantShell;
+import '../../shared/merchant_category.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -549,11 +551,18 @@ class _StepPending extends StatelessWidget {
                 Container(
                   width: 64, height: 64,
                   decoration: BoxDecoration(
-                    color: AppColors.primarySoft,
+                    color: approved
+                        ? AppColors.success.withOpacity(0.15)
+                        : AppColors.primarySoft,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.access_time_rounded,
-                      color: AppColors.primary, size: 30),
+                  child: Icon(
+                    approved
+                        ? Icons.check_circle_rounded
+                        : Icons.access_time_rounded,
+                    color: approved ? AppColors.success : AppColors.primary,
+                    size: 30,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -565,7 +574,7 @@ class _StepPending extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   approved
-                      ? 'Votre compte marchand est actif.'
+                      ? 'Votre compte marchand est actif. Vous pouvez vous connecter.'
                       : 'Nous vérifions votre dossier. Vous serez notifié dès la validation (sous 24 à 72h).',
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 13, color: AppColors.mutedForeground),
@@ -597,29 +606,40 @@ class _StepPending extends StatelessWidget {
           SizedBox(
             width: double.infinity, height: 52,
             child: ElevatedButton(
-              onPressed: onBack,
+              // Si approuvé : retour au login pour se reconnecter avec le bon rôle.
+              // On ne peut pas naviguer directement vers MerchantShell depuis ici
+              // car _AuthGate doit recharger le rôle depuis la DB — une reconnexion
+              // est le moyen le plus simple et le plus fiable.
+              onPressed: approved
+                  ? () => _goToMerchantShell(context)
+                  : onBack,
               style: ElevatedButton.styleFrom(
+                backgroundColor: approved ? AppColors.success : AppColors.primary,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
               ),
-              child: const Text('Retour au profil',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+              child: Text(
+                approved ? 'Se connecter maintenant' : 'Retour au profil',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
+                    color: Colors.white),
+              ),
             ),
           ),
           const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity, height: 48,
-            child: OutlinedButton.icon(
-              onPressed: onBack,
-              icon: const Icon(Icons.help_outline_rounded, size: 16),
-              label: const Text('Contacter le support',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                      color: AppColors.foreground)),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.border),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+          if (!approved)
+            SizedBox(
+              width: double.infinity, height: 48,
+              child: OutlinedButton.icon(
+                onPressed: onBack,
+                icon: const Icon(Icons.help_outline_rounded, size: 16),
+                label: const Text('Contacter le support',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                        color: AppColors.foreground)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.border),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -709,5 +729,43 @@ class _Term extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+// ── Navigation directe vers MerchantShell après approbation ─────────────────
+// refreshSession() force Supabase à émettre un nouveau JWT avec le rôle
+// mis à jour — sans ça, même si la DB dit 'merchant', l'app ne le saurait
+// pas avant la prochaine reconnexion.
+Future<void> _goToMerchantShell(BuildContext context) async {
+  try {
+    // Rafraîchir le token pour que _AuthGate voie le nouveau rôle
+    await Supabase.instance.client.auth.refreshSession();
+    // Charger isPharmacy depuis la DB
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    bool isPharmacy = false;
+    if (uid != null) {
+      final m = await Supabase.instance.client
+          .from('merchants')
+          .select('category')
+          .eq('owner_id', uid)
+          .maybeSingle();
+      isPharmacy = categoryNeedsPrescriptionFlow(m?['category'] as String?);
+    }
+    if (context.mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => MerchantShell(isPharmacy: isPharmacy),
+        ),
+        (_) => false,
+      );
+    }
+  } catch (_) {
+    // Si le refresh échoue, retour au login — l'utilisateur se reconnecte
+    if (context.mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
+    }
   }
 }

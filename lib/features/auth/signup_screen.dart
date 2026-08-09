@@ -15,6 +15,7 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
+  final _name = TextEditingController();
   final _phone = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
@@ -25,6 +26,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   void dispose() {
+    _name.dispose();
     _phone.dispose();
     _email.dispose();
     _password.dispose();
@@ -37,6 +39,11 @@ class _SignupScreenState extends State<SignupScreen> {
     final email = _email.text.trim();
     final password = _password.text;
 
+    final name = _name.text.trim();
+    if (name.length < 2) {
+      setState(() => _error = 'Veuillez entrer votre nom complet');
+      return;
+    }
     if (!CiPhone.isValid(phone)) {
       setState(() => _error = 'Numéro invalide. Format attendu : 01 02 03 04 05');
       return;
@@ -65,8 +72,7 @@ class _SignupScreenState extends State<SignupScreen> {
       final res = await _db.auth.signUp(
         email: authEmail,
         password: password,
-        emailRedirectTo: 'anannan://login-callback/',
-        data: {'phone': phone},
+        data: {'phone': phone, 'name': name},
       );
       final userId = res.user?.id;
       if (userId == null) throw Exception('Création du compte échouée');
@@ -77,6 +83,7 @@ class _SignupScreenState extends State<SignupScreen> {
       // colonne s'applique (à vérifier après un premier test réel).
       await _db.from('users_profiles').upsert({
         'id': userId,
+        'name': name,
         'phone': phone,
         'email': email.isNotEmpty ? email : null,
       });
@@ -152,6 +159,19 @@ class _SignupScreenState extends State<SignupScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const _FieldLabel(text: 'Nom complet'),
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: _name,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: _inputDecoration(
+                      hint: 'Ex: Yah Mardochée Kouakou',
+                      icon: Icons.person_outline_rounded,
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
                   const _FieldLabel(text: 'Numéro de téléphone'),
                   const SizedBox(height: 4),
                   TextField(
