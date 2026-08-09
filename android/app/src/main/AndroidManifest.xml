@@ -1,4 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Internet (Supabase, images réseau) -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Galerie photos/vidéos — Android 13+ (image_picker, stories, prescriptions) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+
+    <!-- Galerie — Android 12 et moins -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
+
+    <!-- Caméra (image_picker — photo produit, ordonnance, couverture boutique) -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+
     <application
         android:label="A Nan-Nan Marchand"
         android:name="${applicationName}"
