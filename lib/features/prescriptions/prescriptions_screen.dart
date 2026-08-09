@@ -185,6 +185,24 @@ class PrescriptionsScreen extends StatefulWidget {
 class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
   late final PrescriptionsNotifier _n;
   String? _openId;
+  // Une seule section ouverte à la fois — même logique que _openId pour les
+  // cartes individuelles. null = pas encore touché par l'utilisateur, on
+  // retombe sur _defaultOpenSection ; '' = toutes repliées (choix explicite).
+  String? _openSection;
+
+  /// Première section non vide, dans l'ordre d'affichage — ouverte par
+  /// défaut tant que l'utilisateur n'a rien touché.
+  String get _defaultOpenSection {
+    if (_n.inbox.isNotEmpty) return 'À traiter';
+    if (_n.quoted.isNotEmpty) return 'Devis envoyés';
+    if (_n.done.isNotEmpty) return 'Payées';
+    return '';
+  }
+
+  void _toggleSection(String title) {
+    final current = _openSection ?? _defaultOpenSection;
+    setState(() => _openSection = current == title ? '' : title);
+  }
 
   @override
   void initState() {
@@ -235,6 +253,8 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
               onToggle: (id) => setState(() => _openId = _openId == id ? null : id),
               notifier: _n,
               onGoToOrders: () => widget.onNavTap(1),
+              isOpen: (_openSection ?? _defaultOpenSection) == 'À traiter',
+              onToggleSection: () => _toggleSection('À traiter'),
             ),
 
           if (_n.quoted.isNotEmpty)
@@ -244,6 +264,8 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
               onToggle: (id) => setState(() => _openId = _openId == id ? null : id),
               notifier: _n,
               onGoToOrders: () => widget.onNavTap(1),
+              isOpen: (_openSection ?? _defaultOpenSection) == 'Devis envoyés',
+              onToggleSection: () => _toggleSection('Devis envoyés'),
             ),
 
           if (_n.done.isNotEmpty)
@@ -253,6 +275,8 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
               onToggle: (id) => setState(() => _openId = _openId == id ? null : id),
               notifier: _n,
               onGoToOrders: () => widget.onNavTap(1),
+              isOpen: (_openSection ?? _defaultOpenSection) == 'Payées',
+              onToggleSection: () => _toggleSection('Payées'),
             ),
 
           if (_n.prescriptions.isEmpty)
@@ -355,10 +379,13 @@ class _Section extends StatelessWidget {
   final ValueChanged<String> onToggle;
   final PrescriptionsNotifier notifier;
   final VoidCallback onGoToOrders;
+  final bool isOpen;
+  final VoidCallback onToggleSection;
 
   const _Section({
     required this.title, required this.items, required this.openId,
     required this.onToggle, required this.notifier, required this.onGoToOrders,
+    required this.isOpen, required this.onToggleSection,
   });
 
   @override
@@ -369,20 +396,49 @@ class _Section extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('$title · ${items.length}',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
-                    color: AppColors.foreground)),
-            const SizedBox(height: 8),
-            ...items.map((p) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _PrescriptionCard(
-                p: p,
-                open: openId == p.id,
-                onToggle: () => onToggle(p.id),
-                notifier: notifier,
-                onGoToOrders: onGoToOrders,
+            // En-tête pastille cliquable — même style que les onglets de
+            // Commandes (rempli + texte blanc si ouvert, contour sinon).
+            GestureDetector(
+              onTap: onToggleSection,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isOpen ? AppColors.primary : AppColors.card,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: isOpen ? AppColors.primary : AppColors.border,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('$title · ${items.length}',
+                        style: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w700,
+                            color: isOpen ? Colors.white : AppColors.foreground)),
+                    const SizedBox(width: 6),
+                    Icon(
+                      isOpen ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                      size: 18,
+                      color: isOpen ? Colors.white : AppColors.mutedForeground,
+                    ),
+                  ],
+                ),
               ),
-            )),
+            ),
+            const SizedBox(height: 8),
+            if (isOpen)
+              ...items.map((p) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _PrescriptionCard(
+                  p: p,
+                  open: openId == p.id,
+                  onToggle: () => onToggle(p.id),
+                  notifier: notifier,
+                  onGoToOrders: onGoToOrders,
+                ),
+              )),
           ],
         ),
       ),

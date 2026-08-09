@@ -263,6 +263,147 @@ class _KpiSkeleton extends StatelessWidget {
 /// Liste de [count] SkeletonCard espacées, shimmer synchronisé sur
 /// l'ensemble — à poser directement à la place d'un indicateur de
 /// chargement dans une liste (commandes, produits, transactions...).
+/// Skeleton de l'écran Profil — reproduit le header gradient (flèche +
+/// cloche + avatar + nom + badge) et les 3 cartes stats. Pas de barre du
+/// bas fantôme : Profil est un écran "poussé" (Navigator.push), comme
+/// Notifications/Stories, pas un onglet — il n'en a jamais eu.
+class ProfileSkeleton extends StatelessWidget {
+  final double topPadding;
+  const ProfileSkeleton({super.key, required this.topPadding});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: const Color(0xFFE0E0E0),
+      highlightColor: const Color(0xFFF5F5F5),
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            // ── Header gradient (fond bleu, pas de shimmer dessus) ──────────
+            Container(
+              decoration: const BoxDecoration(
+                gradient: AppColors.gradientHero,
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(32),
+                  bottomRight: Radius.circular(32),
+                ),
+              ),
+              padding: EdgeInsets.fromLTRB(20, topPadding + 16, 20, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        width: 44, height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      Container(
+                        width: 44, height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 90, height: 24,
+                    color: Colors.white.withOpacity(0.35),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        width: 56, height: 56,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 140, height: 16,
+                              color: Colors.white.withOpacity(0.3),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              width: 100, height: 12,
+                              color: Colors.white.withOpacity(0.2),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 70, height: 22,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── 3 cartes stats ───────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: List.generate(3, (i) => Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: i < 2 ? 10 : 0),
+                    child: Container(
+                      height: 62,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                )),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── 3 lignes menu ────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                children: List.generate(3, (i) => Padding(
+                  padding: EdgeInsets.only(bottom: i < 2 ? 12 : 0),
+                  child: Container(
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                )),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class SkeletonList extends StatelessWidget {
   final int count;
   final EdgeInsets padding;

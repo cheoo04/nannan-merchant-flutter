@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
+import '../../shared/widgets/skeleton.dart';
 
 // ⚠️ PLACEHOLDER — même faux numéro que côté React (_app.profile.tsx),
 // à remplacer par le vrai numéro de support avant mise en production.
@@ -154,13 +155,7 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
     final top = MediaQuery.of(context).padding.top;
 
     if (_loading) {
-      return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(
-          child: CircularProgressIndicator(
-              color: AppColors.primary, strokeWidth: 2),
-        ),
-      );
+      return ProfileSkeleton(topPadding: top);
     }
 
     final name = _profile?.name ?? 'Marchand';
