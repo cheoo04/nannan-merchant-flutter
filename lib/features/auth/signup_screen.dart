@@ -65,6 +65,7 @@ class _SignupScreenState extends State<SignupScreen> {
       final res = await _db.auth.signUp(
         email: authEmail,
         password: password,
+        emailRedirectTo: 'anannan://login-callback/',
         data: {'phone': phone},
       );
       final userId = res.user?.id;
