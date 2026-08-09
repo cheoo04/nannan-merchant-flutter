@@ -98,6 +98,103 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
     }
   }
 
+  Future<void> _editProfile() async {
+    final user = _db.auth.currentUser;
+    if (user == null) return;
+
+    final nameCtrl = TextEditingController(text: _profile?.name ?? '');
+    final phoneCtrl = TextEditingController(text: _profile?.phone ?? '');
+    bool saving = false;
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(24, 24, 24,
+              24 + MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Modifier mes informations',
+                  style: TextStyle(
+                      fontFamily: 'Sora',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameCtrl,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                    labelText: 'Nom complet', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: phoneCtrl,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                    labelText: 'Numéro de téléphone',
+                    hintText: '+225 07 00 00 00 00',
+                    border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          if (nameCtrl.text.trim().isEmpty) {
+                            toast.error('Le nom ne peut pas être vide');
+                            return;
+                          }
+                          setSheetState(() => saving = true);
+                          try {
+                            await _db.from('users_profiles').update({
+                              'name': nameCtrl.text.trim(),
+                              'phone': phoneCtrl.text.trim(),
+                            }).eq('id', user.id);
+                            if (ctx.mounted) Navigator.of(ctx).pop(true);
+                          } catch (_) {
+                            setSheetState(() => saving = false);
+                            if (ctx.mounted) toast.error('Échec de la mise à jour');
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox(
+                          width: 18, height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Text('Enregistrer'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final newName = nameCtrl.text.trim();
+    final newPhone = phoneCtrl.text.trim();
+    nameCtrl.dispose();
+    phoneCtrl.dispose();
+
+    if (saved == true && mounted) {
+      setState(() {
+        _profile = _ProfileData(
+          name: newName.isNotEmpty ? newName : (_profile?.name ?? 'Marchand'),
+          email: _profile?.email ?? '',
+          phone: newPhone,
+          role: _profile?.role ?? 'merchant',
+        );
+      });
+      toast.success('Profil mis à jour');
+    }
+  }
+
   Future<void> _signOut() async {
     // Confirmation avant déconnexion — même pattern que le client
     final confirmed = await showDialog<bool>(
@@ -274,6 +371,19 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
                               color: AppColors.primary)),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: _editProfile,
+                      child: Container(
+                        width: 32, height: 32,
+                        decoration: BoxDecoration(
+                          color: AppColors.secondary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.edit_rounded,
+                            size: 16, color: AppColors.mutedForeground),
+                      ),
                     ),
                   ],
                 ),

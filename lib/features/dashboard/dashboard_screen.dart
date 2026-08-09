@@ -280,14 +280,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
               // ── INSCRIRE UN NOUVEAU COMMERCE ───────────────
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _RegisterMerchantCard(
-                    onTap: widget.onGoToBecomesMerchant,
+              // Masqué si un commerce est déjà chargé : cliquer dessus ne
+              // mène nulle part pour ce cas — _checkExisting() dans
+              // become_merchant_screen.dart bloque sur toute demande déjà
+              // approuvée pour cet utilisateur, peu importe le commerce visé.
+              // Vrai multi-commerce = décision produit à part, pas encore prise.
+              if (_notifier.merchant == null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: _RegisterMerchantCard(
+                      onTap: widget.onGoToBecomesMerchant,
+                    ),
                   ),
                 ),
-              ),
 
               // Espace pour la bottom nav
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
