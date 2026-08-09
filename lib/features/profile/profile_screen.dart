@@ -83,10 +83,14 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
       if (mounted) {
         setState(() {
           _profile = _ProfileData(
+            // Jamais de fallback vers user.email ici : pour un compte
+            // téléphone seul, c'est le placeholder technique généré par
+            // placeholderEmailForPhone() ({phone}@nannan-marchand.local),
+            // documenté comme "jamais affiché" dans ci_phone.dart.
             name: (data?['name'] as String? ?? '').isNotEmpty
                 ? data!['name'] as String
-                : user.email ?? 'Marchand',
-            email: data?['email'] as String? ?? user.email ?? '',
+                : 'Marchand',
+            email: data?['email'] as String? ?? '',
             phone: data?['phone'] as String? ?? '',
             role: data?['role'] as String? ?? 'merchant',
           );
