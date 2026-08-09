@@ -87,7 +87,7 @@ class MerchantModel {
         DateTime.parse(pauseUntil!).isAfter(DateTime.now())) {
       return (label: 'En pause', tone: 'paused');
     }
-    return isOpenNow
+    return isOpen
         ? (label: 'Boutique ouverte', tone: 'open')
         : (label: 'Boutique fermée', tone: 'closed');
   }

@@ -362,7 +362,7 @@ class _PrescriptionsHeader extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Espace pharmacien — chiffrez les demandes reçues.',
+            'Espace pharmacien',
             style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
         ],
