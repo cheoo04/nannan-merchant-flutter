@@ -578,13 +578,12 @@ class _Stat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: const [
-          BoxShadow(color: Color(0x0A000000), blurRadius: 2),
-          BoxShadow(color: Color(0x0F000000), blurRadius: 8, offset: Offset(0, 2)),
+          BoxShadow(color: Color(0x08000000), blurRadius: 6, offset: Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -611,37 +610,30 @@ class _Stat extends StatelessWidget {
 // ── Footer : nom + version app + date de build ──────────────────────────────
 // La date est codée en dur — Flutter n'a pas d'équivalent natif à
 // __BUILD_DATE__ (spécifique aux bundlers JS type Vite). À METTRE À JOUR
-// MANUELLEMENT à chaque nouvelle release.
-const String _buildDate = '26/07/2026';
+// MANUELLEMENT à chaque nouvelle release. Format ISO (YYYY-MM-DD), même
+// convention que le footer React.
+const String _buildDate = '2026-07-26';
 
 class _AppFooter extends StatelessWidget {
   _AppFooter();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const Text(
-          'A Nan-Nan Livraison · Oumé, Côte d\'Ivoire',
+    // Une seule ligne, comme côté React — la localisation (Oumé, Côte
+    // d'Ivoire) est déjà donnée par la ligne "À propos" juste au-dessus,
+    // pas besoin de la répéter ici.
+    return FutureBuilder<PackageInfo>(
+      future: PackageInfo.fromPlatform(),
+      builder: (context, snapshot) {
+        final version = snapshot.data?.version ?? '';
+        return Text(
+          version.isEmpty
+              ? 'A Nan-Nan · build $_buildDate · Made in 🇨🇮'
+              : 'A Nan-Nan · v$version · build $_buildDate · Made in 🇨🇮',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11, color: AppColors.mutedForeground),
-        ),
-        const SizedBox(height: 4),
-        FutureBuilder<PackageInfo>(
-          future: PackageInfo.fromPlatform(),
-          builder: (context, snapshot) {
-            final version = snapshot.data?.version ?? '';
-            return Text(
-              version.isEmpty
-                  ? 'build $_buildDate · Made in 🇨🇮'
-                  : 'v$version · build $_buildDate · Made in 🇨🇮',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  fontSize: 10, color: AppColors.mutedForeground),
-            );
-          },
-        ),
-      ],
+          style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
+        );
+      },
     );
   }
 }
@@ -675,11 +667,7 @@ class _ProfileRow extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             boxShadow: const [
-              BoxShadow(color: Color(0x0A000000), blurRadius: 2),
-              BoxShadow(
-                  color: Color(0x0F000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 2)),
+              BoxShadow(color: Color(0x08000000), blurRadius: 6, offset: Offset(0, 2)),
             ],
           ),
           child: Row(
