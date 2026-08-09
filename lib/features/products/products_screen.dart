@@ -11,6 +11,7 @@ import '../../shared/widgets/notification_bell_button.dart';
 import '../../shared/widgets/skeleton.dart';
 import '../../shared/models/models.dart';
 import '../../shared/merchant_category.dart';
+import '../dashboard/dashboard_notifier.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -56,41 +57,38 @@ class DbProduct {
 
 // ── Notifier produits ─────────────────────────────────────────────────────────
 class ProductsNotifier extends ChangeNotifier {
+  // Source unique de vérité pour "merchant" (statut ouvert/fermé, pause,
+  // horaires) — la même instance que Dashboard et Profil. Avant, ce
+  // notifier gardait sa propre copie du marchand avec son propre
+  // abonnement realtime : basculer depuis un écran ne mettait à jour QUE
+  // cet écran, jamais les autres, sans lien de cause à effet fiable.
+  final DashboardNotifier dashboardNotifier;
+
   List<DbProduct> products = [];
-  MerchantModel? merchant;
-  bool loadingMerchant = true;
   bool loadingProducts = true;
   String query = '';
   String categoryFilter = 'all';
   String availFilter = 'all'; // all | visible | hidden
   RealtimeChannel? _channel;
-  RealtimeChannel? _merchantChannel;
-  String? _userId;
+  String? _productsLoadedForMerchantId;
 
-  ProductsNotifier() { _init(); }
+  MerchantModel? get merchant => dashboardNotifier.merchant;
+  bool get loadingMerchant => dashboardNotifier.loadingMerchant;
 
-  Future<void> _init() async {
-    final user = _db.auth.currentUser;
-    if (user == null) { loadingMerchant = false; notifyListeners(); return; }
-    _userId = user.id;
-
-    await _loadMerchant();
-    _subscribeMerchant();
+  ProductsNotifier(this.dashboardNotifier) {
+    dashboardNotifier.addListener(_onMerchantChanged);
+    _onMerchantChanged(); // le marchand peut déjà être chargé à cet instant
   }
 
-  Future<void> _loadMerchant() async {
-    if (_userId == null) return;
-    final m = await _db.from('merchants').select().eq('owner_id', _userId!).maybeSingle();
-    if (m == null) { loadingMerchant = false; notifyListeners(); return; }
-    final wasNull = merchant == null;
-    merchant = MerchantModel.fromJson(m);
-    loadingMerchant = false;
-    notifyListeners();
-
-    if (wasNull) {
-      await _loadProducts();
+  void _onMerchantChanged() {
+    final m = dashboardNotifier.merchant;
+    if (m != null && m.id != _productsLoadedForMerchantId) {
+      _productsLoadedForMerchantId = m.id;
+      _loadProducts();
       _subscribeProducts();
     }
+    // Répercute is_open/pause_until/etc. sur l'UI Produits immédiatement.
+    notifyListeners();
   }
 
   Future<void> _loadProducts() async {
@@ -103,27 +101,6 @@ class ProductsNotifier extends ChangeNotifier {
     products = (data as List).map((e) => DbProduct.fromJson(e)).toList();
     loadingProducts = false;
     notifyListeners();
-  }
-
-  // Réplique exactement useMyMerchant() (merchant-availability.ts) : une
-  // souscription realtime sur merchants filtrée par owner_id, présente sur
-  // chaque écran qui affiche le statut ouvert/fermé — pas seulement Dashboard.
-  void _subscribeMerchant() {
-    if (_userId == null) return;
-    _merchantChannel = _db
-        .channel('my-merchant-$_userId')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'merchants',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'owner_id',
-            value: _userId,
-          ),
-          callback: (_) => _loadMerchant(),
-        )
-        .subscribe();
   }
 
   void _subscribeProducts() {
@@ -166,34 +143,11 @@ class ProductsNotifier extends ChangeNotifier {
   void setCategoryFilter(String v) { categoryFilter = v; notifyListeners(); }
   void setAvailFilter(String v) { availFilter = v; notifyListeners(); }
 
-  Future<void> toggleOpen() async {
-    if (merchant == null) return;
-    await _db.from('merchants').update({'is_open': !merchant!.isOpen}).eq('id', merchant!.id);
-    await _loadMerchant();
-  }
-
-  Future<void> pauseMerchant(int minutes) async {
-    if (merchant == null) return;
-    final until = DateTime.now().add(Duration(minutes: minutes));
-    await _db.from('merchants').update({'pause_until': until.toIso8601String()}).eq('id', merchant!.id);
-    await _loadMerchant();
-  }
-
-  Future<void> resumeMerchant() async {
-    if (merchant == null) return;
-    await _db.from('merchants').update({'pause_until': null}).eq('id', merchant!.id);
-    await _loadMerchant();
-  }
-
-  Future<void> saveSchedule({required bool enabled, String? opening, String? closing}) async {
-    if (merchant == null) return;
-    await _db.from('merchants').update({
-      'auto_schedule_enabled': enabled,
-      'opening_time': enabled ? opening : null,
-      'closing_time': enabled ? closing : null,
-    }).eq('id', merchant!.id);
-    await _loadMerchant();
-  }
+  Future<void> toggleOpen() => dashboardNotifier.toggleOpen();
+  Future<void> pauseMerchant(int minutes) => dashboardNotifier.pauseMerchant(minutes);
+  Future<void> resumeMerchant() => dashboardNotifier.resumeMerchant();
+  Future<void> saveSchedule({required bool enabled, String? opening, String? closing}) =>
+      dashboardNotifier.saveSchedule(enabled: enabled, opening: opening, closing: closing);
 
   Future<void> toggleAvailability(DbProduct p) async {
     await _db.from('products').update({'is_available': !p.isAvailable}).eq('id', p.id);
@@ -251,14 +205,15 @@ class ProductsNotifier extends ChangeNotifier {
 
   @override
   void dispose() {
+    dashboardNotifier.removeListener(_onMerchantChanged);
     if (_channel != null) _db.removeChannel(_channel!);
-    if (_merchantChannel != null) _db.removeChannel(_merchantChannel!);
     super.dispose();
   }
 }
 
 // ── PRODUCTS SCREEN ───────────────────────────────────────────────────────────
 class ProductsScreen extends StatefulWidget {
+  final DashboardNotifier dashboardNotifier;
   final int currentNavIndex;
   final ValueChanged<int> onNavTap;
   final VoidCallback onGoToDashboard;
@@ -267,6 +222,7 @@ class ProductsScreen extends StatefulWidget {
 
   const ProductsScreen({
     super.key,
+    required this.dashboardNotifier,
     required this.currentNavIndex,
     required this.onNavTap,
     required this.onGoToDashboard,
@@ -286,7 +242,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   @override
   void initState() {
     super.initState();
-    _n = ProductsNotifier();
+    _n = ProductsNotifier(widget.dashboardNotifier);
     _n.addListener(() => setState(() {}));
   }
 

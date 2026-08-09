@@ -214,6 +214,49 @@ class DashboardNotifier extends ChangeNotifier {
     }
   }
 
+  Future<void> pauseMerchant(int minutes) async {
+    if (merchant == null) return;
+    try {
+      final until = DateTime.now().add(Duration(minutes: minutes));
+      await _db.from('merchants')
+          .update({'pause_until': until.toIso8601String()})
+          .eq('id', merchant!.id);
+      final userId = _db.auth.currentUser?.id;
+      if (userId != null) await _loadMerchant(userId);
+    } catch (e) {
+      error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> resumeMerchant() async {
+    if (merchant == null) return;
+    try {
+      await _db.from('merchants').update({'pause_until': null}).eq('id', merchant!.id);
+      final userId = _db.auth.currentUser?.id;
+      if (userId != null) await _loadMerchant(userId);
+    } catch (e) {
+      error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> saveSchedule({required bool enabled, String? opening, String? closing}) async {
+    if (merchant == null) return;
+    try {
+      await _db.from('merchants').update({
+        'auto_schedule_enabled': enabled,
+        'opening_time': enabled ? opening : null,
+        'closing_time': enabled ? closing : null,
+      }).eq('id', merchant!.id);
+      final userId = _db.auth.currentUser?.id;
+      if (userId != null) await _loadMerchant(userId);
+    } catch (e) {
+      error = e.toString();
+      notifyListeners();
+    }
+  }
+
   Future<void> updateImage(String? imageUrl) async {
     if (merchant == null) return;
     await _db

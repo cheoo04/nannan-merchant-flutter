@@ -94,7 +94,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         listenable: _notifier,
         builder: (context, _) {
           final merchant = _notifier.merchant;
-          final isOpen = merchant?.isOpenNow ?? false;
+          final isOpen = merchant?.isOpen ?? false;
           final statusLabel = merchant?.statusLabel.label ?? '—';
           final merchantName = merchant?.name ?? 'Mon commerce';
           final hasData = _notifier.totalCount > 0;

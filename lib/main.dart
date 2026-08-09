@@ -290,6 +290,7 @@ class _MerchantShellState extends State<MerchantShell> {
 
         // Produits
         ProductsScreen(
+          dashboardNotifier: _dashboard,
           currentNavIndex: _index,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
