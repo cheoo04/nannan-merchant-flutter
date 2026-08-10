@@ -371,7 +371,7 @@ class _GradientHeader extends StatelessWidget {
                 child: Container(
                   width: 40, height: 40,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.person_rounded, color: Colors.white, size: 20),
@@ -653,15 +653,15 @@ class _EmptyOrdersCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border, style: BorderStyle.solid),
       ),
-      child: Column(
+      child: const Column(
         children: [
-          const Icon(
+          Icon(
             Icons.access_time_rounded,
             size: 24,
             color: AppColors.mutedForeground,
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             'Aucune commande pour le moment',
             style: TextStyle(
               fontSize: 13,
@@ -670,8 +670,8 @@ class _EmptyOrdersCard extends StatelessWidget {
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 4),
-          const Text(
+          SizedBox(height: 4),
+          Text(
             "Dès qu'un client commandera, vous le verrez apparaître ici.",
             style: TextStyle(
               fontSize: 11,
@@ -876,8 +876,11 @@ class _ShopImagePickerState extends State<_ShopImagePicker> {
     final url = await widget.onPick(File(file.path));
     if (mounted) setState(() => _uploading = false);
 
-    if (url != null) toast.success('Photo mise à jour');
-    else toast.error("Échec de l'envoi de la photo");
+    if (url != null) {
+      toast.success('Photo mise à jour');
+    } else {
+      toast.error("Échec de l'envoi de la photo");
+    }
   }
 
   @override

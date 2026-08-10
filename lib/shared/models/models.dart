@@ -61,7 +61,9 @@ class MerchantModel {
     if (status != 'active') return false;
     if (!isOpen) return false;
     if (pauseUntil != null &&
-        DateTime.parse(pauseUntil!).isAfter(DateTime.now())) return false;
+        DateTime.parse(pauseUntil!).isAfter(DateTime.now())) {
+      return false;
+    }
     if (autoScheduleEnabled && openingTime != null && closingTime != null) {
       final now = DateTime.now().toUtc();
       final cur = now.hour * 3600 + now.minute * 60;

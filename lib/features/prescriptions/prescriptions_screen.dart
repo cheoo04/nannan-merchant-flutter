@@ -341,7 +341,7 @@ class _PrescriptionsHeader extends StatelessWidget {
                 onTap: onBack,
                 child: Container(
                   width: 44, height: 44,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppColors.headerOverlay,
                     shape: BoxShape.circle,
                   ),
@@ -633,7 +633,7 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.secondary.withOpacity(0.5),
+                        color: AppColors.secondary.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text('"${p.clientNote}"',
@@ -805,7 +805,7 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                           gradient: _submitting
                               ? null
                               : AppColors.gradientPrimary,
-                          color: _submitting ? AppColors.primary.withOpacity(0.5) : null,
+                          color: _submitting ? AppColors.primary.withValues(alpha: 0.5) : null,
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: ElevatedButton.icon(
@@ -840,7 +840,7 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.success.withOpacity(0.15),
+                        color: AppColors.success.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Column(
@@ -927,7 +927,7 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: AppColors.secondary.withOpacity(0.4),
+        color: AppColors.secondary.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(

@@ -470,7 +470,7 @@ class _FinanceHeader extends StatelessWidget {
                 onTap: onBack,
                 child: Container(
                   width: 44, height: 44,
-                  decoration: BoxDecoration(color: AppColors.headerOverlay, shape: BoxShape.circle),
+                  decoration: const BoxDecoration(color: AppColors.headerOverlay, shape: BoxShape.circle),
                   child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
                 ),
               ),

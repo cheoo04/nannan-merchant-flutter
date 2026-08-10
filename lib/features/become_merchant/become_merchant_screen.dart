@@ -172,7 +172,7 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
           // ── Header sticky (miroir React) ─────────────────
           Container(
             padding: EdgeInsets.fromLTRB(16, top + 8, 16, 12),
-            color: AppColors.background.withOpacity(0.95),
+            color: AppColors.background.withValues(alpha: 0.95),
             child: Row(
               children: [
                 // Retour
@@ -180,10 +180,10 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
                   onTap: widget.onBack,
                   child: Container(
                     width: 36, height: 36,
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: AppColors.card,
                       shape: BoxShape.circle,
-                      boxShadow: const [BoxShadow(color: Color(0x0F000000), blurRadius: 8)],
+                      boxShadow: [BoxShadow(color: Color(0x0F000000), blurRadius: 8)],
                     ),
                     child: const Icon(Icons.arrow_back_rounded, size: 16),
                   ),
@@ -225,7 +225,7 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
                 const SizedBox(width: 12),
                 Container(
                   width: 36, height: 36,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppColors.primarySoft,
                     shape: BoxShape.circle,
                   ),
@@ -418,10 +418,10 @@ class _StepTerms extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             boxShadow: const [BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4))],
           ),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+          child: const SingleChildScrollView(
+            padding: EdgeInsets.all(16),
             child: Column(
-              children: const [
+              children: [
                 _Term(
                   title: 'Engagement de service',
                   text: "Je m'engage à respecter les délais, la qualité et la courtoisie envers les clients d'A Nan-Nan.",
@@ -553,7 +553,7 @@ class _StepPending extends StatelessWidget {
                   width: 64, height: 64,
                   decoration: BoxDecoration(
                     color: approved
-                        ? AppColors.success.withOpacity(0.15)
+                        ? AppColors.success.withValues(alpha: 0.15)
                         : AppColors.primarySoft,
                     shape: BoxShape.circle,
                   ),
@@ -584,7 +584,7 @@ class _StepPending extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: AppColors.success.withOpacity(0.12),
+                    color: AppColors.success.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: const Row(

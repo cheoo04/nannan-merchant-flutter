@@ -192,7 +192,7 @@ class StoriesNotifier extends ChangeNotifier {
   // ── Helper : extraire le path depuis l'URL publique Storage ──
   String? _pathFromUrl(String url) {
     // URL publique : .../storage/v1/object/public/stories/PATH
-    final marker = '/object/public/stories/';
+    const marker = '/object/public/stories/';
     final idx = url.indexOf(marker);
     if (idx == -1) return null;
     return url.substring(idx + marker.length);
@@ -200,8 +200,6 @@ class StoriesNotifier extends ChangeNotifier {
 
   int get maxImages => videoUrl != null ? _maxImages : _maxImagesNoVideo;
 
-  @override
-  void dispose() => super.dispose();
 }
 
 // ── STORIES SCREEN ────────────────────────────────────────────────────────────
@@ -248,8 +246,11 @@ class _StoriesScreenState extends State<StoriesScreen> {
     final bytes = await file.readAsBytes();
     final ext = file.name.split('.').last.toLowerCase();
     final err = await _n.uploadImage(bytes, ext.isEmpty ? 'jpg' : ext);
-    if (err != null) toast.error(err);
-    else toast.success('Photo ajoutée');
+    if (err != null) {
+      toast.error(err);
+    } else {
+      toast.success('Photo ajoutée');
+    }
   }
 
   // ── Picker vidéo ──────────────────────────────────────────
@@ -285,8 +286,11 @@ class _StoriesScreenState extends State<StoriesScreen> {
     final bytes = await file.readAsBytes();
     final ext = file.name.split('.').last.toLowerCase();
     final err = await _n.uploadVideo(bytes, ext.isEmpty ? 'mp4' : ext);
-    if (err != null) toast.error(err);
-    else toast.success('Vidéo ajoutée');
+    if (err != null) {
+      toast.error(err);
+    } else {
+      toast.success('Vidéo ajoutée');
+    }
   }
 
   // ── Confirmer suppression ─────────────────────────────────
@@ -309,8 +313,11 @@ class _StoriesScreenState extends State<StoriesScreen> {
     );
     if (ok != true) return;
     final err = await _n.deleteImage(index);
-    if (err != null) toast.error(err);
-    else toast.success('Photo supprimée');
+    if (err != null) {
+      toast.error(err);
+    } else {
+      toast.success('Photo supprimée');
+    }
   }
 
   Future<void> _confirmDeleteVideo() async {
@@ -332,8 +339,11 @@ class _StoriesScreenState extends State<StoriesScreen> {
     );
     if (ok != true) return;
     final err = await _n.deleteVideo();
-    if (err != null) toast.error(err);
-    else toast.success('Vidéo supprimée');
+    if (err != null) {
+      toast.error(err);
+    } else {
+      toast.success('Vidéo supprimée');
+    }
   }
 
   @override
@@ -502,7 +512,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
                         children: [
                           Container(
                             width: 56, height: 56,
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               color: AppColors.primarySoft,
                               shape: BoxShape.circle,
                             ),
@@ -588,7 +598,7 @@ class _StoriesHeader extends StatelessWidget {
                 onTap: onBack,
                 child: Container(
                   width: 44, height: 44,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppColors.headerOverlay, shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
@@ -632,7 +642,7 @@ class _StoriesHeader extends StatelessWidget {
                 value: hasVideo ? 'Ajoutée' : 'Aucune',
               )),
               const SizedBox(width: 8),
-              Expanded(child: _HeaderKpi(
+              const Expanded(child: _HeaderKpi(
                 icon: Icons.timer_rounded,
                 label: 'Durée max',
                 value: '1min30',
@@ -721,7 +731,7 @@ class _AddButton extends StatelessWidget {
             color: AppColors.card,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: enabled ? AppColors.primary.withOpacity(0.5) : AppColors.border,
+              color: enabled ? AppColors.primary.withValues(alpha: 0.5) : AppColors.border,
               width: enabled ? 1.5 : 0.5,
             ),
             boxShadow: const [
@@ -873,7 +883,7 @@ class _ImageTile extends StatelessWidget {
                 onTap: onDelete,
                 child: Container(
                   width: 32, height: 32,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppColors.destructive,
                     shape: BoxShape.circle,
                   ),
@@ -888,7 +898,7 @@ class _ImageTile extends StatelessWidget {
                 index: index,
                 child: Container(
                   width: 32, height: 32,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: Colors.black45,
                     shape: BoxShape.circle,
                   ),
@@ -975,7 +985,7 @@ class _VideoCard extends StatelessWidget {
             child: Container(
               width: 36, height: 36,
               decoration: BoxDecoration(
-                color: AppColors.destructive.withOpacity(0.1),
+                color: AppColors.destructive.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.delete_rounded, color: AppColors.destructive, size: 18),
@@ -1019,7 +1029,7 @@ class _ImageLightboxState extends State<_ImageLightbox> {
   Widget build(BuildContext context) {
     return Positioned.fill(
       child: Material(
-        color: Colors.black.withOpacity(0.95),
+        color: Colors.black.withValues(alpha: 0.95),
         child: Stack(
           children: [
             // Swipe images
@@ -1045,7 +1055,7 @@ class _ImageLightboxState extends State<_ImageLightbox> {
                 child: Container(
                   width: 44, height: 44,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
@@ -1118,19 +1128,19 @@ class _VideoLightboxState extends State<_VideoLightbox> {
 
     return Positioned.fill(
       child: Material(
-        color: Colors.black.withOpacity(0.95),
+        color: Colors.black.withValues(alpha: 0.95),
         child: Stack(
           children: [
             Center(
               child: _error != null
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 24),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.error_outline_rounded, color: Colors.white60, size: 40),
-                          const SizedBox(height: 12),
-                          const Text('Impossible de lire cette vidéo',
+                          Icon(Icons.error_outline_rounded, color: Colors.white60, size: 40),
+                          SizedBox(height: 12),
+                          Text('Impossible de lire cette vidéo',
                               style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
                         ],
                       ),
@@ -1150,7 +1160,7 @@ class _VideoLightboxState extends State<_VideoLightbox> {
                                 if (!c.value.isPlaying)
                                   Container(
                                     width: 56, height: 56,
-                                    decoration: BoxDecoration(
+                                    decoration: const BoxDecoration(
                                       color: Colors.black54,
                                       shape: BoxShape.circle,
                                     ),
@@ -1186,7 +1196,7 @@ class _VideoLightboxState extends State<_VideoLightbox> {
                 child: Container(
                   width: 44, height: 44,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),

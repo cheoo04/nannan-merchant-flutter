@@ -106,7 +106,7 @@ class DashboardSkeleton extends StatelessWidget {
                       Container(
                         width: 36, height: 36,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -114,7 +114,7 @@ class DashboardSkeleton extends StatelessWidget {
                       Container(
                         width: 80, height: 28,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(999),
                         ),
                       ),
@@ -122,7 +122,7 @@ class DashboardSkeleton extends StatelessWidget {
                       Container(
                         width: 36, height: 36,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -132,20 +132,20 @@ class DashboardSkeleton extends StatelessWidget {
                   // "Espace marchand"
                   Container(
                     width: 100, height: 10,
-                    color: Colors.white.withOpacity(0.25),
+                    color: Colors.white.withValues(alpha: 0.25),
                   ),
                   const SizedBox(height: 6),
                   // Nom du commerce
                   Container(
                     width: 200, height: 22,
-                    color: Colors.white.withOpacity(0.35),
+                    color: Colors.white.withValues(alpha: 0.35),
                   ),
                   const SizedBox(height: 12),
                   // Badge ouvert/fermé
                   Container(
                     width: 160, height: 28,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
@@ -241,7 +241,7 @@ class _KpiSkeleton extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -249,11 +249,11 @@ class _KpiSkeleton extends StatelessWidget {
         children: [
           Container(
               width: 60, height: 9,
-              color: Colors.white.withOpacity(0.4)),
+              color: Colors.white.withValues(alpha: 0.4)),
           const SizedBox(height: 6),
           Container(
               width: 40, height: 20,
-              color: Colors.white.withOpacity(0.5)),
+              color: Colors.white.withValues(alpha: 0.5)),
         ],
       ),
     );
@@ -300,14 +300,14 @@ class ProfileSkeleton extends StatelessWidget {
                       Container(
                         width: 44, height: 44,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                       ),
                       Container(
                         width: 44, height: 44,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -316,7 +316,7 @@ class ProfileSkeleton extends StatelessWidget {
                   const SizedBox(height: 12),
                   Container(
                     width: 90, height: 24,
-                    color: Colors.white.withOpacity(0.35),
+                    color: Colors.white.withValues(alpha: 0.35),
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -324,7 +324,7 @@ class ProfileSkeleton extends StatelessWidget {
                       Container(
                         width: 56, height: 56,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -335,12 +335,12 @@ class ProfileSkeleton extends StatelessWidget {
                           children: [
                             Container(
                               width: 140, height: 16,
-                              color: Colors.white.withOpacity(0.3),
+                              color: Colors.white.withValues(alpha: 0.3),
                             ),
                             const SizedBox(height: 8),
                             Container(
                               width: 100, height: 12,
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                             ),
                           ],
                         ),
@@ -348,7 +348,7 @@ class ProfileSkeleton extends StatelessWidget {
                       Container(
                         width: 70, height: 22,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(999),
                         ),
                       ),
@@ -413,8 +413,8 @@ class SkeletonList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Shimmer.fromColors(
-      baseColor: AppColors.border.withOpacity(0.5),
-      highlightColor: AppColors.border.withOpacity(0.15),
+      baseColor: AppColors.border.withValues(alpha: 0.5),
+      highlightColor: AppColors.border.withValues(alpha: 0.15),
       child: Padding(
         padding: padding,
         child: Column(

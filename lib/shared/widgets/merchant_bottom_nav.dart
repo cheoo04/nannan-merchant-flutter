@@ -68,7 +68,7 @@ class MerchantBottomNav extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.card.withOpacity(0.95),
+        color: AppColors.card.withValues(alpha: 0.95),
         border: const Border(
           top: BorderSide(color: AppColors.border, width: 0.5),
         ),

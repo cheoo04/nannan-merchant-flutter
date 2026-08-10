@@ -22,7 +22,7 @@ import 'notifications_notifier.dart';
       return (
         icon: Icons.two_wheeler_rounded,
         color: AppColors.warm,
-        bg: AppColors.warm.withOpacity(0.2),
+        bg: AppColors.warm.withValues(alpha: 0.2),
       );
     case 'payment':
       return (
@@ -123,10 +123,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     onTap: () => Navigator.of(context).maybePop(),
                     child: Container(
                       width: 40, height: 40,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: AppColors.card,
                         shape: BoxShape.circle,
-                        boxShadow: const [
+                        boxShadow: [
                           BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 2)),
                         ],
                       ),
@@ -155,17 +155,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     onTap: unread > 0 ? () => _n.markAllAsRead() : null,
                     child: Container(
                       width: 40, height: 40,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: AppColors.card,
                         shape: BoxShape.circle,
-                        boxShadow: const [
+                        boxShadow: [
                           BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 2)),
                         ],
                       ),
                       child: Icon(
                         Icons.done_all_rounded, // = CheckCheck
                         size: 20,
-                        color: unread > 0 ? AppColors.primary : AppColors.mutedForeground.withOpacity(0.4),
+                        color: unread > 0 ? AppColors.primary : AppColors.mutedForeground.withValues(alpha: 0.4),
                       ),
                     ),
                   ),
@@ -206,7 +206,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(32),
                           decoration: BoxDecoration(
-                            color: AppColors.card.withOpacity(0.5),
+                            color: AppColors.card.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: const Text('Chargement…',
@@ -293,7 +293,7 @@ class _NotificationTile extends StatelessWidget {
           color: AppColors.card,
           borderRadius: BorderRadius.circular(16), // rounded-2xl
           border: !isRead
-              ? Border.all(color: AppColors.primary.withOpacity(0.3), width: 1) // ring-1 ring-primary/30
+              ? Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 1) // ring-1 ring-primary/30
               : Border.all(color: Colors.transparent, width: 1),
           boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 4, offset: Offset(0, 1))],
         ),
@@ -405,7 +405,7 @@ class _EmptyState extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(32),
           decoration: BoxDecoration(
-            color: AppColors.card.withOpacity(0.5),
+            color: AppColors.card.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: AppColors.border,
@@ -416,7 +416,7 @@ class _EmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.notifications_off_rounded, // BellOff
+              const Icon(Icons.notifications_off_rounded, // BellOff
                   size: 32, color: AppColors.mutedForeground),
               const SizedBox(height: 8),
               Text(

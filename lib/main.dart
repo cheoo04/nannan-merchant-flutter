@@ -402,8 +402,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
       }
-    } on AuthException catch (_) {
-      setState(() => _error = 'Email ou mot de passe incorrect.');
+    } on AuthException catch (e) {
+      setState(() => _error = friendlyError(e));
     } catch (e) {
       setState(() => _error = friendlyError(e,
           fallback:
@@ -530,7 +530,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        color: AppColors.destructive.withOpacity(0.1),
+                        color: AppColors.destructive.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(

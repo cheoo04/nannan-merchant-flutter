@@ -317,7 +317,7 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                       onTap: _editProfile,
                       child: Container(
                         width: 32, height: 32,
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           color: AppColors.secondary,
                           shape: BoxShape.circle,
                         ),
@@ -406,7 +406,7 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       side: BorderSide(
-                          color: AppColors.destructive.withOpacity(0.35),
+                          color: AppColors.destructive.withValues(alpha: 0.35),
                           width: 2),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16)),
@@ -437,7 +437,7 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
           const SizedBox(height: 24),
 
           // Footer
-          _AppFooter(),
+          const _AppFooter(),
           const SizedBox(height: 32),
         ],
       ),
@@ -498,8 +498,8 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            Text('📞 $_supportPhoneDisplay',
-                style: const TextStyle(fontSize: 13)),
+            const Text('📞 $_supportPhoneDisplay',
+                style: TextStyle(fontSize: 13)),
             const SizedBox(height: 4),
             InkWell(
               onTap: () => _launch(Uri.parse('mailto:$_supportEmail')),
@@ -539,12 +539,12 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
       context: context,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(24),
+      builder: (_) => const Padding(
+        padding: EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
+          children: [
             Text('À propos',
                 style: TextStyle(
                     fontFamily: 'Sora',
@@ -665,7 +665,7 @@ class _Stat extends StatelessWidget {
 const String _buildDate = '2026-07-26';
 
 class _AppFooter extends StatelessWidget {
-  _AppFooter();
+  const _AppFooter();
 
   @override
   Widget build(BuildContext context) {

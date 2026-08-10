@@ -317,7 +317,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         decoration: BoxDecoration(
                           color: AppColors.primarySoft,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.primary.withOpacity(0.4), width: 2,
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.4), width: 2,
                               style: BorderStyle.solid),
                         ),
                         child: Row(
@@ -535,7 +535,7 @@ class _ProductsHeader extends StatelessWidget {
                 onTap: onBack,
                 child: Container(
                   width: 44, height: 44,
-                  decoration: BoxDecoration(color: AppColors.headerOverlay, shape: BoxShape.circle),
+                  decoration: const BoxDecoration(color: AppColors.headerOverlay, shape: BoxShape.circle),
                   child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
                 ),
               ),
@@ -636,9 +636,9 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
 
   Color get _toneBg {
     final t = widget.notifier.merchant!.statusLabel.tone;
-    if (t == 'open') return AppColors.success.withOpacity(0.15);
-    if (t == 'paused') return AppColors.warm.withOpacity(0.2);
-    return AppColors.destructive.withOpacity(0.1);
+    if (t == 'open') return AppColors.success.withValues(alpha: 0.15);
+    if (t == 'paused') return AppColors.warm.withValues(alpha: 0.2);
+    return AppColors.destructive.withValues(alpha: 0.1);
   }
 
   Color get _toneFg {
@@ -764,7 +764,7 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
               child: Container(
                 height: 40, width: double.infinity,
                 decoration: BoxDecoration(
-                  color: AppColors.success.withOpacity(0.15),
+                  color: AppColors.success.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Row(
@@ -829,7 +829,7 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
                       Switch(
                         value: _schedEnabled,
                         onChanged: (v) => setState(() => _schedEnabled = v),
-                        activeColor: AppColors.primary,
+                        activeThumbColor: AppColors.primary,
                       ),
                     ],
                   ),
@@ -997,7 +997,7 @@ class _ProductRow extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                             color: p.isAvailable
-                                ? AppColors.success.withOpacity(0.2)
+                                ? AppColors.success.withValues(alpha: 0.2)
                                 : AppColors.secondary,
                             borderRadius: BorderRadius.circular(999),
                           ),
@@ -1046,7 +1046,7 @@ class _ProductRow extends StatelessWidget {
               child: Container(
                 width: 32, height: 32,
                 decoration: BoxDecoration(
-                  color: AppColors.destructive.withOpacity(0.1),
+                  color: AppColors.destructive.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: const Icon(Icons.delete_rounded, size: 14, color: AppColors.destructive),
@@ -1207,7 +1207,7 @@ class _ProductEditorState extends State<_ProductEditor> {
                     const SizedBox(height: 20),
 
                     // Nom
-                    _FieldLabel(label: 'Nom'),
+                    const _FieldLabel(label: 'Nom'),
                     const SizedBox(height: 4),
                     TextField(controller: _name,
                         decoration: const InputDecoration(hintText: 'Ex: Garba spécial')),
@@ -1215,7 +1215,7 @@ class _ProductEditorState extends State<_ProductEditor> {
                     const SizedBox(height: 12),
 
                     // Description
-                    _FieldLabel(label: 'Description'),
+                    const _FieldLabel(label: 'Description'),
                     const SizedBox(height: 4),
                     TextField(controller: _desc, maxLines: 2,
                         decoration: const InputDecoration(hintText: 'Ingrédients, détails…')),
@@ -1224,7 +1224,7 @@ class _ProductEditorState extends State<_ProductEditor> {
 
                     // Catégorie (sous-famille) — clé pour un catalogue lisible
                     // dès qu'il y a beaucoup de produits (ex. pharmacie).
-                    _FieldLabel(label: 'Catégorie'),
+                    const _FieldLabel(label: 'Catégorie'),
                     const SizedBox(height: 4),
                     TextField(controller: _category,
                         decoration: const InputDecoration(hintText: 'Ex: Antidouleur, Vitamines…')),
@@ -1255,7 +1255,7 @@ class _ProductEditorState extends State<_ProductEditor> {
                     Row(
                       children: [
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          _FieldLabel(label: 'Prix (FCFA)'),
+                          const _FieldLabel(label: 'Prix (FCFA)'),
                           const SizedBox(height: 4),
                           TextField(controller: _price,
                               keyboardType: TextInputType.number,
@@ -1263,7 +1263,7 @@ class _ProductEditorState extends State<_ProductEditor> {
                         ])),
                         const SizedBox(width: 12),
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          _FieldLabel(label: 'Stock (optionnel)'),
+                          const _FieldLabel(label: 'Stock (optionnel)'),
                           const SizedBox(height: 4),
                           TextField(controller: _stock,
                               keyboardType: TextInputType.number,
@@ -1275,7 +1275,7 @@ class _ProductEditorState extends State<_ProductEditor> {
                     const SizedBox(height: 12),
 
                     // Photo
-                    _FieldLabel(label: 'Photo du produit'),
+                    const _FieldLabel(label: 'Photo du produit'),
                     const SizedBox(height: 4),
                     GestureDetector(
                       onTap: _pickImage,

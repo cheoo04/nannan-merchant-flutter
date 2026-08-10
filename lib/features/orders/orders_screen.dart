@@ -275,7 +275,7 @@ class _OrdersHeader extends StatelessWidget {
                 onTap: onBack,
                 child: Container(
                   width: 44, height: 44,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppColors.headerOverlay,
                     shape: BoxShape.circle,
                   ),
@@ -491,7 +491,7 @@ class _OrderCardState extends State<_OrderCard> {
                         size: 12,
                         color: o.deliveryAddressText != null
                             ? AppColors.mutedForeground
-                            : AppColors.mutedForeground.withOpacity(0.4)),
+                            : AppColors.mutedForeground.withValues(alpha: 0.4)),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
@@ -502,7 +502,7 @@ class _OrderCardState extends State<_OrderCard> {
                           fontSize: 11,
                           color: o.deliveryAddressText != null
                               ? AppColors.mutedForeground
-                              : AppColors.mutedForeground.withOpacity(0.5),
+                              : AppColors.mutedForeground.withValues(alpha: 0.5),
                           fontStyle: o.deliveryAddressText == null
                               ? FontStyle.italic
                               : FontStyle.normal,
