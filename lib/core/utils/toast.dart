@@ -5,13 +5,13 @@ import '../theme/app_colors.dart';
 enum ToastType { success, error, info }
 
 // ── Modèle ────────────────────────────────────────────────────────────────────
-class _ToastItem {
+class ToastItem {
   final String id;
   final String title;
   final String? description;
   final ToastType type;
 
-  _ToastItem({
+  ToastItem({
     required this.id,
     required this.title,
     this.description,
@@ -25,12 +25,12 @@ class ToastManager extends ChangeNotifier {
   static ToastManager get instance => _instance;
   ToastManager._();
 
-  final List<_ToastItem> _toasts = [];
-  List<_ToastItem> get toasts => List.unmodifiable(_toasts);
+  final List<ToastItem> _toasts = [];
+  List<ToastItem> get toasts => List.unmodifiable(_toasts);
 
   void show(String title, {String? description, ToastType type = ToastType.info}) {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
-    _toasts.insert(0, _ToastItem(id: id, title: title, description: description, type: type));
+    _toasts.insert(0, ToastItem(id: id, title: title, description: description, type: type));
     notifyListeners();
 
     // Auto-dismiss après 3s
@@ -112,7 +112,7 @@ class ToastOverlay extends StatelessWidget {
 
 // ── Card toast ────────────────────────────────────────────────────────────────
 class _ToastCard extends StatelessWidget {
-  final _ToastItem item;
+  final ToastItem item;
   final VoidCallback onDismiss;
 
   const _ToastCard({required this.item, required this.onDismiss});

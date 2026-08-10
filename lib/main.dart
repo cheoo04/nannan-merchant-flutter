@@ -49,7 +49,7 @@ Future<void> main() async {
 
   await Supabase.initialize(
     url: 'https://ilhanzanjduogsmfjmwm.supabase.co',
-    anonKey:
+    publishableKey:
         'sb_publishable_gUzQnBCgVxn_tFlyK9WT5g_MD1X1cCF',
     realtimeClientOptions: const RealtimeClientOptions(eventsPerSecond: 10),
   );
