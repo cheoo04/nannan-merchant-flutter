@@ -131,7 +131,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         return;
       }
       final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       );
       final point = LatLng(position.latitude, position.longitude);
       setState(() {

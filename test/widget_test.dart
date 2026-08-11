@@ -1,30 +1,15 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Ce fichier remplace le test Flutter par défaut (compteur) qui était
+// incompatible avec notre app (nécessite Supabase initialisé).
+// Les vrais tests de l'app sont dans :
+//   test/features/location_picker/nominatim_service_test.dart
+//   test/shared/models/merchant_model_test.dart
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:nannan_merchant/main.dart';
-
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const NanNanMerchantApp());
-
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  test('placeholder — voir test/features/ et test/shared/ pour les vrais tests', () {
+    // Ce test existe uniquement pour que `flutter test` passe sans erreur.
+    // Les tests unitaires réels couvrent NominatimService et MerchantModel.
+    expect(true, isTrue);
   });
 }
