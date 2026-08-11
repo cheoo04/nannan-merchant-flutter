@@ -5,6 +5,7 @@ import '../../core/utils/toast.dart';
 import '../../core/utils/error_message.dart';
 import '../../main.dart' show LoginScreen, MerchantShell;
 import '../../shared/merchant_category.dart';
+import '../location_picker/location_picker_screen.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -42,6 +43,8 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
   final _phone = TextEditingController();
   final _city = TextEditingController(text: 'Oumé');
   final _address = TextEditingController();
+  double? _lat;
+  double? _lng;
   final _businessName = TextEditingController();
   final _description = TextEditingController();
   String _category = _categories[0].id;
@@ -114,6 +117,26 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
     setState(() => _step = _Step.terms);
   }
 
+  Future<void> _pickLocation() async {
+    final result = await Navigator.of(context).push<LocationPickResult>(
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialLat: _lat,
+          initialLng: _lng,
+          initialAddress: _address.text.trim().isEmpty ? null : _address.text.trim(),
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _lat = result.lat;
+      _lng = result.lng;
+      if (result.address != null && result.address!.isNotEmpty) {
+        _address.text = result.address!;
+      }
+    });
+  }
+
   // ── Soumission finale ─────────────────────────────────────
   Future<void> _submitTerms() async {
     if (!_accepted) { toast.error('Vous devez accepter les conditions'); return; }
@@ -141,6 +164,8 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
           'city': _city.text.trim(),
           'city_code': 'oume',
           'address': _address.text.trim(),
+          'lat': _lat,
+          'lng': _lng,
           'business_name': _businessName.text.trim(),
           'category': _category,
           'description': _description.text.trim(),
@@ -246,8 +271,10 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
                     name: _name, phone: _phone, city: _city,
                     address: _address, businessName: _businessName,
                     description: _description, category: _category,
+                    lat: _lat, lng: _lng,
                     onCategoryChanged: (v) => setState(() => _category = v),
                     onNext: _submitInfo,
+                    onPickLocation: _pickLocation,
                   ),
                 _Step.terms => _StepTerms(
                     accepted: _accepted,
@@ -273,13 +300,17 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
 class _StepInfo extends StatelessWidget {
   final TextEditingController name, phone, city, address, businessName, description;
   final String category;
+  final double? lat;
+  final double? lng;
   final ValueChanged<String> onCategoryChanged;
   final VoidCallback onNext;
+  final VoidCallback onPickLocation;
 
   const _StepInfo({
     required this.name, required this.phone, required this.city,
     required this.address, required this.businessName, required this.description,
-    required this.category, required this.onCategoryChanged, required this.onNext,
+    required this.category, this.lat, this.lng,
+    required this.onCategoryChanged, required this.onNext, required this.onPickLocation,
   });
 
   @override
@@ -300,6 +331,38 @@ class _StepInfo extends StatelessWidget {
         const SizedBox(height: 12),
         _Field(label: 'Adresse du commerce', controller: address,
             placeholder: 'Quartier, repère'),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: onPickLocation,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  lat != null ? Icons.check_circle_rounded : Icons.location_on_outlined,
+                  size: 16,
+                  color: lat != null ? AppColors.success : AppColors.mutedForeground,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    lat != null ? 'Position définie sur la carte' : 'Localiser mon commerce sur la carte',
+                    style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600,
+                      color: lat != null ? AppColors.success : AppColors.foreground,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.mutedForeground),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: 12),
         _Field(label: 'Nom du commerce', controller: businessName,
             placeholder: 'Chez Tantie Awa'),

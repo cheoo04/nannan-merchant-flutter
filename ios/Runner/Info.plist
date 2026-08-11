@@ -45,5 +45,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Nannan Marchand utilise votre position pour localiser précisément votre boutique sur la carte.</string>
 </dict>
 </plist>

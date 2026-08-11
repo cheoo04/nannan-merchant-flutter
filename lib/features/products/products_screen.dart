@@ -13,6 +13,7 @@ import '../../shared/widgets/skeleton.dart';
 import '../../shared/models/models.dart';
 import '../../shared/merchant_category.dart';
 import '../dashboard/dashboard_notifier.dart';
+import '../location_picker/location_picker_screen.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -149,6 +150,8 @@ class ProductsNotifier extends ChangeNotifier {
   Future<void> resumeMerchant() => dashboardNotifier.resumeMerchant();
   Future<void> saveSchedule({required bool enabled, String? opening, String? closing}) =>
       dashboardNotifier.saveSchedule(enabled: enabled, opening: opening, closing: closing);
+  Future<void> updateLocation({required double lat, required double lng, String? address}) =>
+      dashboardNotifier.updateLocation(lat: lat, lng: lng, address: address);
 
   Future<void> toggleAvailability(DbProduct p) async {
     await _db.from('products').update({'is_available': !p.isAvailable}).eq('id', p.id);
@@ -873,6 +876,58 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
               ),
             ),
           ],
+
+          const SizedBox(height: 12),
+
+          // Position GPS
+          GestureDetector(
+            onTap: () async {
+              final result = await Navigator.of(context).push<LocationPickResult>(
+                MaterialPageRoute(
+                  builder: (_) => LocationPickerScreen(
+                    initialLat: m.lat,
+                    initialLng: m.lng,
+                    initialAddress: m.address,
+                  ),
+                ),
+              );
+              if (result == null) return;
+              try {
+                await widget.notifier.updateLocation(
+                  lat: result.lat, lng: result.lng, address: result.address,
+                );
+                toast.success('Position mise à jour');
+              } catch (e) {
+                toast.error(friendlyError(e));
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    m.lat != null ? Icons.check_circle_rounded : Icons.location_on_outlined,
+                    size: 14,
+                    color: m.lat != null ? AppColors.success : AppColors.foreground,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Position de la boutique',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  ),
+                  Text(
+                    m.lat != null ? 'Définie' : 'Non définie',
+                    style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

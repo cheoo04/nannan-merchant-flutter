@@ -15,6 +15,8 @@ class MerchantModel {
   final bool autoScheduleEnabled;
   final String status; // pending | active | suspended
   final String cityCode;
+  final double? lat;
+  final double? lng;
   final DateTime createdAt;
 
   const MerchantModel({
@@ -33,6 +35,8 @@ class MerchantModel {
     required this.autoScheduleEnabled,
     required this.status,
     required this.cityCode,
+    this.lat,
+    this.lng,
     required this.createdAt,
   });
 
@@ -52,6 +56,8 @@ class MerchantModel {
         autoScheduleEnabled: j['auto_schedule_enabled'] as bool? ?? false,
         status: j['status']?.toString() ?? 'pending',
         cityCode: j['city_code'] as String? ?? 'oume',
+        lat: (j['lat'] as num?)?.toDouble(),
+        lng: (j['lng'] as num?)?.toDouble(),
         createdAt: DateTime.parse(j['created_at'] as String),
       );
 

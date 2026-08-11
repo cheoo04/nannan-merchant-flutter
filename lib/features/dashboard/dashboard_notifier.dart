@@ -258,6 +258,33 @@ class DashboardNotifier extends ChangeNotifier {
     }
   }
 
+  /// Contrairement aux méthodes ci-dessus (toggleOpen, pauseMerchant,
+  /// resumeMerchant, saveSchedule) qui avalent l'erreur en interne sans la
+  /// relancer, celle-ci fait un `rethrow` après avoir enregistré l'état —
+  /// c'est une action utilisateur explicite (bouton "Confirmer" du sélecteur
+  /// de position) et l'écran appelant doit pouvoir afficher un toast d'échec
+  /// via son propre try/catch.
+  Future<void> updateLocation({
+    required double lat,
+    required double lng,
+    String? address,
+  }) async {
+    if (merchant == null) return;
+    try {
+      final patch = <String, dynamic>{'lat': lat, 'lng': lng};
+      if (address != null && address.trim().isNotEmpty) {
+        patch['address'] = address.trim();
+      }
+      await _db.from('merchants').update(patch).eq('id', merchant!.id);
+      final userId = _db.auth.currentUser?.id;
+      if (userId != null) await _loadMerchant(userId);
+    } catch (e) {
+      error = friendlyError(e);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> updateImage(String? imageUrl) async {
     if (merchant == null) return;
     await _db
