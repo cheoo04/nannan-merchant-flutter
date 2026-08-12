@@ -42,14 +42,9 @@ class MerchantProfileScreen extends StatefulWidget {
   final VoidCallback onSignOut;
   final VoidCallback? onGoToNotifications;
   final int unreadCount;
-  /// Notifier partagé (voir main.dart) — sert aux stats ci-dessous ET à la
+  /// Notifier partagé (voir main.dart) — sert aux stats live ET à la
   /// carte Position/Horaires de la boutique (déplacée depuis l'écran Produits).
   final DashboardNotifier notifier;
-  /// Stats lues depuis DashboardNotifier (partagé, voir main.dart) — pas de
-  /// requête DB dédiée pour cet écran.
-  final int deliveredCount;
-  final int activeCount;
-  final int revenueTotal;
 
   const MerchantProfileScreen({
     super.key,
@@ -57,9 +52,6 @@ class MerchantProfileScreen extends StatefulWidget {
     required this.notifier,
     this.onGoToNotifications,
     this.unreadCount = 0,
-    this.deliveredCount = 0,
-    this.activeCount = 0,
-    this.revenueTotal = 0,
   });
 
   @override
@@ -75,6 +67,18 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
   void initState() {
     super.initState();
     _load();
+    widget.notifier.addListener(_onNotifierChange);
+  }
+
+  void _onNotifierChange() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.notifier.removeListener(_onNotifierChange);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -346,17 +350,17 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
               children: [
                 Expanded(
                   child: _Stat(
-                      label: 'Livrées', value: '${widget.deliveredCount}'),
+                      label: 'Livrées', value: '${widget.notifier.deliveredCount}'),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child:
-                      _Stat(label: 'En attente', value: '${widget.activeCount}'),
+                      _Stat(label: 'En attente', value: '${widget.notifier.activeCount}'),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: _Stat(
-                      label: 'CA total', value: formatXOF(widget.revenueTotal)),
+                      label: 'CA total', value: formatXOF(widget.notifier.revenueTotal)),
                 ),
               ],
             ),

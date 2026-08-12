@@ -356,10 +356,10 @@ class _RoundIconButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: 40, height: 40,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: AppColors.card,
           shape: BoxShape.circle,
-          boxShadow: const [BoxShadow(color: Color(0x1F000000), blurRadius: 8, offset: Offset(0, 2))],
+          boxShadow: [BoxShadow(color: Color(0x1F000000), blurRadius: 8, offset: Offset(0, 2))],
         ),
         child: Icon(icon, size: 20, color: AppColors.foreground),
       ),

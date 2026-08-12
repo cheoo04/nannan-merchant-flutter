@@ -147,10 +147,6 @@ class ProductsNotifier extends ChangeNotifier {
   Future<void> toggleOpen() => dashboardNotifier.toggleOpen();
   Future<void> pauseMerchant(int minutes) => dashboardNotifier.pauseMerchant(minutes);
   Future<void> resumeMerchant() => dashboardNotifier.resumeMerchant();
-  Future<void> saveSchedule({required bool enabled, String? opening, String? closing}) =>
-      dashboardNotifier.saveSchedule(enabled: enabled, opening: opening, closing: closing);
-  Future<void> updateLocation({required double lat, required double lng, String? address}) =>
-      dashboardNotifier.updateLocation(lat: lat, lng: lng, address: address);
 
   Future<void> toggleAvailability(DbProduct p) async {
     await _db.from('products').update({'is_available': !p.isAvailable}).eq('id', p.id);
