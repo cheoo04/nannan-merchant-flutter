@@ -143,7 +143,6 @@ class PrescriptionsNotifier extends ChangeNotifier {
 
   Future<void> submitQuote(String id, {
     required List<Map<String, dynamic>> items,
-    required int deliveryFee,
     required int readyMin,
     String? note,
   }) async {
@@ -154,8 +153,10 @@ class PrescriptionsNotifier extends ChangeNotifier {
       'status': 'quoted',
       'quote_items': items,
       'products_subtotal_xof': subtotal,
-      'delivery_fee_xof': deliveryFee,
-      'total_xof': subtotal + deliveryFee,
+      // Pas de delivery_fee_xof ici — le pharmacien ne fixe/voit jamais les
+      // frais de livraison (décidés ailleurs dans le système, pas par le
+      // marchand). total_xof ne reflète donc que les articles.
+      'total_xof': subtotal,
       'estimated_ready_minutes': readyMin,
       'pharmacist_note': note,
       'quoted_at': DateTime.now().toIso8601String(),
@@ -466,7 +467,6 @@ class _PrescriptionCard extends StatefulWidget {
 class _PrescriptionCardState extends State<_PrescriptionCard> {
   List<String?> _signedUrls = [];
   late List<Map<String, dynamic>> _items;
-  late final TextEditingController _deliveryFee;
   late final TextEditingController _readyMin;
   late final TextEditingController _note;
   bool _submitting = false;
@@ -478,14 +478,13 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
     _items = p.quoteItems?.isNotEmpty == true
         ? List<Map<String, dynamic>>.from(p.quoteItems!)
         : [{'name': '', 'qty': 1, 'unit_price_xof': 0}];
-    _deliveryFee = TextEditingController(text: '${p.deliveryFeeXof ?? 500}');
     _readyMin    = TextEditingController(text: '${p.estimatedReadyMinutes ?? 20}');
     _note        = TextEditingController(text: p.pharmacistNote ?? '');
   }
 
   @override
   void dispose() {
-    _deliveryFee.dispose(); _readyMin.dispose(); _note.dispose();
+    _readyMin.dispose(); _note.dispose();
     super.dispose();
   }
 
@@ -505,7 +504,8 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
   int get _subtotal => _items.fold<int>(
     0, (s, i) => s + (i['qty'] as int? ?? 1) * (i['unit_price_xof'] as int? ?? 0),
   );
-  int get _total => _subtotal + (int.tryParse(_deliveryFee.text) ?? 0);
+  // Pas de frais de livraison ici — jamais fixés ni vus par le marchand.
+  int get _total => _subtotal;
 
   Future<void> _sendQuote() async {
     final cleaned = _items.where((i) =>
@@ -517,7 +517,6 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
     try {
       await widget.notifier.submitQuote(widget.p.id,
           items: cleaned,
-          deliveryFee: int.tryParse(_deliveryFee.text) ?? 0,
           readyMin: int.tryParse(_readyMin.text) ?? 20,
           note: _note.text.trim().isEmpty ? null : _note.text.trim());
       toast.success(widget.p.status == 'quoted' ? 'Devis mis à jour' : 'Devis envoyé au client');
@@ -751,18 +750,12 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Frais livraison + délai
-                    Row(children: [
-                      Expanded(child: _QuoteField(
-                        label: 'Frais livraison', controller: _deliveryFee,
-                        type: TextInputType.number,
-                      )),
-                      const SizedBox(width: 8),
-                      Expanded(child: _QuoteField(
-                        label: 'Prêt sous (min)', controller: _readyMin,
-                        type: TextInputType.number,
-                      )),
-                    ]),
+                    // Délai de préparation — pas de frais de livraison ici,
+                    // jamais fixés ni vus par le marchand.
+                    _QuoteField(
+                      label: 'Prêt sous (min)', controller: _readyMin,
+                      type: TextInputType.number,
+                    ),
                     const SizedBox(height: 8),
 
                     // CORRECTION 2 — note pharmacien limitée à 200 caractères

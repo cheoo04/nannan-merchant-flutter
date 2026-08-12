@@ -394,7 +394,10 @@ class _OrderCardState extends State<_OrderCard> {
                       ),
                     ),
                     Text(
-                      formatXOF(o.totalAmount),
+                      // itemsAmount uniquement — le marchand ne voit jamais
+                      // le montant de la livraison (payé au livreur et à
+                      // l'entreprise, pas au marchand).
+                      formatXOF(o.itemsAmount),
                       style: const TextStyle(
                         fontSize: 13, fontWeight: FontWeight.w700,
                         color: AppColors.primary,
