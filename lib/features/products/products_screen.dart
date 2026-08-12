@@ -13,7 +13,6 @@ import '../../shared/widgets/skeleton.dart';
 import '../../shared/models/models.dart';
 import '../../shared/merchant_category.dart';
 import '../dashboard/dashboard_notifier.dart';
-import '../location_picker/location_picker_screen.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -611,18 +610,9 @@ class _ShopAvailability extends StatefulWidget {
 }
 
 class _ShopAvailabilityState extends State<_ShopAvailability> {
-  bool _showSched = false;
-  late String _opening;
-  late String _closing;
-  late bool _schedEnabled;
-
   @override
   void initState() {
     super.initState();
-    final m = widget.notifier.merchant!;
-    _opening = m.openingTime ?? '08:00';
-    _closing = m.closingTime ?? '22:00';
-    _schedEnabled = m.autoScheduleEnabled;
     // Écouter le notifier pour se rebuilder quand le merchant change
     widget.notifier.addListener(_onNotifierChange);
   }
@@ -782,152 +772,6 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
               ),
             ),
           ],
-
-          const SizedBox(height: 12),
-
-          // Horaires automatiques
-          GestureDetector(
-            onTap: () => setState(() => _showSched = !_showSched),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.access_time_rounded, size: 14, color: AppColors.foreground),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text('Horaires automatiques',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                  ),
-                  Text(
-                    m.autoScheduleEnabled
-                        ? '${m.openingTime ?? '?'} → ${m.closingTime ?? '?'}'
-                        : 'Désactivés',
-                    style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          if (_showSched) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Activer la planification',
-                          style: TextStyle(fontSize: 12, color: AppColors.foreground)),
-                      Switch(
-                        value: _schedEnabled,
-                        onChanged: (v) => setState(() => _schedEnabled = v),
-                        activeThumbColor: AppColors.primary,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(child: _TimeField(
-                        label: 'Ouverture', value: _opening,
-                        onChanged: (v) => setState(() => _opening = v),
-                      )),
-                      const SizedBox(width: 8),
-                      Expanded(child: _TimeField(
-                        label: 'Fermeture', value: _closing,
-                        onChanged: (v) => setState(() => _closing = v),
-                      )),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        try {
-                          await widget.notifier.saveSchedule(
-                            enabled: _schedEnabled,
-                            opening: _opening,
-                            closing: _closing,
-                          );
-                          setState(() => _showSched = false);
-                          toast.success('Horaires enregistrés');
-                        } catch (e) { toast.error(friendlyError(e)); }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-                      ),
-                      child: const Text('Enregistrer les horaires',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 12),
-
-          // Position GPS
-          GestureDetector(
-            onTap: () async {
-              final result = await Navigator.of(context).push<LocationPickResult>(
-                MaterialPageRoute(
-                  builder: (_) => LocationPickerScreen(
-                    initialLat: m.lat,
-                    initialLng: m.lng,
-                    initialAddress: m.address,
-                  ),
-                ),
-              );
-              if (result == null) return;
-              try {
-                await widget.notifier.updateLocation(
-                  lat: result.lat, lng: result.lng, address: result.address,
-                );
-                toast.success('Position mise à jour');
-              } catch (e) {
-                toast.error(friendlyError(e));
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    m.lat != null ? Icons.check_circle_rounded : Icons.location_on_outlined,
-                    size: 14,
-                    color: m.lat != null ? AppColors.success : AppColors.foreground,
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text('Position de la boutique',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                  ),
-                  Text(
-                    m.lat != null ? 'Définie' : 'Non définie',
-                    style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -1401,48 +1245,6 @@ class _FieldLabel extends StatelessWidget {
     style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
         color: AppColors.mutedForeground, letterSpacing: 0.8),
   );
-}
-
-class _TimeField extends StatelessWidget {
-  final String label;
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  const _TimeField({required this.label, required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label.toUpperCase(),
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                color: AppColors.mutedForeground, letterSpacing: 0.8)),
-        const SizedBox(height: 4),
-        GestureDetector(
-          onTap: () async {
-            final parts = value.split(':').map(int.parse).toList();
-            final picked = await showTimePicker(
-              context: context,
-              initialTime: TimeOfDay(hour: parts[0], minute: parts[1]),
-            );
-            if (picked != null) {
-              onChanged('${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}');
-            }
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 class _EmptyMerchant extends StatelessWidget {

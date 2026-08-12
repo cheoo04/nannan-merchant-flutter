@@ -5,13 +5,15 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/error_message.dart';
 import '../../shared/widgets/skeleton.dart';
+import '../dashboard/dashboard_notifier.dart';
+import '../location_picker/location_picker_screen.dart';
 
-// ⚠️ PLACEHOLDER — même faux numéro que côté React (_app.profile.tsx),
-// à remplacer par le vrai numéro de support avant mise en production.
-const String _supportPhoneDisplay = '+225 07 00 00 00 00';
-const String _supportPhoneDial = '+22507000000'; // format tel: sans espaces
-const String _supportPhoneWa = '22507000000'; // format wa.me sans le +
+// Numéro de support réel (WhatsApp + appel).
+const String _supportPhoneDisplay = '+225 05 65 07 48 68';
+const String _supportPhoneDial = '+2250565074868'; // format tel: sans espaces
+const String _supportPhoneWa = '2250565074868'; // format wa.me sans le +
 const String _supportEmail = 'support@nannan.ci';
 
 SupabaseClient get _db => Supabase.instance.client;
@@ -40,6 +42,9 @@ class MerchantProfileScreen extends StatefulWidget {
   final VoidCallback onSignOut;
   final VoidCallback? onGoToNotifications;
   final int unreadCount;
+  /// Notifier partagé (voir main.dart) — sert aux stats ci-dessous ET à la
+  /// carte Position/Horaires de la boutique (déplacée depuis l'écran Produits).
+  final DashboardNotifier notifier;
   /// Stats lues depuis DashboardNotifier (partagé, voir main.dart) — pas de
   /// requête DB dédiée pour cet écran.
   final int deliveredCount;
@@ -49,6 +54,7 @@ class MerchantProfileScreen extends StatefulWidget {
   const MerchantProfileScreen({
     super.key,
     required this.onSignOut,
+    required this.notifier,
     this.onGoToNotifications,
     this.unreadCount = 0,
     this.deliveredCount = 0,
@@ -358,6 +364,14 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
 
           const SizedBox(height: 20),
 
+          // ── Horaires + Position boutique (déplacé depuis l'écran Produits) ──
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _ShopScheduleAndLocationCard(notifier: widget.notifier),
+          ),
+
+          const SizedBox(height: 20),
+
           // ── Lignes menu ───────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -614,6 +628,283 @@ class _FaqItemState extends State<_FaqItem> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Carte Horaires + Position boutique (déplacée depuis Produits le
+// 2026-08 — Toggle Ouvert/Fermé et Pause restent dans Produits, dupliqués
+// avec Dashboard ; seuls les réglages "configure une fois" viennent ici) ────
+class _ShopScheduleAndLocationCard extends StatefulWidget {
+  final DashboardNotifier notifier;
+
+  const _ShopScheduleAndLocationCard({required this.notifier});
+
+  @override
+  State<_ShopScheduleAndLocationCard> createState() =>
+      _ShopScheduleAndLocationCardState();
+}
+
+class _ShopScheduleAndLocationCardState
+    extends State<_ShopScheduleAndLocationCard> {
+  bool _showSched = false;
+  String _opening = '08:00';
+  String _closing = '22:00';
+  bool _schedEnabled = false;
+  bool _initializedFromMerchant = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.notifier.addListener(_onNotifierChange);
+    _syncFromMerchant();
+  }
+
+  void _onNotifierChange() {
+    if (!mounted) return;
+    // Ne resynchronise les champs du formulaire qu'une fois, à la première
+    // apparition du commerce — sinon on écraserait une saisie en cours
+    // dès qu'une notification realtime arrive pendant que le marchand tape.
+    _syncFromMerchant();
+    setState(() {});
+  }
+
+  void _syncFromMerchant() {
+    if (_initializedFromMerchant) return;
+    final m = widget.notifier.merchant;
+    if (m == null) return;
+    _opening = m.openingTime ?? '08:00';
+    _closing = m.closingTime ?? '22:00';
+    _schedEnabled = m.autoScheduleEnabled;
+    _initializedFromMerchant = true;
+  }
+
+  @override
+  void dispose() {
+    widget.notifier.removeListener(_onNotifierChange);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final m = widget.notifier.merchant;
+    if (m == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('PARAMÈTRES DE LA BOUTIQUE',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.mutedForeground,
+                  letterSpacing: 0.8)),
+          const SizedBox(height: 12),
+
+          // Horaires automatiques
+          GestureDetector(
+            onTap: () => setState(() => _showSched = !_showSched),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.access_time_rounded, size: 14, color: AppColors.foreground),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Horaires automatiques',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  ),
+                  Text(
+                    m.autoScheduleEnabled
+                        ? '${m.openingTime ?? '?'} → ${m.closingTime ?? '?'}'
+                        : 'Désactivés',
+                    style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          if (_showSched) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Activer la planification',
+                          style: TextStyle(fontSize: 12, color: AppColors.foreground)),
+                      Switch(
+                        value: _schedEnabled,
+                        onChanged: (v) => setState(() => _schedEnabled = v),
+                        activeThumbColor: AppColors.primary,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _TimeField(
+                          label: 'Ouverture',
+                          value: _opening,
+                          onChanged: (v) => setState(() => _opening = v),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _TimeField(
+                          label: 'Fermeture',
+                          value: _closing,
+                          onChanged: (v) => setState(() => _closing = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        try {
+                          await widget.notifier.saveSchedule(
+                            enabled: _schedEnabled,
+                            opening: _opening,
+                            closing: _closing,
+                          );
+                          setState(() => _showSched = false);
+                          toast.success('Horaires enregistrés');
+                        } catch (e) {
+                          toast.error(friendlyError(e));
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                      ),
+                      child: const Text('Enregistrer les horaires',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 12),
+
+          // Position GPS
+          GestureDetector(
+            onTap: () async {
+              final result = await Navigator.of(context).push<LocationPickResult>(
+                MaterialPageRoute(
+                  builder: (_) => LocationPickerScreen(
+                    initialLat: m.lat,
+                    initialLng: m.lng,
+                    initialAddress: m.address,
+                  ),
+                ),
+              );
+              if (result == null) return;
+              try {
+                await widget.notifier.updateLocation(
+                  lat: result.lat, lng: result.lng, address: result.address,
+                );
+                if (mounted) toast.success('Position mise à jour');
+              } catch (e) {
+                if (mounted) toast.error(friendlyError(e));
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    m.lat != null ? Icons.check_circle_rounded : Icons.location_on_outlined,
+                    size: 14,
+                    color: m.lat != null ? AppColors.success : AppColors.foreground,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Position de la boutique',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  ),
+                  Text(
+                    m.lat != null ? 'Définie' : 'Non définie',
+                    style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimeField extends StatelessWidget {
+  final String label;
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  const _TimeField({required this.label, required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label.toUpperCase(),
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                color: AppColors.mutedForeground, letterSpacing: 0.8)),
+        const SizedBox(height: 4),
+        GestureDetector(
+          onTap: () async {
+            final parts = value.split(':').map(int.parse).toList();
+            final picked = await showTimePicker(
+              context: context,
+              initialTime: TimeOfDay(hour: parts[0], minute: parts[1]),
+            );
+            if (picked != null) {
+              onChanged('${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}');
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          ),
+        ),
+      ],
     );
   }
 }

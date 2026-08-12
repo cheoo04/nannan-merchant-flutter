@@ -229,6 +229,7 @@ class _MerchantShellState extends State<MerchantShell> {
   void _openProfile() {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => MerchantProfileScreen(
+        notifier: _dashboard,
         deliveredCount: _dashboard.deliveredCount,
         activeCount: _dashboard.activeCount,
         revenueTotal: _dashboard.revenueTotal,
