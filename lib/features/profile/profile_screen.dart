@@ -959,26 +959,35 @@ class _Stat extends StatelessWidget {
 // convention que le footer React.
 const String _buildDate = '2026-07-26';
 
-class _AppFooter extends StatelessWidget {
+class _AppFooter extends StatefulWidget {
   const _AppFooter();
+
+  @override
+  State<_AppFooter> createState() => _AppFooterState();
+}
+
+class _AppFooterState extends State<_AppFooter> {
+  String _version = '';
+
+  @override
+  void initState() {
+    super.initState();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _version = info.version);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     // Une seule ligne, comme côté React — la localisation (Oumé, Côte
     // d'Ivoire) est déjà donnée par la ligne "À propos" juste au-dessus,
     // pas besoin de la répéter ici.
-    return FutureBuilder<PackageInfo>(
-      future: PackageInfo.fromPlatform(),
-      builder: (context, snapshot) {
-        final version = snapshot.data?.version ?? '';
-        return Text(
-          version.isEmpty
-              ? 'A Nan-Nan · build $_buildDate · Made in 🇨🇮'
-              : 'A Nan-Nan · v$version · build $_buildDate · Made in 🇨🇮',
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
-        );
-      },
+    return Text(
+      _version.isEmpty
+          ? 'A Nan-Nan · build $_buildDate · Made in 🇨🇮'
+          : 'A Nan-Nan · v$_version · build $_buildDate · Made in 🇨🇮',
+      textAlign: TextAlign.center,
+      style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
     );
   }
 }
@@ -1092,8 +1101,6 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _phoneCtrl;
   bool _saving = false;
-
-  SupabaseClient get _db => Supabase.instance.client;
 
   @override
   void initState() {
