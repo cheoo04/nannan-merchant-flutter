@@ -491,11 +491,6 @@ class _StepTerms extends StatelessWidget {
                 ),
                 SizedBox(height: 12),
                 _Term(
-                  title: 'Commission plateforme',
-                  text: "Une commission de 10% est prélevée sur chaque commande livrée via A Nan-Nan.",
-                ),
-                SizedBox(height: 12),
-                _Term(
                   title: 'Données & confidentialité',
                   text: "Mes données personnelles sont utilisées uniquement pour les besoins du service A Nan-Nan.",
                 ),

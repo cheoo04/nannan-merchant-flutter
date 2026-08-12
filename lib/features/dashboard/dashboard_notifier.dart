@@ -132,6 +132,10 @@ class DashboardNotifier extends ChangeNotifier {
 
   int get totalCount => orders.length;
 
+  // CA basé sur itemsAmount (articles uniquement), pas totalAmount — les
+  // frais de livraison reviennent au livreur, pas au marchand. Voir
+  // OrderModel.itemsAmount. Diverge volontairement du React de référence
+  // sur ce point précis (React additionne encore total_xof brut).
   int get revenueDay {
     final startOfDay = DateTime.now().copyWith(
       hour: 0, minute: 0, second: 0, millisecond: 0,
@@ -140,7 +144,7 @@ class DashboardNotifier extends ChangeNotifier {
         .where((o) =>
             o.status == OrderStatus.delivered &&
             (o.deliveredAt ?? o.createdAt).isAfter(startOfDay))
-        .fold(0, (s, o) => s + o.totalAmount);
+        .fold(0, (s, o) => s + o.itemsAmount);
   }
 
   int get revenueWeek {
@@ -149,7 +153,7 @@ class DashboardNotifier extends ChangeNotifier {
         .where((o) =>
             o.status == OrderStatus.delivered &&
             (o.deliveredAt ?? o.createdAt).isAfter(start))
-        .fold(0, (s, o) => s + o.totalAmount);
+        .fold(0, (s, o) => s + o.itemsAmount);
   }
 
   int get revenueMonth {
@@ -158,14 +162,14 @@ class DashboardNotifier extends ChangeNotifier {
         .where((o) =>
             o.status == OrderStatus.delivered &&
             (o.deliveredAt ?? o.createdAt).isAfter(start))
-        .fold(0, (s, o) => s + o.totalAmount);
+        .fold(0, (s, o) => s + o.itemsAmount);
   }
 
   /// CA total, toutes dates confondues — pour le résumé du profil.
   /// Distinct de revenueDay/Week/Month qui filtrent par période.
   int get revenueTotal => orders
       .where((o) => o.status == OrderStatus.delivered)
-      .fold(0, (s, o) => s + o.totalAmount);
+      .fold(0, (s, o) => s + o.itemsAmount);
 
   /// Commandes pas encore terminées (ni livrées, ni annulées/remboursées) —
   /// utilisé pour le résumé "en attente" du profil.

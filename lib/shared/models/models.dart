@@ -153,6 +153,13 @@ class OrderModel {
   final DateTime? deliveredAt;
   final DateTime? merchantConfirmedAt;
 
+  /// Part de la commande qui revient au marchand — total payé par le client
+  /// MOINS les frais de livraison (qui reviennent au livreur, pas au
+  /// marchand ; il n'y a pas de commission plateforme actuellement).
+  /// À utiliser pour tout CA/finances affiché au marchand ; `totalAmount`
+  /// reste le montant total payé par le client (ex: détail d'une commande).
+  int get itemsAmount => totalAmount - deliveryFee;
+
   const OrderModel({
     required this.id,
     required this.clientId,

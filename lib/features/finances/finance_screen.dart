@@ -12,8 +12,6 @@ import '../orders/orders_repository.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
-const _commissionPct = 0.1; // 10% — miroir de COMMISSION_PCT du React
-
 // ── Notifier ──────────────────────────────────────────────────────────────────
 class FinanceNotifier extends ChangeNotifier {
   final OrdersRepository _repo;
@@ -119,7 +117,9 @@ class FinanceNotifier extends ChangeNotifier {
       final idx = ((ts - cutoff) / bucketMs).floor().clamp(0, buckets - 1);
       data[idx] = (
         label: data[idx].label,
-        sales: data[idx].sales + o.totalAmount,
+        // itemsAmount (articles uniquement) — pas totalAmount : la livraison
+        // revient au livreur, pas au marchand (pas de commission plateforme).
+        sales: data[idx].sales + o.itemsAmount,
         count: data[idx].count + 1,
       );
     }
@@ -128,9 +128,7 @@ class FinanceNotifier extends ChangeNotifier {
 
   int get totalSales => chartData.fold(0, (s, d) => s + d.sales);
   int get totalOrders => chartData.fold(0, (s, d) => s + d.count);
-  int get commission => (totalSales * _commissionPct).round();
-  int get netRevenue => totalSales - commission;
-  int get refundedTotal => refunded.fold(0, (s, o) => s + o.totalAmount);
+  int get refundedTotal => refunded.fold(0, (s, o) => s + o.itemsAmount);
 }
 
 // ── FINANCE SCREEN ────────────────────────────────────────────────────────────
@@ -185,7 +183,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
               onBack: widget.onGoToDashboard,
               totalSales: _n.totalSales,
               totalOrders: _n.totalOrders,
-              netRevenue: _n.netRevenue,
               unreadCount: widget.unreadCount,
               onNotifications: widget.onGoToNotifications,
             ),
@@ -289,40 +286,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
           const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
-          // ── DÉTAIL FINANCIER ─────────────────────────────
-          if (!_n.loading)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _FinanceCard(
-                  title: 'Détail',
-                  child: Column(
-                    children: [
-                      _DetailRow(label: 'Ventes brutes', value: formatXOF(_n.totalSales)),
-                      const SizedBox(height: 8),
-                      _DetailRow(
-                        label: 'Commission plateforme (${(_commissionPct * 100).round()}%)',
-                        value: '-${formatXOF(_n.commission)}',
-                        muted: true,
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
-                        child: Divider(color: AppColors.border, height: 1),
-                      ),
-                      _DetailRow(
-                        label: 'Revenu net',
-                        value: formatXOF(_n.netRevenue),
-                        primary: true,
-                        bold: true,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-          const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
           // ── COMMANDES ANNULÉES/REMBOURSÉES ───────────────
           if (!_n.loading)
             SliverToBoxAdapter(
@@ -366,7 +329,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                                       ],
                                     ),
                                   ),
-                                  Text('-${formatXOF(o.totalAmount)}',
+                                  Text('-${formatXOF(o.itemsAmount)}',
                                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
                                           color: AppColors.destructive)),
                                 ],
@@ -410,7 +373,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                               ],
                             ),
                           ),
-                          Text(formatXOF(o.totalAmount),
+                          Text(formatXOF(o.itemsAmount),
                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
                                   color: AppColors.primary)),
                         ],
@@ -439,13 +402,12 @@ class _FinanceHeader extends StatelessWidget {
   final VoidCallback onBack;
   final int totalSales;
   final int totalOrders;
-  final int netRevenue;
   final int unreadCount;
   final VoidCallback? onNotifications;
 
   const _FinanceHeader({
     required this.topPadding, required this.onBack,
-    required this.totalSales, required this.totalOrders, required this.netRevenue,
+    required this.totalSales, required this.totalOrders,
     this.unreadCount = 0, this.onNotifications,
   });
 
@@ -487,10 +449,11 @@ class _FinanceHeader extends StatelessWidget {
               style: TextStyle(color: Colors.white, fontSize: 24,
                   fontWeight: FontWeight.w700, fontFamily: 'Sora')),
           const SizedBox(height: 4),
-          const Text('Ventes, commission plateforme et revenu net.',
+          const Text('Ventes (articles) et commandes livrées.',
               style: TextStyle(color: Colors.white, fontSize: 12)),
           const SizedBox(height: 16),
-          // 3 KPIs
+          // 2 KPIs — plus de "Net" : pas de commission plateforme, le
+          // marchand reçoit directement le montant des articles.
           Row(
             children: [
               Expanded(child: _HeaderKpi(
@@ -503,12 +466,6 @@ class _FinanceHeader extends StatelessWidget {
                 icon: Icons.receipt_rounded,
                 label: 'Commandes',
                 value: '$totalOrders',
-              )),
-              const SizedBox(width: 8),
-              Expanded(child: _HeaderKpi(
-                icon: Icons.account_balance_wallet_rounded,
-                label: 'Net',
-                value: formatXOF(netRevenue),
               )),
             ],
           ),
@@ -662,33 +619,6 @@ class _FinanceCard extends StatelessWidget {
           child,
         ],
       ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool muted;
-  final bool primary;
-  final bool bold;
-
-  const _DetailRow({
-    required this.label, required this.value,
-    this.muted = false, this.primary = false, this.bold = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = primary ? AppColors.primary : muted ? AppColors.mutedForeground : AppColors.foreground;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(fontSize: 12, color: color,
-            fontWeight: bold ? FontWeight.w700 : FontWeight.w400)),
-        Text(value, style: TextStyle(fontSize: 12, color: color,
-            fontWeight: bold ? FontWeight.w700 : FontWeight.w400)),
-      ],
     );
   }
 }
