@@ -24,6 +24,9 @@ import 'features/profile/profile_screen.dart';
 import 'features/notifications/notifications_screen.dart';
 import 'shared/widgets/merchant_bottom_nav.dart';
 import 'shared/merchant_category.dart';
+import 'features/pin/pin_lock_gate.dart';
+import 'features/pin/pin_setup_screen.dart';
+import 'features/pin/pin_storage.dart';
 
 Future<void> main() async {
   // Initialiser les données de locale pour intl (DateFormat 'fr_FR')
@@ -89,6 +92,8 @@ class _AuthGateState extends State<_AuthGate> {
   bool _checking = true;
   bool _isMerchant = false;
   bool _isPharmacy = false;
+  bool _needsPinSetup = false;
+  bool _hasPin = false;
 
   @override
   void initState() {
@@ -117,6 +122,10 @@ class _AuthGateState extends State<_AuthGate> {
         _isMerchant = results[0]?['role'] == 'merchant';
         _isPharmacy = categoryNeedsPrescriptionFlow(
             results[1]?['category'] as String?);
+        if (_isMerchant) {
+          _hasPin = await PinStorage().hasPin();
+          _needsPinSetup = !_hasPin;
+        }
       } catch (_) {
         // Erreur réseau : ne jamais rester bloqué — retour vers Login.
         _isMerchant = false;
@@ -134,9 +143,24 @@ class _AuthGateState extends State<_AuthGate> {
     // Pendant _checking : splash natif toujours visible (preserve() actif)
     // → ce Scaffold ne s'affiche jamais à l'écran.
     if (_checking) return const SizedBox.shrink();
-    return _isMerchant
-        ? MerchantShell(isPharmacy: _isPharmacy)
-        : const LoginScreen();
+    if (!_isMerchant) return const LoginScreen();
+    // PIN pas encore configuré (compte marchand, session valide) —
+    // configuration obligatoire avant d'entrer, jamais de saut d'étape.
+    if (_needsPinSetup) {
+      return PinSetupScreen(
+        onDone: () => setState(() => _needsPinSetup = false),
+      );
+    }
+    // PIN déjà configuré → verrou local par-dessus une session déjà valide,
+    // Supabase reste connecté en arrière-plan (voir PinLockGate).
+    return PinLockGate(
+      startLocked: true,
+      onForgotPin: () => Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      ),
+      child: MerchantShell(isPharmacy: _isPharmacy),
+    );
   }
 }
 
@@ -394,9 +418,42 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (mounted) {
+        // PIN déjà configuré (ex: reconnexion après déconnexion volontaire,
+        // le PIN survit à un signOut) → verrou direct, pas besoin de le
+        // redemander juste après avoir tapé le mot de passe. Sinon,
+        // configuration obligatoire avant d'entrer.
+        //
+        // Important : les callbacks onDone/onForgotPin ci-dessous s'exécutent
+        // bien après que cet écran (LoginScreen) ait été remplacé — on utilise
+        // donc le `context` de chaque `builder`, pas celui de LoginScreen
+        // (qui sera démonté), sinon Navigator.of(context) plante.
+        final hasPin = await PinStorage().hasPin();
+        if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => MerchantShell(isPharmacy: isPharmacy),
+            builder: (routeContext) => hasPin
+                ? PinLockGate(
+                    startLocked: false,
+                    onForgotPin: () => Navigator.of(routeContext).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      (_) => false,
+                    ),
+                    child: MerchantShell(isPharmacy: isPharmacy),
+                  )
+                : PinSetupScreen(
+                    onDone: () => Navigator.of(routeContext).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (innerContext) => PinLockGate(
+                          startLocked: false,
+                          onForgotPin: () => Navigator.of(innerContext).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (_) => const LoginScreen()),
+                            (_) => false,
+                          ),
+                          child: MerchantShell(isPharmacy: isPharmacy),
+                        ),
+                      ),
+                    ),
+                  ),
           ),
         );
       }

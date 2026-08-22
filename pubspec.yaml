@@ -37,6 +37,10 @@ dependencies:
   geolocator: ^13.0.1
   latlong2: ^0.9.1
 
+  # Verrouillage par code PIN
+  crypto: ^3.0.5
+  flutter_secure_storage: ^11.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
