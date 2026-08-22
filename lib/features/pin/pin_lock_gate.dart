@@ -10,6 +10,7 @@ import 'pin_entry_screen.dart';
 /// d'être détruits/recréés à chaque verrouillage. L'écran PIN est juste un
 /// calque opaque par-dessus tant que [_locked] est vrai.
 class PinLockGate extends StatefulWidget {
+  final String userId;
   final Widget child;
   /// true : démarre verrouillé (cas normal — retour à froid avec PIN déjà
   /// configuré). false : démarre déverrouillé (juste après une connexion ou
@@ -21,6 +22,7 @@ class PinLockGate extends StatefulWidget {
 
   const PinLockGate({
     super.key,
+    required this.userId,
     required this.child,
     required this.onForgotPin,
     this.startLocked = true,
@@ -71,7 +73,9 @@ class _PinLockGateState extends State<PinLockGate> with WidgetsBindingObserver {
         widget.child,
         if (_locked)
           Positioned.fill(
-            child: PinEntryScreen(onUnlocked: _onUnlocked, onForgotPin: _onForgotPin),
+            child: PinEntryScreen(
+              userId: widget.userId, onUnlocked: _onUnlocked, onForgotPin: _onForgotPin,
+            ),
           ),
       ],
     );

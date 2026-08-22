@@ -23,7 +23,7 @@ void main() {
 
   setUp(() {
     store = _FakeStore();
-    pin = PinStorage(store: store);
+    pin = PinStorage(store: store, userId: 'user-1');
   });
 
   group('PinStorage — cycle de vie de base', () {
@@ -93,6 +93,33 @@ void main() {
         await pin.verifyPin('0000');
       }
       expect(await pin.remainingLockoutSeconds(), greaterThan(0));
+    });
+  });
+
+  group('PinStorage — isolation entre comptes (device partagé)', () {
+    test('deux userId différents ont des PIN totalement indépendants', () async {
+      // Même stockage physique partagé (même device), deux comptes différents.
+      final pinA = PinStorage(store: store, userId: 'user-A');
+      final pinB = PinStorage(store: store, userId: 'user-B');
+
+      await pinA.setPin('1111');
+
+      expect(await pinB.hasPin(), isFalse);
+      expect(await pinA.hasPin(), isTrue);
+    });
+
+    test('le verrou anti brute-force d\'un compte n\'affecte pas l\'autre', () async {
+      final pinA = PinStorage(store: store, userId: 'user-A');
+      final pinB = PinStorage(store: store, userId: 'user-B');
+      await pinA.setPin('1111');
+      await pinB.setPin('2222');
+
+      for (var i = 0; i < 5; i++) {
+        await pinA.verifyPin('0000');
+      }
+      expect(await pinA.remainingLockoutSeconds(), greaterThan(0));
+      expect(await pinB.remainingLockoutSeconds(), 0);
+      expect(await pinB.verifyPin('2222'), PinVerifyResult.correct);
     });
   });
 }

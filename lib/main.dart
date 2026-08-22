@@ -94,6 +94,7 @@ class _AuthGateState extends State<_AuthGate> {
   bool _isPharmacy = false;
   bool _needsPinSetup = false;
   bool _hasPin = false;
+  String? _userId;
 
   @override
   void initState() {
@@ -105,6 +106,7 @@ class _AuthGateState extends State<_AuthGate> {
     final client = Supabase.instance.client;
     final session = client.auth.currentSession;
     if (session != null) {
+      _userId = session.user.id;
       try {
         // Requête unique : role + catégorie du commerce en parallèle
         final results = await Future.wait([
@@ -123,7 +125,7 @@ class _AuthGateState extends State<_AuthGate> {
         _isPharmacy = categoryNeedsPrescriptionFlow(
             results[1]?['category'] as String?);
         if (_isMerchant) {
-          _hasPin = await PinStorage().hasPin();
+          _hasPin = await PinStorage(userId: session.user.id).hasPin();
           _needsPinSetup = !_hasPin;
         }
       } catch (_) {
@@ -148,12 +150,14 @@ class _AuthGateState extends State<_AuthGate> {
     // configuration obligatoire avant d'entrer, jamais de saut d'étape.
     if (_needsPinSetup) {
       return PinSetupScreen(
+        userId: _userId!,
         onDone: () => setState(() => _needsPinSetup = false),
       );
     }
     // PIN déjà configuré → verrou local par-dessus une session déjà valide,
     // Supabase reste connecté en arrière-plan (voir PinLockGate).
     return PinLockGate(
+      userId: _userId!,
       startLocked: true,
       onForgotPin: () => Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -427,12 +431,13 @@ class _LoginScreenState extends State<LoginScreen> {
         // bien après que cet écran (LoginScreen) ait été remplacé — on utilise
         // donc le `context` de chaque `builder`, pas celui de LoginScreen
         // (qui sera démonté), sinon Navigator.of(context) plante.
-        final hasPin = await PinStorage().hasPin();
+        final hasPin = await PinStorage(userId: userId).hasPin();
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (routeContext) => hasPin
                 ? PinLockGate(
+                    userId: userId,
                     startLocked: false,
                     onForgotPin: () => Navigator.of(routeContext).pushAndRemoveUntil(
                       MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -441,9 +446,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: MerchantShell(isPharmacy: isPharmacy),
                   )
                 : PinSetupScreen(
+                    userId: userId,
                     onDone: () => Navigator.of(routeContext).pushReplacement(
                       MaterialPageRoute(
                         builder: (innerContext) => PinLockGate(
+                          userId: userId,
                           startLocked: false,
                           onForgotPin: () => Navigator.of(innerContext).pushAndRemoveUntil(
                             MaterialPageRoute(builder: (_) => const LoginScreen()),

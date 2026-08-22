@@ -12,9 +12,10 @@ import 'pin_storage.dart';
 /// naviguer ensuite vers l'espace marchand (ce widget ne connaît pas
 /// `MerchantShell` pour rester découplé).
 class PinSetupScreen extends StatefulWidget {
+  final String userId;
   final VoidCallback onDone;
 
-  const PinSetupScreen({super.key, required this.onDone});
+  const PinSetupScreen({super.key, required this.userId, required this.onDone});
 
   @override
   State<PinSetupScreen> createState() => _PinSetupScreenState();
@@ -64,7 +65,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
       return;
     }
     setState(() => _saving = true);
-    await PinStorage().setPin(_entry);
+    await PinStorage(userId: widget.userId).setPin(_entry);
     if (mounted) widget.onDone();
   }
 
@@ -92,10 +93,10 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                 const SizedBox(height: 8),
                 Text(
                   _error
-                      ? 'Les deux codes ne correspondent pas — réessayez.'
+                      ? 'Les deux codes ne correspondent pas.\nRecommençons depuis le début.'
                       : (_confirming
-                          ? 'Ressaisissez le même code pour confirmer.'
-                          : 'Ce code à 4 chiffres servira à déverrouiller\nl\'app rapidement, comme sur Wave.'),
+                          ? 'Répétez le même code pour vous assurer\nde ne pas vous être trompé.'
+                          : 'Choisissez 4 chiffres dont vous vous souviendrez —\nvous en aurez besoin à chaque ouverture de l\'app.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       fontSize: 13,

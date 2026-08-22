@@ -37,18 +37,26 @@ class _FlutterSecureKeyValueStore implements SecureKeyValueStore {
 /// Le PIN ne remplace pas l'authentification Supabase — il verrouille l'accès
 /// local à une session déjà valide, exactement comme Wave. Voir
 /// `docs/superpowers/specs/` pour le détail du flux complet.
+///
+/// Les clés de stockage sont préfixées par [userId] : sur un device partagé
+/// entre plusieurs comptes marchands (ex: tests), le PIN de l'un ne doit
+/// jamais s'appliquer à l'autre.
 class PinStorage {
   static const maxAttempts = 5;
   static const lockoutDuration = Duration(seconds: 30);
 
-  static const _kHash = 'pin_hash';
-  static const _kSalt = 'pin_salt';
-  static const _kAttempts = 'pin_attempts';
-  static const _kLockoutUntil = 'pin_lockout_until_ms';
-
   final SecureKeyValueStore _store;
+  final String _kHash;
+  final String _kSalt;
+  final String _kAttempts;
+  final String _kLockoutUntil;
 
-  PinStorage({SecureKeyValueStore? store}) : _store = store ?? _FlutterSecureKeyValueStore();
+  PinStorage({SecureKeyValueStore? store, required String userId})
+      : _store = store ?? _FlutterSecureKeyValueStore(),
+        _kHash = 'pin_hash_$userId',
+        _kSalt = 'pin_salt_$userId',
+        _kAttempts = 'pin_attempts_$userId',
+        _kLockoutUntil = 'pin_lockout_until_ms_$userId';
 
   Future<bool> hasPin() async => (await _store.read(_kHash)) != null;
 

@@ -15,10 +15,13 @@ import 'pin_storage.dart';
 /// doit repasser par email/mot de passe pour en redéfinir un nouveau —
 /// impossible de redonner l'ancien PIN oublié).
 class PinEntryScreen extends StatefulWidget {
+  final String userId;
   final VoidCallback onUnlocked;
   final VoidCallback onForgotPin;
 
-  const PinEntryScreen({super.key, required this.onUnlocked, required this.onForgotPin});
+  const PinEntryScreen({
+    super.key, required this.userId, required this.onUnlocked, required this.onForgotPin,
+  });
 
   @override
   State<PinEntryScreen> createState() => _PinEntryScreenState();
@@ -26,7 +29,7 @@ class PinEntryScreen extends StatefulWidget {
 
 class _PinEntryScreenState extends State<PinEntryScreen> {
   static const _length = 4;
-  final _pinStorage = PinStorage();
+  late final _pinStorage = PinStorage(userId: widget.userId);
 
   String _entry = '';
   bool _error = false;
@@ -51,11 +54,14 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
     if (!mounted) return;
     setState(() => _lockoutSeconds = seconds);
     if (seconds > 0) {
+      // Calculé une seule fois puis décompté localement — pas de lecture du
+      // secure storage à chaque tick, seulement au démarrage du compte à rebours.
+      final endTime = DateTime.now().add(Duration(seconds: seconds));
       _lockoutTimer?.cancel();
-      _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
-        final remaining = await _pinStorage.remainingLockoutSeconds();
+      _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted) return;
-        setState(() => _lockoutSeconds = remaining);
+        final remaining = endTime.difference(DateTime.now()).inSeconds;
+        setState(() => _lockoutSeconds = remaining > 0 ? remaining : 0);
         if (remaining <= 0) _lockoutTimer?.cancel();
       });
     }
