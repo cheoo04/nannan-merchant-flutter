@@ -167,6 +167,17 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             options: MapOptions(
               initialCenter: _selected ?? _defaultCenter,
               initialZoom: _selected != null ? 17 : 13,
+              // Empêche de déplacer/dézoomer la carte hors de la Côte
+              // d'Ivoire — pas de gain de vitesse en soi (les tuiles hors
+              // champ ne sont de toute façon jamais chargées), mais évite
+              // que le marchand s'égare visuellement hors du pays.
+              cameraConstraint: CameraConstraint.contain(
+                bounds: LatLngBounds(
+                  LatLng(ciBoundsSW.lat, ciBoundsSW.lng),
+                  LatLng(ciBoundsNE.lat, ciBoundsNE.lng),
+                ),
+              ),
+              minZoom: 6,
               onPositionChanged: (camera, hasGesture) {
                 if (hasGesture) {
                   setState(() {

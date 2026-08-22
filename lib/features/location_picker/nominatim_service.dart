@@ -2,6 +2,11 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+/// Boîte englobante approximative de la Côte d'Ivoire (SW → NE), utilisée
+/// pour restreindre à la fois la recherche Nominatim et la carte elle-même.
+const ciBoundsSW = (lat: 4.2, lng: -8.6);
+const ciBoundsNE = (lat: 10.8, lng: -2.4);
+
 /// Un résultat de recherche d'adresse renvoyé par Nominatim.
 class GeocodingResult {
   final String displayName;
@@ -33,6 +38,9 @@ class NominatimService {
 
   /// Recherche des adresses en Côte d'Ivoire correspondant à [query].
   /// Retourne une liste vide pour une requête vide (aucun appel réseau fait).
+  /// `countrycodes=ci` filtre déjà strictement au pays ; `viewbox`+`bounded=1`
+  /// en plus resserre/priorise la recherche sur la boîte englobante réelle du
+  /// pays, ce qui accélère et affine le tri des résultats côté serveur.
   Future<List<GeocodingResult>> search(String query) async {
     if (query.trim().isEmpty) return [];
 
@@ -41,6 +49,8 @@ class NominatimService {
       'countrycodes': 'ci',
       'format': 'json',
       'limit': '5',
+      'viewbox': '${ciBoundsSW.lng},${ciBoundsNE.lat},${ciBoundsNE.lng},${ciBoundsSW.lat}',
+      'bounded': '1',
     });
 
     final response = await _client.get(

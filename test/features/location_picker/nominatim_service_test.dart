@@ -11,6 +11,8 @@ void main() {
       final mockClient = MockClient((request) async {
         expect(request.url.queryParameters['q'], 'Oumé marché');
         expect(request.url.queryParameters['countrycodes'], 'ci');
+        expect(request.url.queryParameters['bounded'], '1');
+        expect(request.url.queryParameters['viewbox'], isNotEmpty);
         return http.Response(
           jsonEncode([
             {
