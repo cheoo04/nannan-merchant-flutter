@@ -77,6 +77,12 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
       // que ce n'est pas terminé.
       canPop: false,
       child: Scaffold(
+        // Pas de TextField ici (clavier custom PinKeypad) — on ignore
+        // l'inset clavier, sinon un débordement furtif flashe pendant la
+        // transition depuis le formulaire email/mot de passe (dont le
+        // clavier système finit de se fermer en même temps que cet écran
+        // apparaît).
+        resizeToAvoidBottomInset: false,
         backgroundColor: AppColors.background,
         body: SafeArea(
           child: Padding(
@@ -96,7 +102,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                       ? 'Les deux codes ne correspondent pas.\nRecommençons depuis le début.'
                       : (_confirming
                           ? 'Répétez le même code pour vous assurer\nde ne pas vous être trompé.'
-                          : 'Choisissez 4 chiffres dont vous vous souviendrez.'),
+                          : 'Choisissez 4 chiffres dont vous vous souviendrez —\nvous en aurez besoin à chaque ouverture de l\'app.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       fontSize: 13,

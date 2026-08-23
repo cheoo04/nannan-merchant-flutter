@@ -137,6 +137,10 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
     final top = MediaQuery.of(context).padding.top;
     final locked = _lockoutSeconds > 0;
     return Scaffold(
+      // Même raison que pin_setup_screen.dart — pas de TextField système,
+      // on ignore l'inset clavier transitoire pour éviter le débordement
+      // furtif pendant les transitions (connexion, retour d'arrière-plan).
+      resizeToAvoidBottomInset: false,
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
