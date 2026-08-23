@@ -44,7 +44,21 @@ String friendlyError(Object error, {String? fallback}) {
     if (msg.contains('email not confirmed')) {
       return 'Veuillez confirmer votre email avant de continuer.';
     }
-    if (msg.contains('network') || msg.contains('socket') || msg.contains('failed host lookup')) {
+    // AuthRetryableFetchException (requête réseau qui échoue au niveau
+    // transport — ex: connexion coupée en pleine requête) hérite de
+    // AuthException, donc passe par cette branche AVANT le filet de
+    // sécurité générique plus bas. Sans ce bloc, un message brut du type
+    // "ClientException: Software caused connection abort, uri=..." finit
+    // par s'afficher tel quel (bug vu en prod le 23/08).
+    if (error is AuthRetryableFetchException ||
+        msg.contains('network') ||
+        msg.contains('socket') ||
+        msg.contains('failed host lookup') ||
+        msg.contains('clientexception') ||
+        msg.contains('connection abort') ||
+        msg.contains('connection refused') ||
+        msg.contains('connection reset') ||
+        msg.contains('handshakeexception')) {
       return 'Pas de connexion internet. Vérifiez votre réseau et réessayez.';
     }
     return error.message;
@@ -67,6 +81,7 @@ String friendlyError(Object error, {String? fallback}) {
   if (raw.contains('socketexception') ||
       raw.contains('clientexception') ||
       raw.contains('failed host lookup') ||
+      raw.contains('connection abort') ||
       raw.contains('connection refused') ||
       raw.contains('connection reset') ||
       raw.contains('network is unreachable') ||
