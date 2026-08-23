@@ -788,7 +788,10 @@ class ReorderableWrap extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: images.length,
-      onReorder: onReorder,
+      // onReorder est déprécié depuis v3.41.0 — onReorderItem reçoit déjà
+      // le newIndex corrigé (décalé si oldIndex < newIndex), donc on peut
+      // passer onReorder directement sans adapter les paramètres.
+      onReorderItem: (oldIndex, newIndex) => onReorder(oldIndex, newIndex),
       buildDefaultDragHandles: false,
       itemBuilder: (context, i) {
         return Padding(
