@@ -96,7 +96,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                       ? 'Les deux codes ne correspondent pas.\nRecommençons depuis le début.'
                       : (_confirming
                           ? 'Répétez le même code pour vous assurer\nde ne pas vous être trompé.'
-                          : 'Choisissez 4 chiffres dont vous vous souviendrez —\nvous en aurez besoin à chaque ouverture de l\'app.'),
+                          : 'Choisissez 4 chiffres dont vous vous souviendrez.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       fontSize: 13,

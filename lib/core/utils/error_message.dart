@@ -39,7 +39,7 @@ String friendlyError(Object error, {String? fallback}) {
       return 'Un compte existe déjà avec ces informations.';
     }
     if (msg.contains('invalid login credentials') || msg.contains('invalid credentials')) {
-      return 'Identifiants incorrects. Vérifiez votre email/téléphone et mot de passe.';
+      return 'Identifiants incorrects. \nVérifiez votre email/téléphone et mot de passe.';
     }
     if (msg.contains('email not confirmed')) {
       return 'Veuillez confirmer votre email avant de continuer.';
