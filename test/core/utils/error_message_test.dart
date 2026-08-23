@@ -20,12 +20,12 @@ void main() {
 
   group('friendlyError — AuthException (identifiants, etc.)', () {
     test('"Invalid login credentials" → message identifiants', () {
-      final msg = friendlyError(AuthException('Invalid login credentials'));
+      final msg = friendlyError(const AuthException('Invalid login credentials'));
       expect(msg.toLowerCase(), contains('identifiants'));
     });
 
     test('message AuthException légitime et inconnu → renvoyé tel quel', () {
-      final msg = friendlyError(AuthException('Un message Supabase légitime'));
+      final msg = friendlyError(const AuthException('Un message Supabase légitime'));
       expect(msg, 'Un message Supabase légitime');
     });
   });
