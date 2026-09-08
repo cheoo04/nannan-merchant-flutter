@@ -19,12 +19,45 @@ const _maxImages = 5;
 const _maxImagesNoVideo = 7;
 const _maxVideoSeconds = 90; // 1min30
 
+// ── Modèle : une ligne de la table merchant_stories ────────────────────────────
+class MerchantStoryItem {
+  final String id;
+  final String mediaType; // 'image' | 'video'
+  final String mediaUrl;
+  final String? description;
+  final int position;
+
+  const MerchantStoryItem({
+    required this.id,
+    required this.mediaType,
+    required this.mediaUrl,
+    this.description,
+    required this.position,
+  });
+
+  factory MerchantStoryItem.fromJson(Map<String, dynamic> j) => MerchantStoryItem(
+        id: j['id'] as String,
+        mediaType: j['media_type'] as String,
+        mediaUrl: j['media_url'] as String,
+        description: j['description'] as String?,
+        position: j['position'] as int? ?? 0,
+      );
+
+  MerchantStoryItem copyWith({String? description, int? position}) => MerchantStoryItem(
+        id: id,
+        mediaType: mediaType,
+        mediaUrl: mediaUrl,
+        description: description ?? this.description,
+        position: position ?? this.position,
+      );
+}
+
 // ── Notifier ──────────────────────────────────────────────────────────────────
 class StoriesNotifier extends ChangeNotifier {
   String? merchantId;
   String? userId;
-  List<String> imageUrls = [];   // URLs publiques stockées en DB
-  String? videoUrl;              // URL publique vidéo
+  List<MerchantStoryItem> images = [];   // media_type = 'image', triées par position
+  MerchantStoryItem? video;              // media_type = 'video' (0 ou 1)
   bool loading = true;
   bool saving = false;
   String? error;
@@ -38,14 +71,24 @@ class StoriesNotifier extends ChangeNotifier {
 
     final m = await _db
         .from('merchants')
-        .select('id, story_images, story_video_url')
+        .select('id')
         .eq('owner_id', user.id)
         .maybeSingle();
 
     if (m != null) {
       merchantId = m['id'] as String;
-      imageUrls = (m['story_images'] as List<dynamic>? ?? []).cast<String>();
-      videoUrl = m['story_video_url'] as String?;
+      final rows = await _db
+          .from('merchant_stories')
+          .select('id, media_type, media_url, description, position')
+          .eq('merchant_id', merchantId!)
+          .order('position');
+
+      final items = (rows as List)
+          .map((r) => MerchantStoryItem.fromJson(r as Map<String, dynamic>))
+          .toList();
+      images = items.where((e) => e.mediaType == 'image').toList();
+      final videos = items.where((e) => e.mediaType == 'video').toList();
+      video = videos.isNotEmpty ? videos.first : null;
     }
 
     loading = false;
@@ -53,12 +96,12 @@ class StoriesNotifier extends ChangeNotifier {
   }
 
   // ── Upload image ──────────────────────────────────────────
-  Future<String?> uploadImage(Uint8List bytes, String ext) async {
+  Future<String?> uploadImage(Uint8List bytes, String ext, {String? description}) async {
     if (userId == null || merchantId == null) return 'Non connecté';
 
-    final hasVideo = videoUrl != null;
+    final hasVideo = video != null;
     final limit = hasVideo ? _maxImages : _maxImagesNoVideo;
-    if (imageUrls.length >= limit) {
+    if (images.length >= limit) {
       return hasVideo
           ? 'Maximum $_maxImages images avec une vidéo'
           : 'Maximum $_maxImagesNoVideo images sans vidéo';
@@ -74,8 +117,14 @@ class StoriesNotifier extends ChangeNotifier {
         fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: false),
       );
       final url = _db.storage.from('stories').getPublicUrl(path);
-      imageUrls = [...imageUrls, url];
-      await _saveToDb();
+      final row = await _db.from('merchant_stories').insert({
+        'merchant_id': merchantId,
+        'media_type': 'image',
+        'media_url': url,
+        'description': description,
+        'position': images.length,
+      }).select().single();
+      images = [...images, MerchantStoryItem.fromJson(row)];
       return null; // succès
     } catch (e) {
       final msg = friendlyError(e);
@@ -88,11 +137,11 @@ class StoriesNotifier extends ChangeNotifier {
   }
 
   // ── Upload vidéo ──────────────────────────────────────────
-  Future<String?> uploadVideo(Uint8List bytes, String ext) async {
+  Future<String?> uploadVideo(Uint8List bytes, String ext, {String? description}) async {
     if (userId == null || merchantId == null) return 'Non connecté';
-    if (videoUrl != null) return 'Une vidéo existe déjà — supprimez-la d\'abord';
-    if (imageUrls.length > _maxImages) {
-      return 'Avec une vidéo, maximum $_maxImages images. Supprimez ${imageUrls.length - _maxImages} image(s).';
+    if (video != null) return 'Une vidéo existe déjà — supprimez-la d\'abord';
+    if (images.length > _maxImages) {
+      return 'Avec une vidéo, maximum $_maxImages images. Supprimez ${images.length - _maxImages} image(s).';
     }
 
     saving = true;
@@ -107,8 +156,15 @@ class StoriesNotifier extends ChangeNotifier {
           upsert: false,
         ),
       );
-      videoUrl = _db.storage.from('stories').getPublicUrl(path);
-      await _saveToDb();
+      final url = _db.storage.from('stories').getPublicUrl(path);
+      final row = await _db.from('merchant_stories').insert({
+        'merchant_id': merchantId,
+        'media_type': 'video',
+        'media_url': url,
+        'description': description,
+        'position': 999,
+      }).select().single();
+      video = MerchantStoryItem.fromJson(row);
       return null;
     } catch (e) {
       final msg = friendlyError(e);
@@ -122,19 +178,19 @@ class StoriesNotifier extends ChangeNotifier {
 
   // ── Supprimer image ───────────────────────────────────────
   Future<String?> deleteImage(int index) async {
-    if (index < 0 || index >= imageUrls.length) return null;
+    if (index < 0 || index >= images.length) return null;
     saving = true;
     notifyListeners();
 
     try {
-      final url = imageUrls[index];
-      // Extraire le path depuis l'URL publique
-      final path = _pathFromUrl(url);
+      final item = images[index];
+      final path = _pathFromUrl(item.mediaUrl);
       if (path != null) {
         await _db.storage.from('stories').remove([path]);
       }
-      imageUrls = [...imageUrls]..removeAt(index);
-      await _saveToDb();
+      await _db.from('merchant_stories').delete().eq('id', item.id);
+      images = [...images]..removeAt(index);
+      await _resequencePositions();
       return null;
     } catch (e) {
       final msg = friendlyError(e);
@@ -148,17 +204,17 @@ class StoriesNotifier extends ChangeNotifier {
 
   // ── Supprimer vidéo ───────────────────────────────────────
   Future<String?> deleteVideo() async {
-    if (videoUrl == null) return null;
+    if (video == null) return null;
     saving = true;
     notifyListeners();
 
     try {
-      final path = _pathFromUrl(videoUrl!);
+      final path = _pathFromUrl(video!.mediaUrl);
       if (path != null) {
         await _db.storage.from('stories').remove([path]);
       }
-      videoUrl = null;
-      await _saveToDb();
+      await _db.from('merchant_stories').delete().eq('id', video!.id);
+      video = null;
       return null;
     } catch (e) {
       final msg = friendlyError(e);
@@ -172,21 +228,52 @@ class StoriesNotifier extends ChangeNotifier {
 
   // ── Réordonner images (drag) ──────────────────────────────
   Future<void> reorder(int oldIndex, int newIndex) async {
-    final list = [...imageUrls];
+    final list = [...images];
     final item = list.removeAt(oldIndex);
     list.insert(newIndex, item);
-    imageUrls = list;
+    images = list;
     notifyListeners();
-    await _saveToDb();
+    await _resequencePositions();
   }
 
-  // ── Persister en DB ───────────────────────────────────────
-  Future<void> _saveToDb() async {
-    if (merchantId == null) return;
-    await _db.from('merchants').update({
-      'story_images': imageUrls,
-      'story_video_url': videoUrl,
-    }).eq('id', merchantId!);
+  // ── Modifier la description d'une publication ─────────────
+  Future<String?> updateDescription({
+    required String id,
+    required bool isVideo,
+    String? text,
+  }) async {
+    saving = true;
+    notifyListeners();
+    try {
+      await _db.from('merchant_stories').update({'description': text}).eq('id', id);
+      if (isVideo && video != null && video!.id == id) {
+        video = video!.copyWith(description: text);
+      } else {
+        final idx = images.indexWhere((e) => e.id == id);
+        if (idx != -1) {
+          images = [...images];
+          images[idx] = images[idx].copyWith(description: text);
+        }
+      }
+      return null;
+    } catch (e) {
+      final msg = friendlyError(e);
+      error = msg;
+      return msg;
+    } finally {
+      saving = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Réaligner les positions après suppression/réordonnancement ──
+  Future<void> _resequencePositions() async {
+    for (var i = 0; i < images.length; i++) {
+      if (images[i].position != i) {
+        await _db.from('merchant_stories').update({'position': i}).eq('id', images[i].id);
+        images[i] = images[i].copyWith(position: i);
+      }
+    }
   }
 
   // ── Helper : extraire le path depuis l'URL publique Storage ──
@@ -198,7 +285,7 @@ class StoriesNotifier extends ChangeNotifier {
     return url.substring(idx + marker.length);
   }
 
-  int get maxImages => videoUrl != null ? _maxImages : _maxImagesNoVideo;
+  int get maxImages => video != null ? _maxImages : _maxImagesNoVideo;
 
 }
 
@@ -346,11 +433,51 @@ class _StoriesScreenState extends State<StoriesScreen> {
     }
   }
 
+  // ── Éditer la description d'une publication (photo ou vidéo) ──
+  Future<void> _editDescription({
+    required String id,
+    required bool isVideo,
+    required String? current,
+  }) async {
+    final controller = TextEditingController(text: current ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Description',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'Sora')),
+        content: TextField(
+          controller: controller,
+          maxLines: 3,
+          maxLength: 200,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Décrivez cette publication…'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Enregistrer', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    final err = await _n.updateDescription(
+      id: id, isVideo: isVideo, text: result.isEmpty ? null : result,
+    );
+    if (err != null) {
+      toast.error(err);
+    } else {
+      toast.success('Description enregistrée');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
-    final hasVideo = _n.videoUrl != null;
-    final imgCount = _n.imageUrls.length;
+    final hasVideo = _n.video != null;
+    final imgCount = _n.images.length;
     final maxImg = _n.maxImages;
     final canAddImage = imgCount < maxImg;
     final canAddVideo = !hasVideo;
@@ -467,13 +594,16 @@ class _StoriesScreenState extends State<StoriesScreen> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: ReorderableWrap(
-                      images: _n.imageUrls,
+                      items: _n.images,
                       onReorder: _n.reorder,
                       onDelete: _confirmDeleteImage,
                       onTap: (i) => setState(() {
                         _lightboxIndex = i;
                         _lightboxIsVideo = false;
                       }),
+                      onEditDescription: (item) => _editDescription(
+                        id: item.id, isVideo: false, current: item.description,
+                      ),
                     ),
                   ),
                 ),
@@ -486,12 +616,16 @@ class _StoriesScreenState extends State<StoriesScreen> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: _VideoCard(
-                      videoUrl: _n.videoUrl!,
+                      videoUrl: _n.video!.mediaUrl,
+                      description: _n.video!.description,
                       onDelete: _confirmDeleteVideo,
                       onPreview: () => setState(() {
                         _lightboxIndex = 0;
                         _lightboxIsVideo = true;
                       }),
+                      onEditDescription: () => _editDescription(
+                        id: _n.video!.id, isVideo: true, current: _n.video!.description,
+                      ),
                     ),
                   ),
                 ),
@@ -544,15 +678,15 @@ class _StoriesScreenState extends State<StoriesScreen> {
           // ── LIGHTBOX IMAGES ──────────────────────────────────
           if (_lightboxIndex != null && !_lightboxIsVideo)
             _ImageLightbox(
-              images: _n.imageUrls,
+              images: _n.images.map((e) => e.mediaUrl).toList(),
               startIndex: _lightboxIndex!,
               onClose: () => setState(() => _lightboxIndex = null),
             ),
 
           // ── LIGHTBOX VIDÉO ───────────────────────────────────
-          if (_lightboxIndex != null && _lightboxIsVideo && _n.videoUrl != null)
+          if (_lightboxIndex != null && _lightboxIsVideo && _n.video != null)
             _VideoLightbox(
-              videoUrl: _n.videoUrl!,
+              videoUrl: _n.video!.mediaUrl,
               onClose: () => setState(() => _lightboxIndex = null),
             ),
         ],
@@ -771,15 +905,17 @@ class _AddButton extends StatelessWidget {
 
 // ── GRILLE RÉORDONNABLES ──────────────────────────────────────────────────────
 class ReorderableWrap extends StatelessWidget {
-  final List<String> images;
+  final List<MerchantStoryItem> items;
   final Future<void> Function(int, int) onReorder;
   final Future<void> Function(int) onDelete;
   final void Function(int) onTap;
+  final void Function(MerchantStoryItem) onEditDescription;
 
   const ReorderableWrap({
     super.key,
-    required this.images, required this.onReorder,
+    required this.items, required this.onReorder,
     required this.onDelete, required this.onTap,
+    required this.onEditDescription,
   });
 
   @override
@@ -787,21 +923,56 @@ class ReorderableWrap extends StatelessWidget {
     return ReorderableListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: images.length,
+      itemCount: items.length,
       // onReorder est déprécié depuis v3.41.0 — onReorderItem reçoit déjà
       // le newIndex corrigé (décalé si oldIndex < newIndex), donc on peut
       // passer onReorder directement sans adapter les paramètres.
       onReorderItem: (oldIndex, newIndex) => onReorder(oldIndex, newIndex),
       buildDefaultDragHandles: false,
       itemBuilder: (context, i) {
+        final item = items[i];
         return Padding(
-          key: ValueKey(images[i]),
+          key: ValueKey(item.id),
           padding: const EdgeInsets.only(bottom: 10),
-          child: _ImageTile(
-            url: images[i],
-            index: i,
-            onTap: () => onTap(i),
-            onDelete: () => onDelete(i),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _ImageTile(
+                url: item.mediaUrl,
+                index: i,
+                onTap: () => onTap(i),
+                onDelete: () => onDelete(i),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 6, left: 4, right: 4),
+                child: GestureDetector(
+                  onTap: () => onEditDescription(item),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.edit_note_rounded,
+                          size: 15, color: AppColors.mutedForeground),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          (item.description != null && item.description!.isNotEmpty)
+                              ? item.description!
+                              : 'Ajouter une description',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontStyle: (item.description != null && item.description!.isNotEmpty)
+                                ? FontStyle.normal : FontStyle.italic,
+                            color: (item.description != null && item.description!.isNotEmpty)
+                                ? AppColors.foreground : AppColors.mutedForeground,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -920,15 +1091,20 @@ class _ImageTile extends StatelessWidget {
 // ── VIDÉO CARD ────────────────────────────────────────────────────────────────
 class _VideoCard extends StatelessWidget {
   final String videoUrl;
+  final String? description;
   final VoidCallback onDelete;
   final VoidCallback onPreview;
+  final VoidCallback onEditDescription;
 
   const _VideoCard({
-    required this.videoUrl, required this.onDelete, required this.onPreview,
+    required this.videoUrl, required this.description,
+    required this.onDelete, required this.onPreview,
+    required this.onEditDescription,
   });
 
   @override
   Widget build(BuildContext context) {
+    final hasDescription = description != null && description!.isNotEmpty;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -940,6 +1116,7 @@ class _VideoCard extends StatelessWidget {
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Aperçu placeholder vidéo
           GestureDetector(
@@ -965,6 +1142,29 @@ class _VideoCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 const Text('Durée max : 1min30',
                     style: TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: onEditDescription,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.edit_note_rounded,
+                          size: 14, color: AppColors.mutedForeground),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          hasDescription ? description! : 'Ajouter une description',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontStyle: hasDescription ? FontStyle.normal : FontStyle.italic,
+                            color: hasDescription ? AppColors.foreground : AppColors.mutedForeground,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 6),
                 GestureDetector(
                   onTap: onPreview,
