@@ -125,7 +125,14 @@ class _AuthGateState extends State<_AuthGate> {
         _isPharmacy = categoryNeedsPrescriptionFlow(
             results[1]?['category'] as String?);
         if (_isMerchant) {
-          _hasPin = await PinStorage(userId: session.user.id).hasPin();
+          final pinStorage = PinStorage(userId: session.user.id);
+          _hasPin = await pinStorage.hasPin();
+          // Keystore local vide (reset, Keystore purgé par l'OEM...) : on
+          // tente une restauration depuis la copie de secours avant de
+          // forcer une reconfiguration complète du PIN.
+          if (!_hasPin) {
+            _hasPin = await pinStorage.restoreFromRemote();
+          }
           _needsPinSetup = !_hasPin;
         }
       } catch (_) {
@@ -431,7 +438,11 @@ class _LoginScreenState extends State<LoginScreen> {
         // bien après que cet écran (LoginScreen) ait été remplacé — on utilise
         // donc le `context` de chaque `builder`, pas celui de LoginScreen
         // (qui sera démonté), sinon Navigator.of(context) plante.
-        final hasPin = await PinStorage(userId: userId).hasPin();
+        final pinStorage = PinStorage(userId: userId);
+        var hasPin = await pinStorage.hasPin();
+        if (!hasPin) {
+          hasPin = await pinStorage.restoreFromRemote();
+        }
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(

@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Résultat d'une tentative de vérification du PIN.
 enum PinVerifyResult { correct, incorrect, locked }
@@ -30,6 +31,52 @@ class _FlutterSecureKeyValueStore implements SecureKeyValueStore {
   Future<void> delete(String key) => _storage.delete(key: key);
 }
 
+/// Copie de secours du hash+salt du PIN sur `users_profiles`, pour survivre
+/// à un Keystore local effacé (fréquent sur certains OEM — Tecno/Infinix/
+/// Xiaomi — qui purgent les données chiffrées "non utilisées" au reboot).
+/// Interface injectable, comme [SecureKeyValueStore], pour rester testable
+/// sans backend réel.
+abstract class PinRemoteStore {
+  Future<void> push({required String? hash, required String? salt});
+  Future<({String hash, String salt})?> pull();
+}
+
+class _SupabasePinRemoteStore implements PinRemoteStore {
+  final String userId;
+  const _SupabasePinRemoteStore(this.userId);
+
+  @override
+  Future<void> push({required String? hash, required String? salt}) async {
+    try {
+      await Supabase.instance.client.from('users_profiles').update({
+        'pin_hash': hash,
+        'pin_salt': salt,
+        'pin_updated_at': hash != null ? DateTime.now().toIso8601String() : null,
+      }).eq('id', userId);
+    } catch (_) {
+      // Best-effort : la copie locale reste la source de vérité immédiate.
+      // Si hors-ligne, le prochain setPin()/clearPin() retentera la sync.
+    }
+  }
+
+  @override
+  Future<({String hash, String salt})?> pull() async {
+    try {
+      final row = await Supabase.instance.client
+          .from('users_profiles')
+          .select('pin_hash, pin_salt')
+          .eq('id', userId)
+          .maybeSingle();
+      final hash = row?['pin_hash'] as String?;
+      final salt = row?['pin_salt'] as String?;
+      if (hash == null || salt == null) return null;
+      return (hash: hash, salt: salt);
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 /// Gère le code PIN local (verrouillage type Wave) : stockage haché+salé
 /// dans le Keychain/Keystore (jamais en clair, jamais dans SharedPreferences
 /// qui n'est pas chiffré), et verrou anti brute-force (5 essais → pause 30s).
@@ -46,13 +93,18 @@ class PinStorage {
   static const lockoutDuration = Duration(seconds: 30);
 
   final SecureKeyValueStore _store;
+  final PinRemoteStore _remote;
   final String _kHash;
   final String _kSalt;
   final String _kAttempts;
   final String _kLockoutUntil;
 
-  PinStorage({SecureKeyValueStore? store, required String userId})
-      : _store = store ?? _FlutterSecureKeyValueStore(),
+  PinStorage({
+    SecureKeyValueStore? store,
+    PinRemoteStore? remote,
+    required String userId,
+  })  : _store = store ?? _FlutterSecureKeyValueStore(),
+        _remote = remote ?? _SupabasePinRemoteStore(userId),
         _kHash = 'pin_hash_$userId',
         _kSalt = 'pin_salt_$userId',
         _kAttempts = 'pin_attempts_$userId',
@@ -62,10 +114,12 @@ class PinStorage {
 
   Future<void> setPin(String pin) async {
     final salt = _generateSalt();
+    final hash = _hash(pin, salt);
     await _store.write(_kSalt, salt);
-    await _store.write(_kHash, _hash(pin, salt));
+    await _store.write(_kHash, hash);
     await _store.delete(_kAttempts);
     await _store.delete(_kLockoutUntil);
+    await _remote.push(hash: hash, salt: salt);
   }
 
   /// Efface le PIN et tout état de verrou associé — utilisé par le flux
@@ -76,6 +130,23 @@ class PinStorage {
     await _store.delete(_kSalt);
     await _store.delete(_kAttempts);
     await _store.delete(_kLockoutUntil);
+    await _remote.push(hash: null, salt: null);
+  }
+
+  /// Restaure le hash+salt depuis la copie de secours en base quand le
+  /// Keystore local est vide (device reset, Keystore purgé par l'OEM...).
+  /// Ne redonne jamais le PIN en clair — le marchand devra le retaper une
+  /// fois pour prouver qu'il le connaît, exactement comme un déverrouillage
+  /// normal, au lieu de repartir sur une configuration d'un nouveau PIN.
+  /// Retourne `true` si une copie a bien été restaurée.
+  Future<bool> restoreFromRemote() async {
+    final backup = await _remote.pull();
+    if (backup == null) return false;
+    await _store.write(_kHash, backup.hash);
+    await _store.write(_kSalt, backup.salt);
+    await _store.delete(_kAttempts);
+    await _store.delete(_kLockoutUntil);
+    return true;
   }
 
   Future<PinVerifyResult> verifyPin(String pin) async {

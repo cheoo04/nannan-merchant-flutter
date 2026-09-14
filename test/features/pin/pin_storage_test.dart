@@ -17,13 +17,29 @@ class _FakeStore implements SecureKeyValueStore {
   Future<void> delete(String key) async => _data.remove(key);
 }
 
+/// Fake en mémoire de [PinRemoteStore] — simule la copie de secours en base
+/// sans dépendre d'un vrai client Supabase dans les tests.
+class _FakeRemoteStore implements PinRemoteStore {
+  ({String hash, String salt})? backup;
+
+  @override
+  Future<void> push({required String? hash, required String? salt}) async {
+    backup = (hash != null && salt != null) ? (hash: hash, salt: salt) : null;
+  }
+
+  @override
+  Future<({String hash, String salt})?> pull() async => backup;
+}
+
 void main() {
   late _FakeStore store;
+  late _FakeRemoteStore remote;
   late PinStorage pin;
 
   setUp(() {
     store = _FakeStore();
-    pin = PinStorage(store: store, userId: 'user-1');
+    remote = _FakeRemoteStore();
+    pin = PinStorage(store: store, remote: remote, userId: 'user-1');
   });
 
   group('PinStorage — cycle de vie de base', () {
@@ -120,6 +136,44 @@ void main() {
       expect(await pinA.remainingLockoutSeconds(), greaterThan(0));
       expect(await pinB.remainingLockoutSeconds(), 0);
       expect(await pinB.verifyPin('2222'), PinVerifyResult.correct);
+    });
+  });
+
+  group('PinStorage — backup distant (Keystore local perdu)', () {
+    test('setPin() pousse le hash+salt vers le backup distant', () async {
+      await pin.setPin('1234');
+      expect(remote.backup, isNotNull);
+    });
+
+    test('le PIN en clair ne part jamais vers le backup distant', () async {
+      await pin.setPin('1234');
+      expect(remote.backup!.hash, isNot('1234'));
+      expect(remote.backup!.salt, isNot('1234'));
+    });
+
+    test('clearPin() efface aussi le backup distant', () async {
+      await pin.setPin('1234');
+      await pin.clearPin();
+      expect(remote.backup, isNull);
+    });
+
+    test('restoreFromRemote() restaure le local depuis le backup si présent', () async {
+      await pin.setPin('1234');
+
+      // Simule un Keystore local vidé (reset device, purge OEM...).
+      final freshStore = _FakeStore();
+      final restored = PinStorage(store: freshStore, remote: remote, userId: 'user-1');
+
+      expect(await restored.hasPin(), isFalse);
+      expect(await restored.restoreFromRemote(), isTrue);
+      expect(await restored.hasPin(), isTrue);
+      // Le PIN d'origine reste valide après restauration.
+      expect(await restored.verifyPin('1234'), PinVerifyResult.correct);
+    });
+
+    test('restoreFromRemote() retourne false si aucun backup n\'existe', () async {
+      expect(await pin.restoreFromRemote(), isFalse);
+      expect(await pin.hasPin(), isFalse);
     });
   });
 }

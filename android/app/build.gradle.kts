@@ -1,9 +1,11 @@
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
+    // id("kotlin-android") — retiré : avec AGP 9.0, le support Kotlin est
+    // intégré (builtInKotlin=true par défaut). Ce plugin n'est plus nécessaire.
 }
 
 val keyPropertiesFile = rootProject.file("key.properties")
@@ -14,7 +16,9 @@ if (keyPropertiesFile.exists()) {
 
 android {
     namespace = "com.nannan.nannan_merchant"
-    compileSdk = flutter.compileSdkrsion
+    // compileSdkVersion suit automatiquement la valeur recommandée par Flutter SDK,
+    // avec un plancher à 37 requis par flutter_secure_storage.
+    compileSdk = maxOf(flutter.compileSdkVersion, 37)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -22,8 +26,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    // Migration AGP 9.0 : kotlinOptions.jvmTarget est retiré,
+    // remplacé par compilerOptions (DSL intégré depuis AGP 9.0).
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
     }
 
     defaultConfig {
