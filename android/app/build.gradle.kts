@@ -14,7 +14,7 @@ if (keyPropertiesFile.exists()) {
 
 android {
     namespace = "com.nannan.nannan_merchant"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 17
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
