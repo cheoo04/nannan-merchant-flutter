@@ -81,8 +81,7 @@ class ANanNanApiClient {
     });
     // AuthResponse = { user, tokens }
     final tokens = body['tokens'] as Map<String, dynamic>;
-    await _saveSession(
-        tokens['access_token'] as String, tokens['refresh_token'] as String);
+    await _saveSession(tokens['access_token'] as String, tokens['refresh_token'] as String);
     return body['user'] as Map<String, dynamic>;
   }
 
@@ -94,22 +93,17 @@ class ANanNanApiClient {
       'pin': pin,
     });
     // TokenResponse direct (pas enveloppé dans "tokens" ici, contrairement à register)
-    await _saveSession(
-        body['access_token'] as String, body['refresh_token'] as String);
+    await _saveSession(body['access_token'] as String, body['refresh_token'] as String);
   }
 
   Future<void> refreshSession() async {
     await _loadSession();
-    if (_refreshToken == null)
-      throw const ANanNanApiException(401, 'Pas de session à rafraîchir');
-    final body = await _postPublic(
-        '/api/v1/auth/refresh', {'refresh_token': _refreshToken});
-    await _saveSession(
-        body['access_token'] as String, body['refresh_token'] as String);
+    if (_refreshToken == null) throw const ANanNanApiException(401, 'Pas de session à rafraîchir');
+    final body = await _postPublic('/api/v1/auth/refresh', {'refresh_token': _refreshToken});
+    await _saveSession(body['access_token'] as String, body['refresh_token'] as String);
   }
 
-  Future<Map<String, dynamic>> me() async =>
-      await get('/api/v1/auth/me') as Map<String, dynamic>;
+  Future<Map<String, dynamic>> me() async => await get('/api/v1/auth/me') as Map<String, dynamic>;
 
   Future<void> logout() => clearSession();
 
@@ -117,8 +111,7 @@ class ANanNanApiClient {
   Future<Map<String, String>> _authHeaders() async {
     await _loadSession();
     if (_accessToken == null) {
-      throw const ANanNanApiException(
-          401, 'Non connecté (téléphone + PIN requis)');
+      throw const ANanNanApiException(401, 'Non connecté (téléphone + PIN requis)');
     }
     return {
       'Content-Type': 'application/json',
@@ -131,30 +124,25 @@ class ANanNanApiClient {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: query);
     var res = await _http.get(uri, headers: await _authHeaders());
     if (res.statusCode == 401) {
-      res = await _retryAfterRefresh(
-          () => _http.get(uri, headers: _headersSync()));
+      res = await _retryAfterRefresh(() => _http.get(uri, headers: _headersSync()));
     }
     return _handle(res);
   }
 
   Future<dynamic> post(String path, {Object? body}) async {
     final uri = Uri.parse('$baseUrl$path');
-    var res = await _http.post(uri,
-        headers: await _authHeaders(), body: jsonEncode(body));
+    var res = await _http.post(uri, headers: await _authHeaders(), body: jsonEncode(body));
     if (res.statusCode == 401) {
-      res = await _retryAfterRefresh(() =>
-          _http.post(uri, headers: _headersSync(), body: jsonEncode(body)));
+      res = await _retryAfterRefresh(() => _http.post(uri, headers: _headersSync(), body: jsonEncode(body)));
     }
     return _handle(res);
   }
 
   Future<dynamic> patch(String path, {Object? body}) async {
     final uri = Uri.parse('$baseUrl$path');
-    var res = await _http.patch(uri,
-        headers: await _authHeaders(), body: jsonEncode(body));
+    var res = await _http.patch(uri, headers: await _authHeaders(), body: jsonEncode(body));
     if (res.statusCode == 401) {
-      res = await _retryAfterRefresh(() =>
-          _http.patch(uri, headers: _headersSync(), body: jsonEncode(body)));
+      res = await _retryAfterRefresh(() => _http.patch(uri, headers: _headersSync(), body: jsonEncode(body)));
     }
     return _handle(res);
   }
@@ -163,8 +151,7 @@ class ANanNanApiClient {
     final uri = Uri.parse('$baseUrl$path');
     var res = await _http.delete(uri, headers: await _authHeaders());
     if (res.statusCode == 401) {
-      res = await _retryAfterRefresh(
-          () => _http.delete(uri, headers: _headersSync()));
+      res = await _retryAfterRefresh(() => _http.delete(uri, headers: _headersSync()));
     }
     return _handle(res);
   }
@@ -175,8 +162,7 @@ class ANanNanApiClient {
         'Authorization': 'Bearer $_accessToken',
       };
 
-  Future<http.Response> _retryAfterRefresh(
-      Future<http.Response> Function() retry) async {
+  Future<http.Response> _retryAfterRefresh(Future<http.Response> Function() retry) async {
     try {
       await refreshSession();
       return await retry();
@@ -191,10 +177,7 @@ class ANanNanApiClient {
     final uri = Uri.parse('$baseUrl$path');
     final res = await _http.post(
       uri,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
       body: jsonEncode(body),
     );
     return _handle(res) as Map<String, dynamic>;
@@ -213,8 +196,7 @@ class ANanNanApiClient {
       } else if (decoded is Map && decoded['detail'] is List) {
         // HTTPValidationError (422) : liste de ValidationError
         message = (decoded['detail'] as List)
-            .map((e) =>
-                e is Map ? '${e['loc']?.last}: ${e['msg']}' : e.toString())
+            .map((e) => e is Map ? '${e['loc']?.last}: ${e['msg']}' : e.toString())
             .join(', ');
       }
     } catch (_) {

@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/ci_phone.dart';
-import '../../core/utils/error_message.dart';
+import '../../core/services/a_nan_nan_api_client.dart';
 import '../become_merchant/become_merchant_screen.dart';
-
-SupabaseClient get _db => Supabase.instance.client;
 
 // ── SIGNUP SCREEN ─────────────────────────────────────────────────────────
 class SignupScreen extends StatefulWidget {
@@ -16,11 +13,11 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
+  final _api = ANanNanApiClient();
   final _name = TextEditingController();
   final _phone = TextEditingController();
-  final _email = TextEditingController();
-  final _password = TextEditingController();
-  final _confirm = TextEditingController();
+  final _pin = TextEditingController();
+  final _confirmPin = TextEditingController();
   bool _obscure = true;
   bool _loading = false;
   String? _error;
@@ -29,16 +26,14 @@ class _SignupScreenState extends State<SignupScreen> {
   void dispose() {
     _name.dispose();
     _phone.dispose();
-    _email.dispose();
-    _password.dispose();
-    _confirm.dispose();
+    _pin.dispose();
+    _confirmPin.dispose();
     super.dispose();
   }
 
   Future<void> _signup() async {
     final phone = CiPhone.normalize(_phone.text);
-    final email = _email.text.trim();
-    final password = _password.text;
+    final pin = _pin.text.trim();
 
     final name = _name.text.trim();
     if (name.length < 2) {
@@ -49,45 +44,24 @@ class _SignupScreenState extends State<SignupScreen> {
       setState(() => _error = 'Numéro invalide. Format attendu : 01 02 03 04 05');
       return;
     }
-    if (email.isNotEmpty && !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-      setState(() => _error = 'Adresse email invalide');
+    if (!RegExp(r'^\d{4}$').hasMatch(pin)) {
+      setState(() => _error = 'Le code PIN doit contenir exactement 4 chiffres');
       return;
     }
-    if (password.length < 6) {
-      setState(() => _error = 'Le mot de passe doit contenir au moins 6 caractères');
-      return;
-    }
-    if (password != _confirm.text) {
-      setState(() => _error = 'Les mots de passe ne correspondent pas');
+    if (pin != _confirmPin.text.trim()) {
+      setState(() => _error = 'Les codes PIN ne correspondent pas');
       return;
     }
 
     setState(() { _loading = true; _error = null; });
     try {
-      final authEmail = email.isNotEmpty ? email : placeholderEmailForPhone(phone);
-
-      // Le téléphone est passé en métadonnées : le trigger handle_new_user
-      // (côté base) lit raw_user_meta_data->>'phone' pour préremplir
-      // users_profiles.phone dès l'insertion, sans dépendre uniquement de
-      // l'upsert de secours ci-dessous.
-      final res = await _db.auth.signUp(
-        email: authEmail,
-        password: password,
-        data: {'phone': phone, 'name': name},
+      final parts = name.split(RegExp(r'\s+'));
+      await _api.register(
+        phone: phone,
+        pin: pin,
+        firstName: parts.first,
+        lastName: parts.length > 1 ? parts.sublist(1).join(' ') : null,
       );
-      final userId = res.user?.id;
-      if (userId == null) throw Exception('Création du compte échouée');
-
-      // upsert : au cas où un trigger côté base créerait déjà une ligne
-      // users_profiles vide à la création du compte auth.
-      // Pas de `role` fourni volontairement — la valeur par défaut de la
-      // colonne s'applique (à vérifier après un premier test réel).
-      await _db.from('users_profiles').upsert({
-        'id': userId,
-        'name': name,
-        'phone': phone,
-        'email': email.isNotEmpty ? email : null,
-      });
 
       if (mounted) {
         Navigator.of(context).pushReplacement(
@@ -98,12 +72,13 @@ class _SignupScreenState extends State<SignupScreen> {
           ),
         );
       }
-    } on AuthException catch (e) {
-      setState(() => _error = friendlyError(e));
+    } on ANanNanApiException catch (e) {
+      setState(() => _error = e.statusCode == 422
+          ? 'Vérifiez les informations saisies'
+          : e.message);
     } catch (e) {
-      setState(() => _error = friendlyError(e,
-          fallback:
-              'Erreur de connexion. Vérifiez votre connexion internet et réessayez.'));
+      setState(() => _error =
+          'Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -185,31 +160,15 @@ class _SignupScreenState extends State<SignupScreen> {
 
                   const SizedBox(height: 12),
 
-                  const _FieldLabel(text: 'Adresse email (optionnel)'),
-                  const SizedBox(height: 2),
-                  const Text(
-                    "Utile pour récupérer votre mot de passe en cas d'oubli.",
-                    style: TextStyle(fontSize: 11, color: AppColors.mutedForeground),
-                  ),
+                  const _FieldLabel(text: 'Code PIN (4 chiffres)'),
                   const SizedBox(height: 4),
                   TextField(
-                    controller: _email,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: _inputDecoration(
-                      hint: 'votre@email.com',
-                      icon: Icons.mail_outline_rounded,
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  const _FieldLabel(text: 'Mot de passe'),
-                  const SizedBox(height: 4),
-                  TextField(
-                    controller: _password,
+                    controller: _pin,
                     obscureText: _obscure,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
                     decoration: _inputDecoration(
-                      hint: '••••••••',
+                      hint: '••••',
                       icon: Icons.lock_outline_rounded,
                       suffix: GestureDetector(
                         onTap: () => setState(() => _obscure = !_obscure),
@@ -218,20 +177,22 @@ class _SignupScreenState extends State<SignupScreen> {
                           color: AppColors.mutedForeground, size: 18,
                         ),
                       ),
-                    ),
+                    ).copyWith(counterText: ''),
                   ),
 
                   const SizedBox(height: 12),
 
-                  const _FieldLabel(text: 'Confirmer le mot de passe'),
+                  const _FieldLabel(text: 'Confirmer le code PIN'),
                   const SizedBox(height: 4),
                   TextField(
-                    controller: _confirm,
+                    controller: _confirmPin,
                     obscureText: _obscure,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
                     decoration: _inputDecoration(
-                      hint: '••••••••',
+                      hint: '••••',
                       icon: Icons.lock_outline_rounded,
-                    ),
+                    ).copyWith(counterText: ''),
                   ),
 
                   if (_error != null) ...[

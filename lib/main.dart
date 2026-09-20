@@ -8,7 +8,6 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_colors.dart';
 import 'core/utils/toast.dart';
-import 'core/utils/error_message.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/dashboard/dashboard_notifier.dart';
 import 'features/orders/orders_screen.dart';
@@ -19,6 +18,7 @@ import 'features/stories/stories_screen.dart';
 import 'features/become_merchant/become_merchant_screen.dart';
 import 'features/auth/signup_screen.dart';
 import 'core/utils/ci_phone.dart';
+import 'core/services/a_nan_nan_api_client.dart';
 import 'features/notifications/notifications_notifier.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/notifications/notifications_screen.dart';
@@ -365,52 +365,33 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _email = TextEditingController();
-  final _password = TextEditingController();
+  final _api = ANanNanApiClient();
+  final _phone = TextEditingController();
+  final _pin = TextEditingController();
   bool _loading = false;
   bool _obscure = true;
   String? _error;
 
   @override
-  void dispose() { _email.dispose(); _password.dispose(); super.dispose(); }
+  void dispose() { _phone.dispose(); _pin.dispose(); super.dispose(); }
 
   Future<void> _login() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final input = _email.text.trim();
-      // Le champ accepte email OU téléphone : si l'entrée ressemble à un
-      // numéro ivoirien, on régénère le même email de secours généré à
-      // l'inscription (déterministe, pas besoin de lookup en base).
-      final effectiveEmail = CiPhone.isValid(input)
-          ? placeholderEmailForPhone(CiPhone.normalize(input))
-          : input;
+      final phone = CiPhone.normalize(_phone.text);
+      await _api.login(phone: phone, pin: _pin.text.trim());
+      final me = await _api.me();
+      final userId = me['id'] as String;
 
-      final res = await Supabase.instance.client.auth.signInWithPassword(
-        email: effectiveEmail,
-        password: _password.text,
-      );
-      final userId = res.user?.id;
-      if (userId == null) throw Exception('Connexion échouée');
-
-      // Charger role + catégorie en parallèle — même logique que
-      // _AuthGate pour éviter tout état de chargement dans MerchantShell.
-      final results = await Future.wait([
-        Supabase.instance.client
-            .from('users_profiles')
-            .select('role')
-            .eq('id', userId)
-            .maybeSingle(),
-        Supabase.instance.client
-            .from('merchants')
-            .select('category')
-            .eq('owner_id', userId)
-            .maybeSingle(),
-      ]);
-      final profile = results[0];
-      final merchantData = results[1];
-      final role = profile?['role'] as String?;
-      final isPharmacy = categoryNeedsPrescriptionFlow(
-          merchantData?['category'] as String?);
+      // TODO backend : il n'existe pour l'instant aucun endpoint "quel(s)
+      // marchand(s) m'appartien(nen)t ?" sur la nouvelle API (contrairement
+      // à la requête Supabase ci-dessous qu'on remplace). Le rôle marchand
+      // n'est donc pas vérifiable ici pour l'instant — comportement
+      // temporaire : tout le monde passe par le formulaire de candidature,
+      // comme un compte qui n'a encore rien soumis. Corrigé dès que le
+      // backend expose cet endpoint (demandé le 19/09).
+      const role = null;
+      const isPharmacy = false;
       if (role != 'merchant') {
         // Tout compte non-marchand est redirigé vers le formulaire de
         // candidature — que la personne n'ait encore rien soumis (l'écran
@@ -454,7 +435,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       MaterialPageRoute(builder: (_) => const LoginScreen()),
                       (_) => false,
                     ),
-                    child: MerchantShell(isPharmacy: isPharmacy),
+                    child: const MerchantShell(isPharmacy: isPharmacy),
                   )
                 : PinSetupScreen(
                     userId: userId,
@@ -467,7 +448,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             MaterialPageRoute(builder: (_) => const LoginScreen()),
                             (_) => false,
                           ),
-                          child: MerchantShell(isPharmacy: isPharmacy),
+                          child: const MerchantShell(isPharmacy: isPharmacy),
                         ),
                       ),
                     ),
@@ -475,12 +456,13 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
       }
-    } on AuthException catch (e) {
-      setState(() => _error = friendlyError(e));
+    } on ANanNanApiException catch (e) {
+      setState(() => _error = e.statusCode == 401
+          ? 'Numéro ou code PIN incorrect'
+          : e.message);
     } catch (e) {
-      setState(() => _error = friendlyError(e,
-          fallback:
-              'Erreur de connexion. Vérifiez votre connexion internet et réessayez.'));
+      setState(() => _error =
+          'Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -546,16 +528,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
                   const SizedBox(height: 24),
 
-                  // Email ou téléphone
-                  const _LoginLabel(text: 'Email ou téléphone'),
+                  // Téléphone
+                  const _LoginLabel(text: 'Numéro de téléphone'),
                   const SizedBox(height: 4),
                   TextField(
-                    controller: _email,
-                    keyboardType: TextInputType.text,
+                    controller: _phone,
+                    keyboardType: TextInputType.phone,
                     decoration: InputDecoration(
-                      hintText: 'votre@email.com ou 01 02 03 04 05',
+                      hintText: '01 02 03 04 05',
                       hintStyle: const TextStyle(color: AppColors.mutedForeground),
-                      prefixIcon: const Icon(Icons.person_outline_rounded,
+                      prefixIcon: const Icon(Icons.phone_outlined,
                           color: AppColors.mutedForeground, size: 18),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16),
                           borderSide: const BorderSide(color: AppColors.border)),
@@ -569,14 +551,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 12),
 
-                  // Mot de passe
-                  const _LoginLabel(text: 'Mot de passe'),
+                  // Code PIN
+                  const _LoginLabel(text: 'Code PIN (4 chiffres)'),
                   const SizedBox(height: 4),
                   TextField(
-                    controller: _password,
+                    controller: _pin,
                     obscureText: _obscure,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
                     decoration: InputDecoration(
-                      hintText: '••••••••',
+                      hintText: '••••',
                       hintStyle: const TextStyle(color: AppColors.mutedForeground),
                       prefixIcon: const Icon(Icons.lock_outline_rounded,
                           color: AppColors.mutedForeground, size: 18),
@@ -594,6 +578,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16),
                           borderSide: const BorderSide(color: AppColors.primary, width: 2)),
                       filled: true, fillColor: AppColors.card,
+                      counterText: '',
                     ),
                   ),
 

@@ -74,8 +74,7 @@ class CategoryService {
   const CategoryService(this._api);
 
   Future<List<dynamic>> list(String merchantId) async =>
-      await _api.get('/api/v1/merchants/$merchantId/categories')
-          as List<dynamic>;
+      await _api.get('/api/v1/merchants/$merchantId/categories') as List<dynamic>;
 
   Future<Map<String, dynamic>> create(
     String merchantId, {
@@ -147,8 +146,7 @@ class OrderService {
   final ANanNanApiClient _api;
   const OrderService(this._api);
 
-  Future<List<dynamic>> listForMerchant(String merchantId,
-          {String? statusFilter}) async =>
+  Future<List<dynamic>> listForMerchant(String merchantId, {String? statusFilter}) async =>
       await _api.get('/api/v1/orders', query: {
         'merchant_id': merchantId,
         if (statusFilter != null) 'status_filter': statusFilter,
@@ -158,8 +156,7 @@ class OrderService {
       await _api.get('/api/v1/orders/$orderId') as Map<String, dynamic>;
 
   /// target_status: confirmed | preparing | ready_for_pickup | delivering | delivered | cancelled
-  Future<Map<String, dynamic>> updateStatus(
-          String orderId, String targetStatus) async =>
+  Future<Map<String, dynamic>> updateStatus(String orderId, String targetStatus) async =>
       await _api.patch('/api/v1/orders/$orderId/status',
           body: {'target_status': targetStatus}) as Map<String, dynamic>;
 }
@@ -174,8 +171,7 @@ class PublicationService {
   final ANanNanApiClient _api;
   const PublicationService(this._api);
 
-  Future<List<dynamic>> list(String merchantId,
-          {bool activeOnly = true}) async =>
+  Future<List<dynamic>> list(String merchantId, {bool activeOnly = true}) async =>
       await _api.get('/api/v1/merchants/$merchantId/publications',
           query: {'active_only': activeOnly.toString()}) as List<dynamic>;
 
@@ -193,12 +189,9 @@ class PublicationService {
         if (description != null) 'description': description,
       }) as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> toggleActive(String publicationId,
-          {bool? isActive}) async =>
+  Future<Map<String, dynamic>> toggleActive(String publicationId, {bool? isActive}) async =>
       await _api.patch('/api/v1/publications/$publicationId/toggle-active',
-              body: isActive != null ? {'is_active': isActive} : null)
-          as Map<String, dynamic>;
+          body: isActive != null ? {'is_active': isActive} : null) as Map<String, dynamic>;
 
-  Future<void> delete(String publicationId) =>
-      _api.delete('/api/v1/publications/$publicationId');
+  Future<void> delete(String publicationId) => _api.delete('/api/v1/publications/$publicationId');
 }
