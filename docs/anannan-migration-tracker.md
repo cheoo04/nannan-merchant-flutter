@@ -8,8 +8,13 @@ backend — pour ne rien reperdre entre les sessions.
 
 ## 🔴 Bloquants backend actifs
 
-Rien d'ouvert pour l'instant — les deux bugs 500 (`/auth/register`,
-`/orders`) ont été corrigés par le backend le 19/09.
+**Bloquant central, remonté le 20/09** : aucun moyen pour l'app de récupérer
+le `merchant_id` du marchand connecté après `/auth/login` (pas d'endpoint
+"mes marchands"), et flou sur qui crée la ligne `merchants` à l'approbation
+d'une candidature (`role-applications` → admin approve → ??? ). **Bloque
+Dashboard, Products, Orders, Finances** — tout écran qui a besoin de savoir
+"quel marchand suis-je" après connexion. Demande envoyée : un endpoint style
+`GET /api/v1/merchants/mine`.
 
 ## 🟡 Gaps API connus (contournés, pas bloquants)
 
@@ -24,7 +29,7 @@ Rien d'ouvert pour l'instant — les deux bugs 500 (`/auth/register`,
 
 - **Auth** : `LoginScreen` + `SignupScreen` (`main.dart`, `signup_screen.dart`) — téléphone + PIN, via `ANanNanApiClient.register/login`
 - **Candidature marchand** : `BecomeMerchantScreen` → `POST /auth/role-applications`
-- **Client API** : `lib/core/services/a_nan_nan_api_client.dart` — auth, refresh automatique sur 401, gestion erreurs
+- **Client API** : `lib/core/services/a_nan_nan_api_client.dart` — auth, refresh automatique sur 401, gestion erreurs, **upload de fichiers** (`uploadFile()`, multipart, indépendant du `merchant_id`)
 - **Services prêts à l'emploi** (`a_nan_nan_services.dart`) : `MerchantService`, `CategoryService`, `OfferingService`, `OrderService`, `PublicationService` — écrits mais pas encore branchés sur tous les écrans
 
 ## ⬜ Pas encore migré (encore sur Supabase)

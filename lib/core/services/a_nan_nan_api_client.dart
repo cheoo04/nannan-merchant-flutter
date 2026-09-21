@@ -156,6 +156,41 @@ class ANanNanApiClient {
     return _handle(res);
   }
 
+  /// Téléverse un fichier (image produit, photo de boutique, document KYC...)
+  /// via POST /api/v1/uploads (multipart/form-data). Retourne l'URL publique.
+  /// `folder` sert à ranger côté serveur (ex: 'products', 'merchants', 'documents').
+  Future<String> uploadFile({
+    required List<int> bytes,
+    required String filename,
+    String folder = 'general',
+  }) async {
+    await _loadSession();
+    if (_accessToken == null) {
+      throw const ANanNanApiException(401, 'Non connecté');
+    }
+    final uri = Uri.parse('$baseUrl/api/v1/uploads');
+    final request = http.MultipartRequest('POST', uri)
+      ..headers['Authorization'] = 'Bearer $_accessToken'
+      ..fields['folder'] = folder
+      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+
+    var streamed = await _http.send(request);
+    var res = await http.Response.fromStream(streamed);
+
+    if (res.statusCode == 401) {
+      await refreshSession();
+      final retry = http.MultipartRequest('POST', uri)
+        ..headers['Authorization'] = 'Bearer $_accessToken'
+        ..fields['folder'] = folder
+        ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+      streamed = await _http.send(retry);
+      res = await http.Response.fromStream(streamed);
+    }
+
+    final body = _handle(res) as Map<String, dynamic>;
+    return body['url'] as String;
+  }
+
   Map<String, String> _headersSync() => {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
