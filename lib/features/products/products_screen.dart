@@ -2,11 +2,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/services/a_nan_nan_api_client.dart';
+import '../../core/services/a_nan_nan_services.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/widgets/notification_bell_button.dart';
 import '../../shared/widgets/skeleton.dart';
@@ -14,9 +15,7 @@ import '../../shared/models/models.dart';
 import '../../shared/merchant_category.dart';
 import '../dashboard/dashboard_notifier.dart';
 
-SupabaseClient get _db => Supabase.instance.client;
-
-// ── Modèle produit DB ─────────────────────────────────────────────────────────
+// ── Modèle produit (adapté depuis OfferingResponse) ────────────────────────
 class DbProduct {
   final String id;
   final String merchantId;
@@ -42,18 +41,38 @@ class DbProduct {
     required this.cityCode,
   });
 
-  factory DbProduct.fromJson(Map<String, dynamic> j) => DbProduct(
-        id: j['id'] as String,
-        merchantId: j['merchant_id'] as String,
-        name: j['name'] as String,
-        description: j['description'] as String?,
-        priceXof: j['price_xof'] as int? ?? 0,
-        imageUrl: j['image_url'] as String?,
-        category: j['category'] as String,
-        isAvailable: j['is_available'] as bool? ?? true,
-        stock: j['stock'] as int?,
-        cityCode: j['city_code'] as String? ?? 'oume',
-      );
+  /// Adapté depuis OfferingResponse (nouvelle API Neon) — remplace
+  /// l'ancien DbProduct.fromJson (table `products` Supabase).
+  ///
+  /// TODO : `category` reste vide pour l'instant — OfferingResponse ne
+  /// renvoie qu'un `category_id` (UUID), pas un nom lisible. Il faudra
+  /// croiser avec CategoryService.list(merchantId) pour résoudre les noms
+  /// une fois qu'on affiche un vrai sélecteur de catégories.
+  factory DbProduct.fromOffering(Map<String, dynamic> j) {
+    final variants = (j['variants'] as List?) ?? const [];
+    final Map<String, dynamic>? defaultVariant = variants.isEmpty
+        ? null
+        : (variants.firstWhere(
+            (v) => v['is_default'] == true,
+            orElse: () => variants.first,
+          ) as Map<String, dynamic>);
+
+    final priceStr = defaultVariant?['price'] as String?;
+    final priceXof = priceStr != null ? double.parse(priceStr).round() : 0;
+
+    return DbProduct(
+      id: j['id'] as String,
+      merchantId: j['merchant_id'] as String,
+      name: j['title'] as String,
+      description: j['description'] as String?,
+      priceXof: priceXof,
+      imageUrl: j['image_url'] as String?,
+      category: '', // TODO : résoudre category_id -> nom (voir ci-dessus)
+      isAvailable: defaultVariant?['is_in_stock'] as bool? ?? true,
+      stock: defaultVariant?['stock_quantity'] as int?,
+      cityCode: 'oume', // absent du modèle Neon, conservé pour compat UI
+    );
+  }
 }
 
 // ── Notifier produits ─────────────────────────────────────────────────────────
@@ -64,61 +83,69 @@ class ProductsNotifier extends ChangeNotifier {
   // abonnement realtime : basculer depuis un écran ne mettait à jour QUE
   // cet écran, jamais les autres, sans lien de cause à effet fiable.
   final DashboardNotifier dashboardNotifier;
+  final _api = ANanNanApiClient();
+  late final _offerings = OfferingService(_api);
+
+  // TODO backend : à renseigner dès que GET /api/v1/merchants/mine (ou
+  // équivalent) existe — voir docs/anannan-migration-tracker.md. Tant que
+  // c'est null, l'écran Products affiche un état "en attente" plutôt que
+  // de planter, mais aucun appel réel ne part vers la nouvelle API.
+  String? merchantId;
 
   List<DbProduct> products = [];
   bool loadingProducts = true;
   String query = '';
   String categoryFilter = 'all';
   String availFilter = 'all'; // all | visible | hidden
-  RealtimeChannel? _channel;
   String? _productsLoadedForMerchantId;
 
   MerchantModel? get merchant => dashboardNotifier.merchant;
   bool get loadingMerchant => dashboardNotifier.loadingMerchant;
 
-  ProductsNotifier(this.dashboardNotifier) {
+  ProductsNotifier(this.dashboardNotifier, {this.merchantId}) {
     dashboardNotifier.addListener(_onMerchantChanged);
     _onMerchantChanged(); // le marchand peut déjà être chargé à cet instant
   }
 
   void _onMerchantChanged() {
-    final m = dashboardNotifier.merchant;
-    if (m != null && m.id != _productsLoadedForMerchantId) {
-      _productsLoadedForMerchantId = m.id;
-      _loadProducts();
-      _subscribeProducts();
-    }
-    // Répercute is_open/pause_until/etc. sur l'UI Produits immédiatement.
+    // NOTE : le statut ouvert/fermé/pause continue de venir de
+    // dashboardNotifier (toujours sur Supabase) — seul le catalogue
+    // (produits) est préparé ici pour la nouvelle API.
     notifyListeners();
+    if (merchantId != null && merchantId != _productsLoadedForMerchantId) {
+      _productsLoadedForMerchantId = merchantId;
+      _loadProducts();
+    }
+  }
+
+  /// À appeler dès que le merchant_id Neon est connu (voir TODO plus haut).
+  void setMerchantId(String id) {
+    if (id == merchantId) return;
+    merchantId = id;
+    _productsLoadedForMerchantId = null;
+    _onMerchantChanged();
   }
 
   Future<void> _loadProducts() async {
-    if (merchant == null) return;
-    final data = await _db
-        .from('products')
-        .select()
-        .eq('merchant_id', merchant!.id)
-        .order('created_at', ascending: false);
-    products = (data as List).map((e) => DbProduct.fromJson(e)).toList();
-    loadingProducts = false;
+    if (merchantId == null) return;
+    loadingProducts = true;
     notifyListeners();
+    try {
+      final data = await _offerings.list(merchantId!);
+      products = data
+          .cast<Map<String, dynamic>>()
+          .map(DbProduct.fromOffering)
+          .toList();
+    } catch (_) {
+      // Best-effort — laisse la liste précédente affichée plutôt que de
+      // la vider brutalement sur un pépin réseau ponctuel.
+    } finally {
+      loadingProducts = false;
+      notifyListeners();
+    }
   }
 
-  void _subscribeProducts() {
-    _channel = _db.channel('products-${merchant!.id}')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'products',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'merchant_id',
-            value: merchant!.id,
-          ),
-          callback: (_) => _loadProducts(),
-        )
-        .subscribe();
-  }
+  Future<void> refresh() => _loadProducts();
 
   /// Sous-catégories réellement utilisées par ce commerce (ex: "Antidouleur",
   /// "Vitamines"...). Indispensable dès qu'il y a beaucoup de produits — une
@@ -148,64 +175,75 @@ class ProductsNotifier extends ChangeNotifier {
   Future<void> pauseMerchant(int minutes) => dashboardNotifier.pauseMerchant(minutes);
   Future<void> resumeMerchant() => dashboardNotifier.resumeMerchant();
 
+  // TODO : pas de PATCH partiel sur une variante dans l'API actuelle —
+  // seul l'offering entier se met à jour. En attendant un endpoint dédié
+  // (PATCH /offerings/{id}/variants/{id} ?), on ne peut pas encore basculer
+  // is_in_stock seul sans renvoyer tout le reste. Flag à ajouter au backend
+  // si ça reste bloquant une fois le merchant_id débloqué.
   Future<void> toggleAvailability(DbProduct p) async {
-    await _db.from('products').update({'is_available': !p.isAvailable}).eq('id', p.id);
+    toast.error('Pas encore disponible sur la nouvelle API (en attente backend)');
   }
 
   Future<void> deleteProduct(String id) async {
-    await _db.from('products').delete().eq('id', id);
+    // TODO : pas de DELETE /offerings/{id} dans le schéma actuel — à
+    // demander au backend (ou repasser status='archived' via un futur PATCH).
+    toast.error('Pas encore disponible sur la nouvelle API (en attente backend)');
   }
 
   Future<String?> uploadImage(String path, Uint8List bytes) async {
-    if (merchant == null) return null;
-    final userId = _db.auth.currentUser!.id;
-    final filePath = '$userId/$path';
-    await _db.storage.from('products').uploadBinary(filePath, bytes,
-        fileOptions: const FileOptions(upsert: true));
-    return _db.storage.from('products').getPublicUrl(filePath);
+    try {
+      return await _api.uploadFile(bytes: bytes, filename: path, folder: 'products');
+    } on ANanNanApiException catch (e) {
+      toast.error(e.message);
+      return null;
+    }
   }
 
   Future<void> createProduct({
     required String name, String? description, required int priceXof,
     String? imageUrl, int? stock, String? category,
   }) async {
-    if (merchant == null) return;
-    final user = _db.auth.currentUser!;
-    await _db.from('products').insert({
-      'merchant_id': merchant!.id,
-      'added_by_user_id': user.id,
-      'name': name,
-      'description': description,
-      'price_xof': priceXof,
-      'image_url': imageUrl,
-      'stock': stock,
-      // Sous-catégorie choisie par le marchand ; on retombe sur la catégorie
-      // du commerce seulement si rien n'est saisi (compat. anciens flux).
-      'category': (category != null && category.trim().isNotEmpty)
-          ? category.trim()
-          : merchant!.category,
-      'city_code': merchant!.cityCode,
-    });
+    if (merchantId == null) {
+      toast.error('En attente de la nouvelle API (merchant_id pas encore disponible)');
+      return;
+    }
+    await _offerings.create(
+      merchantId!,
+      title: name,
+      slug: _slugify(name),
+      description: description,
+      price: priceXof.toDouble(),
+      stockQuantity: stock,
+      isInStock: stock == null || stock > 0,
+      imageUrl: imageUrl,
+      status: 'active',
+    );
+    await _loadProducts();
   }
 
   Future<void> updateProduct(String id, {
     required String name, String? description,
     required int priceXof, String? imageUrl, int? stock, String? category,
   }) async {
-    await _db.from('products').update({
-      'name': name,
-      'description': description,
-      'price_xof': priceXof,
-      'image_url': imageUrl,
-      'stock': stock,
-      if (category != null && category.trim().isNotEmpty) 'category': category.trim(),
-    }).eq('id', id);
+    // TODO backend : pas de PATCH /offerings/{id} dans le schéma actuel,
+    // uniquement POST (création) et GET. À demander — sans ça, modifier un
+    // produit existant est impossible depuis l'app.
+    toast.error('Modification pas encore disponible sur la nouvelle API (en attente backend)');
+  }
+
+  String _slugify(String s) {
+    final base = s.toLowerCase().trim()
+        .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
+        .replaceAll(RegExp(r'\s+'), '-');
+    // Suffixe court pour limiter les collisions de slug entre produits au
+    // nom proche — le slug doit être unique par marchand côté API.
+    final suffix = DateTime.now().millisecondsSinceEpoch.toRadixString(36).substring(6);
+    return '$base-$suffix';
   }
 
   @override
   void dispose() {
     dashboardNotifier.removeListener(_onMerchantChanged);
-    if (_channel != null) _db.removeChannel(_channel!);
     super.dispose();
   }
 }
