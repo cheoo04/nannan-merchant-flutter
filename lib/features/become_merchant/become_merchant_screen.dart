@@ -2,12 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
-import '../../core/utils/error_message.dart';
+import '../../core/services/a_nan_nan_api_client.dart';
 import '../../main.dart' show LoginScreen, MerchantShell;
 import '../../shared/merchant_category.dart';
 import '../location_picker/location_picker_screen.dart';
 
-SupabaseClient get _db => Supabase.instance.client;
+// ── Correspondance catégories app -> business_type_code backend ────────────
+// TODO backend : pas d'équivalent propre pour 'gaz' (recharge bouteilles) —
+// classé en 'service' faute de mieux. À revoir avec le backend si un code
+// dédié est ajouté à /api/v1/business-types.
+const _businessTypeCodeByCategory = {
+  'maquis': 'restaurant',
+  'boulangerie': 'boulangerie',
+  'boutique': 'epicerie',
+  'gaz': 'service',
+  'pharmacie': 'pharmacie',
+  'autre': 'service',
+};
 
 // ── Catégories marchand (miroir de MERCHANT_CATEGORIES du React) ──────────────
 const _categories = [
@@ -33,8 +44,7 @@ class BecomeMerchantScreen extends StatefulWidget {
 
 class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
   _Step _step = _Step.info;
-  bool _existingPending = false;
-  bool _existingApproved = false;
+  final bool _existingApproved = false;
   bool _submitting = false;
   bool _checkingExisting = true;
 
@@ -66,38 +76,30 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
     super.dispose();
   }
 
+  final _api = ANanNanApiClient();
+
   Future<void> _prefillFromProfile() async {
-    final user = _db.auth.currentUser;
-    if (user == null) return;
-    final profile = await _db
-        .from('users_profiles')
-        .select('name, phone, email')
-        .eq('id', user.id)
-        .maybeSingle();
-    if (profile != null && mounted) {
-      // Préremplissage automatique — miroir de useAuth().profile dans le React
-      if ((profile['name'] as String? ?? '').isNotEmpty) {
-        _name.text = profile['name'] as String;
-      }
-      if ((profile['phone'] as String? ?? '').isNotEmpty) {
-        _phone.text = profile['phone'] as String;
-      }
+    try {
+      final me = await _api.me();
+      if (!mounted) return;
+      final first = me['first_name'] as String?;
+      final last = me['last_name'] as String?;
+      final fullName = [first, last].where((s) => s != null && s.isNotEmpty).join(' ');
+      if (fullName.isNotEmpty) _name.text = fullName;
+      final phone = me['phone'] as String?;
+      if (phone != null && phone.isNotEmpty) _phone.text = phone;
+    } catch (_) {
+      // Best-effort : un échec de préremplissage n'empêche pas de continuer,
+      // le marchand retape juste ses infos.
     }
   }
 
+  // TODO backend : aucun endpoint "mes candidatures" (l'équivalent GET côté
+  // utilisateur de /api/v1/admin/role-applications) n'existe pour l'instant.
+  // Impossible de savoir si une demande est déjà en attente/approuvée avant
+  // resoumission — on part donc toujours de l'étape info en attendant.
   Future<void> _checkExisting() async {
-    final user = _db.auth.currentUser;
-    if (user == null) { setState(() => _checkingExisting = false); return; }
-    final apps = await _db.from('partner_applications')
-        .select('status')
-        .eq('user_id', user.id)
-        .eq('type', 'merchant');
-    setState(() {
-      _checkingExisting = false;
-      _existingPending = (apps as List).any((a) => a['status'] == 'pending');
-      _existingApproved = apps.any((a) => a['status'] == 'approved');
-      if (_existingPending || _existingApproved) _step = _Step.pending;
-    });
+    setState(() => _checkingExisting = false);
   }
 
   // ── Validation étape 1 ────────────────────────────────────
@@ -113,6 +115,9 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
     }
     if (_address.text.trim().isEmpty) {
       toast.error("Indiquez l'adresse du commerce"); return;
+    }
+    if (_lat == null || _lng == null) {
+      toast.error('Positionnez votre commerce sur la carte'); return;
     }
     setState(() => _step = _Step.terms);
   }
@@ -140,41 +145,31 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
   // ── Soumission finale ─────────────────────────────────────
   Future<void> _submitTerms() async {
     if (!_accepted) { toast.error('Vous devez accepter les conditions'); return; }
-    final user = _db.auth.currentUser;
-    if (user == null) { toast.error('Connectez-vous'); return; }
 
     setState(() => _submitting = true);
     try {
-      // users_profiles.name est posé par le trigger handle_new_user à
-      // l'inscription (souvent avec l'email en valeur par défaut, faute de
-      // mieux à ce moment-là). Ici, c'est la première fois qu'on a le vrai
-      // nom saisi par le marchand — on le renvoie pour corriger ça.
-      await _db.from('users_profiles').update({
-        'name': _name.text.trim(),
-        'phone': _phone.text.trim(),
-      }).eq('id', user.id);
-
-      await _db.from('partner_applications').insert({
-        'user_id': user.id,
-        'type': 'merchant',
-        'status': 'pending',
-        'payload': {
-          'name': _name.text.trim(),
-          'phone': _phone.text.trim(),
-          'city': _city.text.trim(),
-          'city_code': 'oume',
-          'address': _address.text.trim(),
-          'lat': _lat,
-          'lng': _lng,
-          'business_name': _businessName.text.trim(),
-          'category': _category,
-          'description': _description.text.trim(),
-        },
+      await _api.post('/api/v1/auth/role-applications', body: {
+        'requested_role': 'merchant',
+        'business_name': _businessName.text.trim(),
+        'business_type_code': _businessTypeCodeByCategory[_category] ?? 'service',
+        'manager_name': _name.text.trim(),
+        'manager_phone': _phone.text.trim(),
+        // "neighborhood" attend un quartier précis ; on n'a que la ville
+        // dans ce formulaire pour l'instant (toujours "Oumé" par défaut).
+        'neighborhood': _city.text.trim(),
+        'address_line': _address.text.trim(),
+        'latitude': _lat,
+        'longitude': _lng,
+        'description': _description.text.trim(),
       });
       toast.success('Demande envoyée');
-      setState(() { _step = _Step.pending; _existingPending = true; });
+      setState(() => _step = _Step.pending);
+    } on ANanNanApiException catch (e) {
+      toast.error(e.statusCode == 404
+          ? "Type d'activité non reconnu par le serveur"
+          : e.message);
     } catch (e) {
-      toast.error(friendlyError(e));
+      toast.error('Erreur de connexion. Réessayez.');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
