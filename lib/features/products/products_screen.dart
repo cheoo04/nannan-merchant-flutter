@@ -8,6 +8,7 @@ import '../../core/utils/error_message.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/services/a_nan_nan_api_client.dart';
 import '../../core/services/a_nan_nan_services.dart';
+import '../../core/services/neon_session.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/widgets/notification_bell_button.dart';
 import '../../shared/widgets/skeleton.dart';
@@ -102,7 +103,8 @@ class ProductsNotifier extends ChangeNotifier {
   MerchantModel? get merchant => dashboardNotifier.merchant;
   bool get loadingMerchant => dashboardNotifier.loadingMerchant;
 
-  ProductsNotifier(this.dashboardNotifier, {this.merchantId}) {
+  ProductsNotifier(this.dashboardNotifier, {String? merchantId})
+      : merchantId = merchantId ?? NeonSession.merchantId {
     dashboardNotifier.addListener(_onMerchantChanged);
     _onMerchantChanged(); // le marchand peut déjà être chargé à cet instant
   }

@@ -19,6 +19,8 @@ import 'features/become_merchant/become_merchant_screen.dart';
 import 'features/auth/signup_screen.dart';
 import 'core/utils/ci_phone.dart';
 import 'core/services/a_nan_nan_api_client.dart';
+import 'core/services/a_nan_nan_services.dart';
+import 'core/services/neon_session.dart';
 import 'features/notifications/notifications_notifier.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/notifications/notifications_screen.dart';
@@ -383,15 +385,14 @@ class _LoginScreenState extends State<LoginScreen> {
       final me = await _api.me();
       final userId = me['id'] as String;
 
-      // TODO backend : il n'existe pour l'instant aucun endpoint "quel(s)
-      // marchand(s) m'appartien(nen)t ?" sur la nouvelle API (contrairement
-      // à la requête Supabase ci-dessous qu'on remplace). Le rôle marchand
-      // n'est donc pas vérifiable ici pour l'instant — comportement
-      // temporaire : tout le monde passe par le formulaire de candidature,
-      // comme un compte qui n'a encore rien soumis. Corrigé dès que le
-      // backend expose cet endpoint (demandé le 19/09).
-      const role = null;
-      const isPharmacy = false;
+      // GET /api/v1/merchants/me — livré par le backend le 20/09.
+      final myMerchants = await MerchantService(_api).getMine();
+      final myMerchant = myMerchants.isNotEmpty ? myMerchants.first : null;
+      // TODO : myMerchants.length > 1 (multi-boutiques) pas géré — on ne
+      // prend que le premier pour l'instant, à traiter si le cas se présente.
+      NeonSession.setCurrentMerchant(myMerchant);
+      final role = myMerchant != null ? 'merchant' : null;
+      const isPharmacy = false; // TODO : recalculer depuis myMerchant['business_type'] une fois Dashboard migré (categoryNeedsPrescriptionFlow attend l'ancien vocabulaire Supabase, pas les codes business_type Neon)
       if (role != 'merchant') {
         // Tout compte non-marchand est redirigé vers le formulaire de
         // candidature — que la personne n'ait encore rien soumis (l'écran

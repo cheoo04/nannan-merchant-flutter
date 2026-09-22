@@ -12,6 +12,14 @@ class MerchantService {
   final ANanNanApiClient _api;
   const MerchantService(this._api);
 
+  /// GET /api/v1/merchants/me — livré par le backend le 20/09, résout le
+  /// blocage central de la migration. Retourne les marchands dont
+  /// l'utilisateur connecté est owner/staff. Vide = pas encore marchand,
+  /// un seul = cas normal, plusieurs = multi-boutiques (pas encore géré
+  /// dans l'UI — à faire quand un vrai cas se présente).
+  Future<List<Map<String, dynamic>>> getMine() async =>
+      (await _api.get('/api/v1/merchants/me') as List).cast<Map<String, dynamic>>();
+
   Future<Map<String, dynamic>> getById(String merchantId) async =>
       await _api.get('/api/v1/merchants/$merchantId') as Map<String, dynamic>;
 

@@ -8,13 +8,35 @@ backend — pour ne rien reperdre entre les sessions.
 
 ## 🔴 Bloquants backend actifs
 
-**Bloquant central, remonté le 20/09** : aucun moyen pour l'app de récupérer
-le `merchant_id` du marchand connecté après `/auth/login` (pas d'endpoint
-"mes marchands"), et flou sur qui crée la ligne `merchants` à l'approbation
-d'une candidature (`role-applications` → admin approve → ??? ). **Bloque
-Dashboard, Products, Orders, Finances** — tout écran qui a besoin de savoir
-"quel marchand suis-je" après connexion. Demande envoyée : un endpoint style
-`GET /api/v1/merchants/mine`.
+Rien d'ouvert — **le blocage central `merchant_id` est résolu** (voir ci-dessous).
+
+## 🟢 Résolu le 20/09 — `GET /api/v1/merchants/me`
+
+Le backend a livré l'endpoint demandé, très rapidement. Comportement confirmé
+par le backend :
+- Candidature (`role-applications`) approuvée par un admin → le **backend**
+  crée automatiquement la ligne `merchants` + la liaison `staff` (owner).
+  L'app n'a jamais besoin d'appeler `POST /merchants` elle-même.
+- `GET /api/v1/merchants/me` retourne la liste des marchands du user connecté
+  (vide = pas encore marchand, 1 = cas normal, plusieurs = multi-boutiques —
+  **pas géré dans l'UI pour l'instant**, on prend le premier).
+
+Câblé dans `LoginScreen._login()` (`main.dart`) : le rôle marchand est
+maintenant déterminé pour de vrai, plus de `TODO`/`null` en dur.
+`NeonSession` (`lib/core/services/neon_session.dart`) garde le
+`merchant_id` résolu en mémoire pour le reste de l'app.
+
+## ⚠️ Nouveau point d'attention — Dashboard pas migré
+
+`MerchantShell`/`DashboardNotifier` restent **100% Supabase** (session
+Supabase, table `merchants` Supabase). Un compte créé uniquement par
+téléphone+PIN (nouvelle API) n'a **aucune session Supabase** — donc un vrai
+marchand Neon qui se connecte tombe maintenant dans `MerchantShell`, mais
+rien ne garantit que Dashboard arrive à charger quoi que ce soit pour ce
+compte. **Pas testé en conditions réelles.** C'est le prochain chantier
+prioritaire : migrer `DashboardNotifier` (profil marchand, ouvert/fermé,
+pause, horaires) avant de pouvoir valider le parcours complet de bout en
+bout pour un compte 100% Neon.
 
 ## 🟡 Gaps API connus (contournés, pas bloquants)
 
