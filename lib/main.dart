@@ -26,7 +26,6 @@ import 'features/profile/profile_screen.dart';
 import 'features/notifications/notifications_screen.dart';
 import 'shared/widgets/merchant_bottom_nav.dart';
 import 'features/pin/pin_lock_gate.dart';
-import 'features/pin/pin_setup_screen.dart';
 import 'features/pin/pin_storage.dart';
 
 Future<void> main() async {
@@ -49,7 +48,7 @@ class NanNanMerchantApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'A Nan-Nan — Marchand',
+      title: 'A Nan-Nan : Espace Marchand',
       theme: AppTheme.light(),
       debugShowCheckedModeBanner: false,
       builder: (context, child) =>
@@ -59,7 +58,6 @@ class NanNanMerchantApp extends StatelessWidget {
   }
 }
 
-// ── AUTH GATE MIGREE VERS NEON ────────────────────────────────────────────────
 class _AuthGate extends StatefulWidget {
   const _AuthGate();
 
@@ -72,7 +70,6 @@ class _AuthGateState extends State<_AuthGate> {
   bool _isLoggedIn = false;
   bool _isApprovedMerchant = false;
   bool _isPharmacy = false;
-  bool _needsPinSetup = false;
   String? _userId;
 
   final _api = ANanNanApiClient();
@@ -103,12 +100,7 @@ class _AuthGateState extends State<_AuthGate> {
             final bType =
                 (myMerchant['business_type'] as String?)?.toLowerCase();
             _isPharmacy = bType == 'pharmacie' || bType == 'pharmacy';
-
-            final pinStorage = PinStorage(userId: _userId!);
-            final hasPin = await pinStorage.hasPin();
-            _needsPinSetup = !hasPin;
           } else {
-            // Boutique en cours d'examen
             _isApprovedMerchant = false;
           }
         } else {
@@ -132,7 +124,7 @@ class _AuthGateState extends State<_AuthGate> {
     // 1. Non connecté -> Login
     if (!_isLoggedIn) return const LoginScreen();
 
-    // 2. Connecté mais pas encore de boutique approuvée -> Écran d'attente
+    // 2. Connecté mais pas encore de boutique approuvée -> Écran d'attente direct
     if (!_isApprovedMerchant) {
       return BecomeMerchantScreen(
         startAtPending: true,
@@ -140,15 +132,7 @@ class _AuthGateState extends State<_AuthGate> {
       );
     }
 
-    // 3. Marchand approuvé mais PIN pas encore défini
-    if (_needsPinSetup) {
-      return PinSetupScreen(
-        userId: _userId!,
-        onDone: () => setState(() => _needsPinSetup = false),
-      );
-    }
-
-    // 4. Marchand approuvé avec PIN -> Shell Marchand sécurisé
+    // 3. Marchand approuvé -> Accès avec verrou PIN Wave
     return PinLockGate(
       userId: _userId!,
       startLocked: true,
@@ -161,7 +145,6 @@ class _AuthGateState extends State<_AuthGate> {
   }
 }
 
-// ── MERCHANT SHELL ────────────────────────────────────────────────────────────
 class MerchantShell extends StatefulWidget {
   final bool isPharmacy;
   const MerchantShell({super.key, required this.isPharmacy});
@@ -316,7 +299,6 @@ class _MerchantShellState extends State<MerchantShell> {
   }
 }
 
-// ── LOGIN SCREEN ──────────────────────────────────────────────────────────────
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -346,15 +328,20 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       final phone = CiPhone.normalize(_phone.text);
-      await _api.login(phone: phone, pin: _pin.text.trim());
+      final rawPin = _pin.text.trim();
+      await _api.login(phone: phone, pin: rawPin);
       final me = await _api.me();
       final userId = me['id'] as String;
+
+      // On synchronise directement le PIN de connexion avec le verrou local :
+      // plus jamais de question redondante pour créer un code PIN !
+      await PinStorage(userId: userId).setPin(rawPin);
 
       final myMerchants = await MerchantService(_api).getMine();
       final myMerchant = myMerchants.isNotEmpty ? myMerchants.first : null;
       final status = myMerchant?['status'] as String? ?? 'pending';
 
-      // Si pas de boutique ou boutique pas encore active -> Directement écran d'attente
+      // Pas de boutique ou boutique pas encore active -> Écran d'attente
       if (myMerchant == null || status != 'active') {
         if (mounted) {
           Navigator.of(context).pushReplacement(
@@ -371,49 +358,23 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // Boutique validée -> Accès complet
+      // Boutique approuvée -> Dashboard
       NeonSession.setCurrentMerchant(myMerchant);
       final bType = (myMerchant['business_type'] as String?)?.toLowerCase();
       final isPharmacy = bType == 'pharmacie' || bType == 'pharmacy';
 
       if (mounted) {
-        final pinStorage = PinStorage(userId: userId);
-        var hasPin = await pinStorage.hasPin();
-        if (!hasPin) {
-          hasPin = await pinStorage.restoreFromRemote();
-        }
-        if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (routeContext) => hasPin
-                ? PinLockGate(
-                    userId: userId,
-                    startLocked: false,
-                    onForgotPin: () =>
-                        Navigator.of(routeContext).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                      (_) => false,
-                    ),
-                    child: MerchantShell(isPharmacy: isPharmacy),
-                  )
-                : PinSetupScreen(
-                    userId: userId,
-                    onDone: () => Navigator.of(routeContext).pushReplacement(
-                      MaterialPageRoute(
-                        builder: (innerContext) => PinLockGate(
-                          userId: userId,
-                          startLocked: false,
-                          onForgotPin: () =>
-                              Navigator.of(innerContext).pushAndRemoveUntil(
-                            MaterialPageRoute(
-                                builder: (_) => const LoginScreen()),
-                            (_) => false,
-                          ),
-                          child: MerchantShell(isPharmacy: isPharmacy),
-                        ),
-                      ),
-                    ),
-                  ),
+            builder: (routeContext) => PinLockGate(
+              userId: userId,
+              startLocked: false,
+              onForgotPin: () => Navigator.of(routeContext).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (_) => false,
+              ),
+              child: MerchantShell(isPharmacy: isPharmacy),
+            ),
           ),
         );
       }

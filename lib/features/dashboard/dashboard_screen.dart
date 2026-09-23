@@ -1,3 +1,4 @@
+// --- Fichier : lib/features/dashboard/dashboard_screen.dart ---
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -14,11 +15,7 @@ import '../../shared/merchant_category.dart';
 import 'dashboard_notifier.dart';
 
 class DashboardScreen extends StatefulWidget {
-  /// Notifier partagé, levé au niveau du shell (même schéma que
-  /// NotificationsNotifier) — permet à MerchantProfileScreen de lire les
-  /// mêmes stats sans refaire de requête DB.
   final DashboardNotifier notifier;
-  /// Callbacks de navigation vers les autres onglets
   final VoidCallback onGoToOrders;
   final VoidCallback onGoToProducts;
   final VoidCallback onGoToFinance;
@@ -67,16 +64,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
-    // Ne PAS appeler _notifier.dispose() ici — il est partagé et possédé
-    // par _MerchantShellState, qui s'occupe de sa disposal (même règle
-    // que _notifications).
     _notifier.removeListener(_onUpdate);
     super.dispose();
   }
 
-  // ── Toggle ouvert/fermé ───────────────────────────────────
   Future<void> _handleToggle() async {
-    // Lire AVANT le toggle (même logique que le React: !merchant.is_open)
     final wasOpen = _notifier.merchant?.isOpen ?? false;
     await _notifier.toggleOpen();
     if (!mounted) return;
@@ -85,7 +77,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Insets pour safe area
     final top = MediaQuery.of(context).padding.top;
 
     return Scaffold(
@@ -95,209 +86,167 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (context, _) {
           final merchant = _notifier.merchant;
           final isOpen = merchant?.isOpen ?? false;
-          final statusLabel = merchant?.statusLabel.label ?? '—';
+          final statusLabel = merchant?.statusLabel.label ?? 'Fermé';
           final merchantName = merchant?.name ?? 'Mon commerce';
           final hasData = _notifier.totalCount > 0;
 
           return RefreshIndicator(
             onRefresh: _notifier.refresh,
             child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              // ── HEADER GRADIENT ────────────────────────────
-              SliverToBoxAdapter(
-                child: _GradientHeader(
-                  topPadding: top,
-                  merchantName: merchantName,
-                  isOpen: isOpen,
-                  statusLabel: statusLabel,
-                  pendingCount: _notifier.pendingCount,
-                  unreadCount: widget.unreadCount,
-                  cityCode: merchant?.cityCode ?? 'oume',
-                  revenueDay: _notifier.revenueDay,
-                  totalCount: _notifier.totalCount,
-                  pendingCountKpi: _notifier.pendingCount,
-                  deliveredCount: _notifier.deliveredCount,
-                  onToggle: _handleToggle,
-                  onNotifications: widget.onGoToNotifications,
-                  onProfile: widget.onGoToProfile,
-                ),
-              ),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 20)),
-
-              // ── PHOTO DU COMMERCE ──────────────────────────
-              if (merchant != null)
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _ShopImagePicker(
-                      imageUrl: merchant.imageUrl,
-                      onPick: (file) => _notifier.uploadShopImage(file),
+                  child: _GradientHeader(
+                    topPadding: top,
+                    merchantName: merchantName,
+                    isOpen: isOpen,
+                    statusLabel: statusLabel,
+                    pendingCount: _notifier.pendingCount,
+                    unreadCount: widget.unreadCount,
+                    cityCode: merchant?.cityCode ?? 'oume',
+                    revenueDay: _notifier.revenueDay,
+                    totalCount: _notifier.totalCount,
+                    pendingCountKpi: _notifier.pendingCount,
+                    deliveredCount: _notifier.deliveredCount,
+                    onToggle: _handleToggle,
+                    onNotifications: widget.onGoToNotifications,
+                    onProfile: widget.onGoToProfile,
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                if (merchant != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: _ShopImagePicker(
+                        imageUrl: merchant.imageUrl,
+                        onPick: (file) => _notifier.uploadShopImage(file),
+                      ),
                     ),
                   ),
-                ),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 20)),
-
-              // ── LOADING ────────────────────────────────────
-              if (_notifier.loadingOrders)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: SkeletonList(count: 3),
+                const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                if (_notifier.loadingOrders)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: SkeletonList(count: 3),
+                    ),
                   ),
-                ),
-
-              // ── ÉTAT VIDE ──────────────────────────────────
-              if (!_notifier.loadingOrders && !hasData)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _EmptyOrdersCard(),
+                if (!_notifier.loadingOrders && !hasData)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: _EmptyOrdersCard(),
+                    ),
                   ),
-                ),
-
-              // ── NAV CARDS (Commandes / Produits / Finances) ─
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _NavCard(
-                          icon: Icons.receipt_long_rounded,
-                          label: 'Commandes',
-                          hint: '${_notifier.pendingCount} new',
-                          onTap: widget.onGoToOrders,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _NavCard(
-                          icon: Icons.inventory_2_rounded,
-                          label: 'Produits',
-                          hint: 'Catalogue',
-                          onTap: widget.onGoToProducts,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _NavCard(
-                          icon: Icons.bar_chart_rounded,
-                          label: 'Finances',
-                          hint: 'Tendances',
-                          onTap: widget.onGoToFinance,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 8)),
-
-              // ── ACTIONS SECONDAIRES (Publications toujours, Ordonnances
-              // uniquement pour les pharmacies) — pas d'onglet fixe pour ces
-              // usages occasionnels ou spécifiques à un métier.
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _NavCard(
-                          icon: Icons.collections_rounded,
-                          label: 'Publications',
-                          hint: 'Stories',
-                          onTap: widget.onGoToStories,
-                        ),
-                      ),
-                      if (_isPharmacy) ...[
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _NavCard(
-                            icon: Icons.medication_rounded,
-                            label: 'Ordonnances',
-                            hint: 'À traiter',
-                            onTap: widget.onGoToPrescriptions,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
-              // ── REVENUS JOUR / SEMAINE / MOIS ──────────────
-              if (hasData)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Row(
                       children: [
                         Expanded(
-                          child: _RevCard(
-                            label: 'Jour',
-                            value: _notifier.revenueDay,
+                          child: _NavCard(
+                            icon: Icons.receipt_long_rounded,
+                            label: 'Commandes',
+                            hint: '${_notifier.pendingCount} nouvelles',
+                            onTap: widget.onGoToOrders,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: _RevCard(
-                            label: 'Semaine',
-                            value: _notifier.revenueWeek,
+                          child: _NavCard(
+                            icon: Icons.inventory_2_rounded,
+                            label: 'Produits',
+                            hint: 'Catalogue',
+                            onTap: widget.onGoToProducts,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: _RevCard(
-                            label: 'Mois',
-                            value: _notifier.revenueMonth,
+                          child: _NavCard(
+                            icon: Icons.bar_chart_rounded,
+                            label: 'Finances',
+                            hint: 'Tendances',
+                            onTap: widget.onGoToFinance,
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 20)),
-
-              // ── ALERTES ────────────────────────────────────
-              if (_notifier.alerts.isNotEmpty)
+                const SliverToBoxAdapter(child: SizedBox(height: 8)),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _AlertsSection(
-                      alerts: _notifier.alerts,
-                      onTap: widget.onGoToNotifications,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _NavCard(
+                            icon: Icons.collections_rounded,
+                            label: 'Publications',
+                            hint: 'Stories',
+                            onTap: widget.onGoToStories,
+                          ),
+                        ),
+                        if (_isPharmacy) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _NavCard(
+                              icon: Icons.medication_rounded,
+                              label: 'Ordonnances',
+                              hint: 'À traiter',
+                              onTap: widget.onGoToPrescriptions,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
-              // ── INSCRIRE UN NOUVEAU COMMERCE ───────────────
-              // Masqué si un commerce est déjà chargé : cliquer dessus ne
-              // mène nulle part pour ce cas — _checkExisting() dans
-              // become_merchant_screen.dart bloque sur toute demande déjà
-              // approuvée pour cet utilisateur, peu importe le commerce visé.
-              // Vrai multi-commerce = décision produit à part, pas encore prise.
-              if (_notifier.merchant == null)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _RegisterMerchantCard(
-                      onTap: widget.onGoToBecomesMerchant,
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                if (hasData)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _RevCard(
+                              label: 'Jour',
+                              value: _notifier.revenueDay,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _RevCard(
+                              label: 'Semaine',
+                              value: _notifier.revenueWeek,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _RevCard(
+                              label: 'Mois',
+                              value: _notifier.revenueMonth,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-
-              // Espace pour la bottom nav
-              const SliverToBoxAdapter(child: SizedBox(height: 100)),
-            ],
+                const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                if (_notifier.alerts.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: _AlertsSection(
+                        alerts: _notifier.alerts,
+                        onTap: widget.onGoToNotifications,
+                      ),
+                    ),
+                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ],
             ),
           );
         },
@@ -312,7 +261,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 // ── HEADER GRADIENT ─────────────────────────────────────────────────────────
-
 class _GradientHeader extends StatelessWidget {
   final double topPadding;
   final String merchantName;
@@ -360,7 +308,6 @@ class _GradientHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row : ville + notifications
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
@@ -369,22 +316,22 @@ class _GradientHeader extends StatelessWidget {
               GestureDetector(
                 onTap: onProfile,
                 child: Container(
-                  width: 40, height: 40,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.person_rounded, color: Colors.white, size: 20),
+                  child: const Icon(Icons.person_rounded,
+                      color: Colors.white, size: 20),
                 ),
               ),
               const SizedBox(width: 8),
-              NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications),
+              NotificationBellButton(
+                  unreadCount: unreadCount, onTap: onNotifications),
             ],
           ),
-
           const SizedBox(height: 12),
-
-          // Sous-titre
           const Text(
             'Espace marchand',
             style: TextStyle(
@@ -394,10 +341,7 @@ class _GradientHeader extends StatelessWidget {
               letterSpacing: 0.3,
             ),
           ),
-
           const SizedBox(height: 2),
-
-          // Nom du commerce (Sora Bold)
           Text(
             merchantName,
             style: const TextStyle(
@@ -408,18 +352,15 @@ class _GradientHeader extends StatelessWidget {
               fontFamily: 'Sora',
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // Toggle Ouvert / Fermé
           GestureDetector(
             onTap: onToggle,
             child: Container(
-              // touch target 44pt
               constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
               alignment: Alignment.centerLeft,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: isOpen ? AppColors.success : AppColors.headerOverlay,
                   borderRadius: BorderRadius.circular(999),
@@ -437,7 +378,7 @@ class _GradientHeader extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      '$statusLabel · toucher pour changer',
+                      '$statusLabel : toucher pour changer',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,
@@ -449,10 +390,7 @@ class _GradientHeader extends StatelessWidget {
               ),
             ),
           ),
-
           const SizedBox(height: 16),
-
-          // KPIs 2×2
           Row(
             children: [
               Expanded(
@@ -486,15 +424,13 @@ class _GradientHeader extends StatelessWidget {
   }
 }
 
-// ── PETITS WIDGETS ───────────────────────────────────────────────────────────
-
-/// KPI card dans le header gradient
 class _KpiCard extends StatelessWidget {
   final String label;
   final String value;
   final bool small;
 
-  const _KpiCard({required this.label, required this.value, this.small = false});
+  const _KpiCard(
+      {required this.label, required this.value, this.small = false});
 
   @override
   Widget build(BuildContext context) {
@@ -532,7 +468,6 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-/// Navigation card (Commandes / Produits / Finances)
 class _NavCard extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -556,8 +491,10 @@ class _NavCard extends StatelessWidget {
           color: AppColors.card,
           borderRadius: BorderRadius.circular(16),
           boxShadow: const [
-            BoxShadow(color: Color(0x0A000000), blurRadius: 2, offset: Offset(0, 1)),
-            BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+            BoxShadow(
+                color: Color(0x0A000000), blurRadius: 2, offset: Offset(0, 1)),
+            BoxShadow(
+                color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
           ],
         ),
         child: Column(
@@ -595,7 +532,6 @@ class _NavCard extends StatelessWidget {
   }
 }
 
-/// Carte revenu Jour/Semaine/Mois
 class _RevCard extends StatelessWidget {
   final String label;
   final int value;
@@ -610,8 +546,10 @@ class _RevCard extends StatelessWidget {
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
-          BoxShadow(color: Color(0x0A000000), blurRadius: 2, offset: Offset(0, 1)),
-          BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+          BoxShadow(
+              color: Color(0x0A000000), blurRadius: 2, offset: Offset(0, 1)),
+          BoxShadow(
+              color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -642,7 +580,6 @@ class _RevCard extends StatelessWidget {
   }
 }
 
-/// État vide commandes
 class _EmptyOrdersCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -655,28 +592,21 @@ class _EmptyOrdersCard extends StatelessWidget {
       ),
       child: const Column(
         children: [
-          Icon(
-            Icons.access_time_rounded,
-            size: 24,
-            color: AppColors.mutedForeground,
-          ),
+          Icon(Icons.access_time_rounded,
+              size: 24, color: AppColors.mutedForeground),
           SizedBox(height: 8),
           Text(
             'Aucune commande pour le moment',
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.foreground,
-            ),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.foreground),
             textAlign: TextAlign.center,
           ),
           SizedBox(height: 4),
           Text(
             "Dès qu'un client commandera, vous le verrez apparaître ici.",
-            style: TextStyle(
-              fontSize: 11,
-              color: AppColors.mutedForeground,
-            ),
+            style: TextStyle(fontSize: 11, color: AppColors.mutedForeground),
             textAlign: TextAlign.center,
           ),
         ],
@@ -685,7 +615,6 @@ class _EmptyOrdersCard extends StatelessWidget {
   }
 }
 
-/// Section alertes
 class _AlertsSection extends StatelessWidget {
   final List<({String id, String title, String body})> alerts;
   final VoidCallback onTap;
@@ -700,11 +629,10 @@ class _AlertsSection extends StatelessWidget {
         const Text(
           'Notifications importantes',
           style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Sora',
-            color: AppColors.foreground,
-          ),
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Sora',
+              color: AppColors.foreground),
         ),
         const SizedBox(height: 8),
         ...alerts.map(
@@ -719,7 +647,10 @@ class _AlertsSection extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: const [
                     BoxShadow(color: Color(0x0A000000), blurRadius: 2),
-                    BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+                    BoxShadow(
+                        color: Color(0x0F000000),
+                        blurRadius: 16,
+                        offset: Offset(0, 4)),
                   ],
                 ),
                 child: Row(
@@ -731,11 +662,8 @@ class _AlertsSection extends StatelessWidget {
                         color: AppColors.warmSoft,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(
-                        Icons.notifications_rounded,
-                        color: AppColors.warm,
-                        size: 16,
-                      ),
+                      child: const Icon(Icons.notifications_rounded,
+                          color: AppColors.warm, size: 16),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -747,29 +675,23 @@ class _AlertsSection extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.foreground,
-                            ),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.foreground),
                           ),
                           Text(
                             a.body,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.mutedForeground,
-                            ),
+                                fontSize: 11, color: AppColors.mutedForeground),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      color: AppColors.mutedForeground,
-                      size: 16,
-                    ),
+                    const Icon(Icons.chevron_right_rounded,
+                        color: AppColors.mutedForeground, size: 16),
                   ],
                 ),
               ),
@@ -781,74 +703,6 @@ class _AlertsSection extends StatelessWidget {
   }
 }
 
-/// Bouton "Inscrire un nouveau commerce"
-class _RegisterMerchantCard extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _RegisterMerchantCard({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border, width: 0.5),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppColors.secondary,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.add_rounded,
-                color: AppColors.foreground,
-                size: 16,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Inscrire un nouveau commerce',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.foreground,
-                    ),
-                  ),
-                  Text(
-                    "Avec ou sans aide d'un livreur sur le terrain",
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: AppColors.mutedForeground,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.mutedForeground,
-              size: 16,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Sélecteur de photo du commerce
 class _ShopImagePicker extends StatefulWidget {
   final String? imageUrl;
   final Future<String?> Function(File file) onPick;
@@ -901,34 +755,28 @@ class _ShopImagePickerState extends State<_ShopImagePicker> {
               image: imageUrl != null
                   ? DecorationImage(
                       image: CachedNetworkImageProvider(imageUrl),
-                      fit: BoxFit.cover,
-                    )
+                      fit: BoxFit.cover)
                   : null,
             ),
             child: _uploading
                 ? const Center(
                     child: SizedBox(
-                      width: 22, height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2)))
                 : imageUrl == null
                     ? const Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.add_photo_alternate_rounded,
-                            color: AppColors.mutedForeground,
-                            size: 28,
-                          ),
+                          Icon(Icons.add_photo_alternate_rounded,
+                              color: AppColors.mutedForeground, size: 28),
                           SizedBox(height: 4),
                           Text(
                             'Photo de mon commerce',
                             style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.mutedForeground,
-                              fontWeight: FontWeight.w600,
-                            ),
+                                fontSize: 12,
+                                color: AppColors.mutedForeground,
+                                fontWeight: FontWeight.w600),
                           ),
                         ],
                       )

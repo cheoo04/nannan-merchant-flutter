@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/formatters.dart';
@@ -19,7 +18,6 @@ const String _supportPhoneDial = '+2250565074868';
 const String _supportPhoneWa = '2250565074868';
 const String _supportEmail = 'support@nannan.ci';
 
-// ── Modèle profil léger ────────────────────────────────────────────────────────
 class _ProfileData {
   final String name;
   final String email;
@@ -107,8 +105,7 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => _EditProfileSheet(
         initialName: _profile?.name ?? '',
         initialPhone: _profile?.phone ?? '',
@@ -135,30 +132,21 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Déconnexion',
-          style: TextStyle(fontFamily: 'Sora', fontWeight: FontWeight.w700),
-        ),
+        title: const Text('Déconnexion',
+            style: TextStyle(fontFamily: 'Sora', fontWeight: FontWeight.w700)),
         content: const Text(
-          'Êtes-vous sûr de vouloir vous déconnecter de votre espace marchand ?',
-        ),
+            'Êtes-vous sûr de vouloir vous déconnecter de votre espace marchand ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Annuler',
-              style: TextStyle(color: AppColors.mutedForeground),
-            ),
+            child: const Text('Annuler',
+                style: TextStyle(color: AppColors.mutedForeground)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Se déconnecter',
-              style: TextStyle(
-                color: AppColors.destructive,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            child: const Text('Se déconnecter',
+                style: TextStyle(
+                    color: AppColors.destructive, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -179,11 +167,8 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
   }
 
   static String _initials(String name) {
-    final parts = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((p) => p.isNotEmpty)
-        .toList();
+    final parts =
+        name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     if (parts.isEmpty) return 'NN';
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
@@ -206,7 +191,6 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
       body: ListView(
         padding: EdgeInsets.zero,
         children: [
-          // ── Header card ───────────────────────────────────────────────────
           Container(
             decoration: const BoxDecoration(
               color: AppColors.card,
@@ -214,10 +198,9 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
               boxShadow: [
                 BoxShadow(color: Color(0x0A000000), blurRadius: 2),
                 BoxShadow(
-                  color: Color(0x0F000000),
-                  blurRadius: 16,
-                  offset: Offset(0, 4),
-                ),
+                    color: Color(0x0F000000),
+                    blurRadius: 16,
+                    offset: Offset(0, 4)),
               ],
             ),
             padding: EdgeInsets.fromLTRB(20, top + 12, 20, 24),
@@ -237,10 +220,9 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Color(0x14000000),
-                              blurRadius: 6,
-                              offset: Offset(0, 2),
-                            ),
+                                color: Color(0x14000000),
+                                blurRadius: 6,
+                                offset: Offset(0, 2)),
                           ],
                         ),
                         child: const Icon(Icons.arrow_back_rounded, size: 20),
@@ -250,15 +232,12 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                     const Expanded(
                       child: Padding(
                         padding: EdgeInsets.only(top: 8),
-                        child: Text(
-                          'Profil',
-                          style: TextStyle(
-                            fontFamily: 'Sora',
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.foreground,
-                          ),
-                        ),
+                        child: Text('Profil',
+                            style: TextStyle(
+                                fontFamily: 'Sora',
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.foreground)),
                       ),
                     ),
                   ],
@@ -277,11 +256,10 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                       child: Text(
                         _initials(name),
                         style: const TextStyle(
-                          fontFamily: 'Sora',
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
+                            fontFamily: 'Sora',
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white),
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -289,52 +267,38 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              fontFamily: 'Sora',
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.foreground,
-                            ),
-                          ),
+                          Text(name,
+                              style: const TextStyle(
+                                  fontFamily: 'Sora',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.foreground)),
                           const SizedBox(height: 2),
                           if (email.isNotEmpty)
-                            Text(
-                              email,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.mutedForeground,
-                              ),
-                            ),
+                            Text(email,
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.mutedForeground)),
                           if (phone.isNotEmpty)
-                            Text(
-                              phone,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.mutedForeground,
-                              ),
-                            ),
+                            Text(phone,
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.mutedForeground)),
                         ],
                       ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: AppColors.primarySoft,
                         borderRadius: BorderRadius.circular(999),
                       ),
-                      child: const Text(
-                        'Marchand',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
-                      ),
+                      child: const Text('Marchand',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary)),
                     ),
                     const SizedBox(width: 6),
                     GestureDetector(
@@ -346,11 +310,8 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                           color: AppColors.secondary,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
-                          Icons.edit_rounded,
-                          size: 16,
-                          color: AppColors.mutedForeground,
-                        ),
+                        child: const Icon(Icons.edit_rounded,
+                            size: 16, color: AppColors.mutedForeground),
                       ),
                     ),
                   ],
@@ -358,49 +319,34 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
               ],
             ),
           ),
-
           const SizedBox(height: 20),
-
-          // ── Quick stats ───────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
                 Expanded(
-                  child: _Stat(
-                    label: 'Livrées',
-                    value: '${widget.notifier.deliveredCount}',
-                  ),
-                ),
+                    child: _Stat(
+                        label: 'Livrées',
+                        value: '${widget.notifier.deliveredCount}')),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _Stat(
-                    label: 'En attente',
-                    value: '${widget.notifier.activeCount}',
-                  ),
-                ),
+                    child: _Stat(
+                        label: 'En attente',
+                        value: '${widget.notifier.activeCount}')),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _Stat(
-                    label: 'CA total',
-                    value: formatXOF(widget.notifier.revenueTotal),
-                  ),
-                ),
+                    child: _Stat(
+                        label: 'CA total',
+                        value: formatXOF(widget.notifier.revenueTotal))),
               ],
             ),
           ),
-
           const SizedBox(height: 20),
-
-          // ── Horaires + Position boutique ──────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: _ShopScheduleAndLocationCard(notifier: widget.notifier),
           ),
-
           const SizedBox(height: 20),
-
-          // ── Lignes menu ───────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
@@ -417,7 +363,6 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                   ),
                 if (widget.onGoToNotifications != null)
                   const SizedBox(height: 8),
-
                 _ProfileRow(
                   icon: Icons.help_outline_rounded,
                   title: 'Aide & support',
@@ -425,7 +370,6 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                   onTap: () => _showSupport(context),
                 ),
                 const SizedBox(height: 8),
-
                 _ProfileRow(
                   icon: Icons.info_outline_rounded,
                   title: 'À propos',
@@ -433,7 +377,6 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                   onTap: () => _showAbout(context),
                 ),
                 const SizedBox(height: 24),
-
                 SizedBox(
                   width: double.infinity,
                   height: 52,
@@ -442,42 +385,32 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       side: BorderSide(
-                        color: AppColors.destructive.withValues(alpha: 0.35),
-                        width: 2,
-                      ),
+                          color: AppColors.destructive.withValues(alpha: 0.35),
+                          width: 2),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                          borderRadius: BorderRadius.circular(16)),
                     ),
                     icon: _signingOut
                         ? const SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.destructive,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.logout_rounded,
-                            size: 18,
-                            color: AppColors.destructive,
-                          ),
+                                strokeWidth: 2, color: AppColors.destructive))
+                        : const Icon(Icons.logout_rounded,
+                            size: 18, color: AppColors.destructive),
                     label: Text(
                       _signingOut ? 'Déconnexion...' : 'Se déconnecter',
                       style: const TextStyle(
-                        fontFamily: 'Sora',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.destructive,
-                      ),
+                          fontFamily: 'Sora',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.destructive),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-
           const SizedBox(height: 24),
           const _AppFooter(),
           const SizedBox(height: 32),
@@ -497,33 +430,24 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => Padding(
         padding: EdgeInsets.fromLTRB(
-          24,
-          24,
-          24,
-          24 + MediaQuery.of(context).padding.bottom,
-        ),
+            24, 24, 24, 24 + MediaQuery.of(context).padding.bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Aide & support',
-              style: TextStyle(
-                fontFamily: 'Sora',
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            const Text('Aide & support',
+                style: TextStyle(
+                    fontFamily: 'Sora',
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             const Text(
-              'Pour toute question ou problème avec votre espace marchand, '
-              'contactez l\'équipe Nan-Nan :',
-              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
-            ),
+                'Pour toute question ou problème avec votre espace marchand, contactez l\'équipe Nan-Nan :',
+                style:
+                    TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
             const SizedBox(height: 16),
             Row(
               children: [
@@ -541,9 +465,8 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
                     onPressed: () =>
                         _launch(Uri.parse('https://wa.me/$_supportPhoneWa')),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.success,
-                      side: const BorderSide(color: AppColors.success),
-                    ),
+                        foregroundColor: AppColors.success,
+                        side: const BorderSide(color: AppColors.success)),
                     icon: const Icon(Icons.chat_rounded, size: 18),
                     label: const Text('WhatsApp'),
                   ),
@@ -551,33 +474,24 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            const Text(
-              '📞 $_supportPhoneDisplay',
-              style: TextStyle(fontSize: 13),
-            ),
+            const Text('📞 $_supportPhoneDisplay',
+                style: TextStyle(fontSize: 13)),
             const SizedBox(height: 4),
             InkWell(
               onTap: () => _launch(Uri.parse('mailto:$_supportEmail')),
-              child: const Text(
-                '✉️ $_supportEmail',
-                style: TextStyle(fontSize: 13),
-              ),
+              child: const Text('✉️ $_supportEmail',
+                  style: TextStyle(fontSize: 13)),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Questions fréquentes',
-              style: TextStyle(
-                fontFamily: 'Sora',
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            const Text('Questions fréquentes',
+                style: TextStyle(
+                    fontFamily: 'Sora',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             const _FaqItem(
               q: 'Comment recevoir une nouvelle commande ?',
-              a:
-                  'Vous êtes notifié dès qu\'un client commande. Acceptez-la '
-                  'avec le code affiché avant que le livreur ne passe.',
+              a: 'Vous êtes notifié dès qu\'un client commande. Acceptez-la avec le code affiché avant que le livreur ne passe.',
             ),
             const _FaqItem(
               q: 'Le livreur n\'est pas encore passé ?',
@@ -585,9 +499,7 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
             ),
             const _FaqItem(
               q: 'Comment mettre ma boutique en pause ?',
-              a:
-                  'Depuis le tableau de bord, utilisez le bouton Ouvert/Fermé '
-                  'en haut de l\'écran.',
+              a: 'Depuis le tableau de bord, utilisez le bouton Ouvert/Fermé en haut de l\'écran.',
             ),
             const SizedBox(height: 12),
           ],
@@ -600,36 +512,28 @@ class _MerchantProfileScreenState extends State<MerchantProfileScreen> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => const Padding(
         padding: EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'À propos',
-              style: TextStyle(
-                fontFamily: 'Sora',
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            Text('À propos',
+                style: TextStyle(
+                    fontFamily: 'Sora',
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700)),
             SizedBox(height: 16),
-            Text(
-              'A Nan-Nan Livraison',
-              style: TextStyle(
-                fontFamily: 'Sora',
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            Text('A Nan-Nan Livraison',
+                style: TextStyle(
+                    fontFamily: 'Sora',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700)),
             SizedBox(height: 4),
-            Text(
-              'Marketplace locale de livraison\nOumé, Côte d\'Ivoire · v1.0',
-              style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
-            ),
+            Text('Marketplace locale de livraison\nOumé, Côte d\'Ivoire · v1.0',
+                style:
+                    TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
             SizedBox(height: 24),
           ],
         ),
@@ -662,31 +566,20 @@ class _FaqItemState extends State<_FaqItem> {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    widget.q,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  child: Text(widget.q,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
                 ),
-                Icon(
-                  _open ? Icons.remove_rounded : Icons.add_rounded,
-                  size: 18,
-                  color: AppColors.mutedForeground,
-                ),
+                Icon(_open ? Icons.remove_rounded : Icons.add_rounded,
+                    size: 18, color: AppColors.mutedForeground),
               ],
             ),
             if (_open)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  widget.a,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.mutedForeground,
-                  ),
-                ),
+                child: Text(widget.a,
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.mutedForeground)),
               ),
           ],
         ),
@@ -754,26 +647,19 @@ class _ShopScheduleAndLocationCardState
         borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x0F000000),
-            blurRadius: 16,
-            offset: Offset(0, 4),
-          ),
+              color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4))
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'PARAMÈTRES DE LA BOUTIQUE',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: AppColors.mutedForeground,
-              letterSpacing: 0.8,
-            ),
-          ),
+          const Text('PARAMÈTRES DE LA BOUTIQUE',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.mutedForeground,
+                  letterSpacing: 0.8)),
           const SizedBox(height: 12),
-
           GestureDetector(
             onTap: () => setState(() => _showSched = !_showSched),
             child: Container(
@@ -785,55 +671,40 @@ class _ShopScheduleAndLocationCardState
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.access_time_rounded,
-                    size: 14,
-                    color: AppColors.foreground,
-                  ),
+                  const Icon(Icons.access_time_rounded,
+                      size: 14, color: AppColors.foreground),
                   const SizedBox(width: 8),
                   const Expanded(
-                    child: Text(
-                      'Horaires automatiques',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    child: Text('Horaires automatiques',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w700)),
                   ),
                   Text(
                     m.autoScheduleEnabled
-                        ? '${m.openingTime ?? '?'} → ${m.closingTime ?? '?'}'
+                        ? '${m.openingTime ?? "?"} -> ${m.closingTime ?? "?"}'
                         : 'Désactivés',
                     style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.mutedForeground,
-                    ),
+                        fontSize: 11, color: AppColors.mutedForeground),
                   ),
                 ],
               ),
             ),
           ),
-
           if (_showSched) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(12),
-              ),
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(12)),
               child: Column(
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Activer la planification',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.foreground,
-                        ),
-                      ),
+                      const Text('Activer la planification',
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.foreground)),
                       Switch(
                         value: _schedEnabled,
                         onChanged: (v) => setState(() => _schedEnabled = v),
@@ -846,18 +717,16 @@ class _ShopScheduleAndLocationCardState
                     children: [
                       Expanded(
                         child: _TimeField(
-                          label: 'Ouverture',
-                          value: _opening,
-                          onChanged: (v) => setState(() => _opening = v),
-                        ),
+                            label: 'Ouverture',
+                            value: _opening,
+                            onChanged: (v) => setState(() => _opening = v)),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: _TimeField(
-                          label: 'Fermeture',
-                          value: _closing,
-                          onChanged: (v) => setState(() => _closing = v),
-                        ),
+                            label: 'Fermeture',
+                            value: _closing,
+                            onChanged: (v) => setState(() => _closing = v)),
                       ),
                     ],
                   ),
@@ -868,10 +737,9 @@ class _ShopScheduleAndLocationCardState
                       onPressed: () async {
                         try {
                           await widget.notifier.saveSchedule(
-                            enabled: _schedEnabled,
-                            opening: _opening,
-                            closing: _closing,
-                          );
+                              enabled: _schedEnabled,
+                              opening: _opening,
+                              closing: _closing);
                           setState(() => _showSched = false);
                           toast.success('Horaires enregistrés');
                         } catch (e) {
@@ -879,45 +747,34 @@ class _ShopScheduleAndLocationCardState
                         }
                       },
                       style: ElevatedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                      child: const Text(
-                        'Enregistrer les horaires',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999))),
+                      child: const Text('Enregistrer les horaires',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w700)),
                     ),
                   ),
                 ],
               ),
             ),
           ],
-
           const SizedBox(height: 12),
-
           GestureDetector(
             onTap: () async {
-              final result = await Navigator.of(context)
-                  .push<LocationPickResult>(
-                    MaterialPageRoute(
-                      builder: (_) => LocationPickerScreen(
-                        initialLat: m.lat,
-                        initialLng: m.lng,
-                        initialAddress: m.address,
-                      ),
-                    ),
-                  );
+              final result =
+                  await Navigator.of(context).push<LocationPickResult>(
+                MaterialPageRoute(
+                  builder: (_) => LocationPickerScreen(
+                    initialLat: m.lat,
+                    initialLng: m.lng,
+                    initialAddress: m.address,
+                  ),
+                ),
+              );
               if (result == null) return;
               try {
                 await widget.notifier.updateLocation(
-                  lat: result.lat,
-                  lng: result.lng,
-                  address: result.address,
-                );
+                    lat: result.lat, lng: result.lng, address: result.address);
                 if (mounted) toast.success('Position mise à jour');
               } catch (e) {
                 if (mounted) toast.error(friendlyError(e));
@@ -933,31 +790,22 @@ class _ShopScheduleAndLocationCardState
               child: Row(
                 children: [
                   Icon(
-                    m.lat != null
-                        ? Icons.check_circle_rounded
-                        : Icons.location_on_outlined,
-                    size: 14,
-                    color: m.lat != null
-                        ? AppColors.success
-                        : AppColors.foreground,
-                  ),
+                      m.lat != null
+                          ? Icons.check_circle_rounded
+                          : Icons.location_on_outlined,
+                      size: 14,
+                      color: m.lat != null
+                          ? AppColors.success
+                          : AppColors.foreground),
                   const SizedBox(width: 8),
                   const Expanded(
-                    child: Text(
-                      'Position de la boutique',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    child: Text('Position de la boutique',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w700)),
                   ),
-                  Text(
-                    m.lat != null ? 'Définie' : 'Non définie',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.mutedForeground,
-                    ),
-                  ),
+                  Text(m.lat != null ? 'Définie' : 'Non définie',
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.mutedForeground)),
                 ],
               ),
             ),
@@ -973,26 +821,20 @@ class _TimeField extends StatelessWidget {
   final String value;
   final ValueChanged<String> onChanged;
 
-  const _TimeField({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
+  const _TimeField(
+      {required this.label, required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label.toUpperCase(),
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: AppColors.mutedForeground,
-            letterSpacing: 0.8,
-          ),
-        ),
+        Text(label.toUpperCase(),
+            style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.mutedForeground,
+                letterSpacing: 0.8)),
         const SizedBox(height: 4),
         GestureDetector(
           onTap: () async {
@@ -1003,21 +845,18 @@ class _TimeField extends StatelessWidget {
             );
             if (picked != null) {
               onChanged(
-                '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}',
-              );
+                  '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}');
             }
           },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border)),
+            child: Text(value,
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
           ),
         ),
       ],
@@ -1040,34 +879,24 @@ class _Stat extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 6,
-            offset: Offset(0, 2),
-          ),
+              color: Color(0x08000000), blurRadius: 6, offset: Offset(0, 2))
         ],
       ),
       child: Column(
         children: [
-          Text(
-            value,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontFamily: 'Sora',
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: AppColors.primary,
-            ),
-          ),
+          Text(value,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontFamily: 'Sora',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primary)),
           const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppColors.mutedForeground,
-            ),
-          ),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.mutedForeground)),
         ],
       ),
     );
@@ -1135,10 +964,7 @@ class _ProfileRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x08000000),
-                blurRadius: 6,
-                offset: Offset(0, 2),
-              ),
+                  color: Color(0x08000000), blurRadius: 6, offset: Offset(0, 2))
             ],
           ),
           child: Row(
@@ -1147,9 +973,8 @@ class _ProfileRow extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: AppColors.primarySoft,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                    color: AppColors.primarySoft,
+                    borderRadius: BorderRadius.circular(12)),
                 child: Icon(icon, color: AppColors.primary, size: 20),
               ),
               const SizedBox(width: 12),
@@ -1157,51 +982,35 @@ class _ProfileRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontFamily: 'Sora',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.foreground,
-                      ),
-                    ),
+                    Text(title,
+                        style: const TextStyle(
+                            fontFamily: 'Sora',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.foreground)),
                     const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.mutedForeground,
-                      ),
-                    ),
+                    Text(subtitle,
+                        style: const TextStyle(
+                            fontSize: 12, color: AppColors.mutedForeground)),
                   ],
                 ),
               ),
               if (badge != null && badge! > 0)
                 Container(
                   margin: const EdgeInsets.only(right: 6),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 2,
-                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppColors.destructive,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    '$badge',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
+                      color: AppColors.destructive,
+                      borderRadius: BorderRadius.circular(999)),
+                  child: Text('$badge',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white)),
                 ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                size: 20,
-                color: AppColors.mutedForeground,
-              ),
+              const Icon(Icons.chevron_right_rounded,
+                  size: 20, color: AppColors.mutedForeground),
             ],
           ),
         ),
@@ -1253,12 +1062,16 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
     try {
       final merchantId = NeonSession.merchantId;
       if (merchantId != null) {
-        await MerchantService(_api)
-            .update(merchantId, phone: _phoneCtrl.text.trim());
+        await MerchantService(_api).update(
+          merchantId,
+          phone: _phoneCtrl.text.trim(),
+        );
       }
       if (mounted) {
-        Navigator.of(context)
-            .pop((name: _nameCtrl.text.trim(), phone: _phoneCtrl.text.trim()));
+        Navigator.of(context).pop((
+          name: _nameCtrl.text.trim(),
+          phone: _phoneCtrl.text.trim(),
+        ));
       }
     } catch (_) {
       setState(() => _saving = false);
@@ -1281,32 +1094,26 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Modifier mes informations',
-            style: TextStyle(
-              fontFamily: 'Sora',
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          const Text('Modifier mes informations',
+              style: TextStyle(
+                  fontFamily: 'Sora',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           TextField(
             controller: _nameCtrl,
             textCapitalization: TextCapitalization.words,
             decoration: const InputDecoration(
-              labelText: 'Nom complet',
-              border: OutlineInputBorder(),
-            ),
+                labelText: 'Nom complet', border: OutlineInputBorder()),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _phoneCtrl,
             keyboardType: TextInputType.phone,
             decoration: const InputDecoration(
-              labelText: 'Numéro de téléphone',
-              hintText: '+225 07 00 00 00 00',
-              border: OutlineInputBorder(),
-            ),
+                labelText: 'Numéro de téléphone',
+                hintText: '+225 07 00 00 00 00',
+                border: OutlineInputBorder()),
           ),
           const SizedBox(height: 20),
           SizedBox(
@@ -1318,10 +1125,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
+                          strokeWidth: 2, color: Colors.white))
                   : const Text('Enregistrer'),
             ),
           ),
