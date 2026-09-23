@@ -1,16 +1,19 @@
+// --- Fichier : lib/features/become_merchant/become_merchant_screen.dart ---
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/services/a_nan_nan_api_client.dart';
+import '../../core/services/a_nan_nan_services.dart';
+import '../../core/services/neon_session.dart';
 import '../../main.dart' show LoginScreen, MerchantShell;
-import '../../shared/merchant_category.dart';
 import '../location_picker/location_picker_screen.dart';
 
-// ── Correspondance catégories app -> business_type_code backend ────────────
-// TODO backend : pas d'équivalent propre pour 'gaz' (recharge bouteilles) —
-// classé en 'service' faute de mieux. À revoir avec le backend si un code
-// dédié est ajouté à /api/v1/business-types.
+const String _supportPhoneDial = '+2250565074868';
+const String _supportPhoneWa = '2250565074868';
+
 const _businessTypeCodeByCategory = {
   'maquis': 'restaurant',
   'boulangerie': 'boulangerie',
@@ -20,7 +23,6 @@ const _businessTypeCodeByCategory = {
   'autre': 'service',
 };
 
-// ── Catégories marchand (miroir de MERCHANT_CATEGORIES du React) ──────────────
 const _categories = [
   (id: 'maquis', label: 'Maquis / Restaurant'),
   (id: 'boulangerie', label: 'Boulangerie'),
@@ -32,23 +34,27 @@ const _categories = [
 
 enum _Step { info, terms, pending }
 
-// ── BECOME MERCHANT SCREEN ────────────────────────────────────────────────────
 class BecomeMerchantScreen extends StatefulWidget {
   final VoidCallback onBack;
+  final bool startAtPending;
 
-  const BecomeMerchantScreen({super.key, required this.onBack});
+  const BecomeMerchantScreen({
+    super.key,
+    required this.onBack,
+    this.startAtPending = false,
+  });
 
   @override
   State<BecomeMerchantScreen> createState() => _BecomeMerchantScreenState();
 }
 
 class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
-  _Step _step = _Step.info;
-  final bool _existingApproved = false;
+  late _Step _step = widget.startAtPending ? _Step.pending : _Step.info;
+  bool _existingApproved = false;
   bool _submitting = false;
   bool _checkingExisting = true;
+  String? _userId;
 
-  // Champs étape 1
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _city = TextEditingController(text: 'Oumé');
@@ -59,65 +65,114 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
   final _description = TextEditingController();
   String _category = _categories[0].id;
 
-  // Étape 2
   bool _accepted = false;
+
+  final _api = ANanNanApiClient();
+  late final _merchantService = MerchantService(_api);
 
   @override
   void initState() {
     super.initState();
-    _prefillFromProfile();
-    _checkExisting();
+    _checkExistingAndPrefill();
   }
 
   @override
   void dispose() {
-    _name.dispose(); _phone.dispose(); _city.dispose();
-    _address.dispose(); _businessName.dispose(); _description.dispose();
+    _name.dispose();
+    _phone.dispose();
+    _city.dispose();
+    _address.dispose();
+    _businessName.dispose();
+    _description.dispose();
     super.dispose();
   }
 
-  final _api = ANanNanApiClient();
-
-  Future<void> _prefillFromProfile() async {
+  Future<void> _checkExistingAndPrefill() async {
     try {
       final me = await _api.me();
+      _userId = me['id'] as String?;
+
       if (!mounted) return;
+
       final first = me['first_name'] as String?;
       final last = me['last_name'] as String?;
-      final fullName = [first, last].where((s) => s != null && s.isNotEmpty).join(' ');
+      final fullName =
+          [first, last].where((s) => s != null && s.isNotEmpty).join(' ');
       if (fullName.isNotEmpty) _name.text = fullName;
       final phone = me['phone'] as String?;
       if (phone != null && phone.isNotEmpty) _phone.text = phone;
-    } catch (_) {
-      // Best-effort : un échec de préremplissage n'empêche pas de continuer,
-      // le marchand retape juste ses infos.
-    }
+
+      // 1. Vérifier si l'utilisateur a une boutique active sur Neon
+      final myMerchants = await _merchantService.getMine();
+      if (myMerchants.isNotEmpty) {
+        final current = myMerchants.first;
+        NeonSession.setCurrentMerchant(current);
+        final status = current['status'] as String? ?? 'pending';
+
+        if (status == 'active') {
+          setState(() {
+            _step = _Step.pending;
+            _existingApproved = true;
+            _checkingExisting = false;
+          });
+          return;
+        } else {
+          setState(() {
+            _step = _Step.pending;
+            _existingApproved = false;
+            _checkingExisting = false;
+          });
+          return;
+        }
+      }
+
+      // 2. Vérifier si une candidature locale ou paramètre demande l'écran d'attente
+      if (widget.startAtPending) {
+        setState(() {
+          _step = _Step.pending;
+          _checkingExisting = false;
+        });
+        return;
+      }
+
+      if (_userId != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final hasPending =
+            prefs.getBool('pending_application_$_userId') ?? false;
+        if (hasPending) {
+          setState(() {
+            _step = _Step.pending;
+            _existingApproved = false;
+            _checkingExisting = false;
+          });
+          return;
+        }
+      }
+    } catch (_) {}
+
+    if (mounted) setState(() => _checkingExisting = false);
   }
 
-  // TODO backend : aucun endpoint "mes candidatures" (l'équivalent GET côté
-  // utilisateur de /api/v1/admin/role-applications) n'existe pour l'instant.
-  // Impossible de savoir si une demande est déjà en attente/approuvée avant
-  // resoumission — on part donc toujours de l'étape info en attendant.
-  Future<void> _checkExisting() async {
-    setState(() => _checkingExisting = false);
-  }
-
-  // ── Validation étape 1 ────────────────────────────────────
   void _submitInfo() {
     if (_name.text.trim().isEmpty || _phone.text.trim().isEmpty) {
-      toast.error('Renseignez votre nom et numéro'); return;
+      toast.error('Renseignez votre nom et numéro');
+      return;
     }
     if (_businessName.text.trim().isEmpty) {
-      toast.error('Indiquez le nom de votre commerce'); return;
+      toast.error('Indiquez le nom de votre commerce');
+      return;
     }
     if (_description.text.trim().isEmpty) {
-      toast.error('Ajoutez une description'); return;
+      toast.error('Ajoutez une description');
+      return;
     }
     if (_address.text.trim().isEmpty) {
-      toast.error("Indiquez l'adresse du commerce"); return;
+      toast.error("Indiquez l'adresse du commerce");
+      return;
     }
     if (_lat == null || _lng == null) {
-      toast.error('Positionnez votre commerce sur la carte'); return;
+      toast.error('Positionnez votre commerce sur la carte');
+      return;
     }
     setState(() => _step = _Step.terms);
   }
@@ -128,7 +183,8 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
         builder: (_) => LocationPickerScreen(
           initialLat: _lat,
           initialLng: _lng,
-          initialAddress: _address.text.trim().isEmpty ? null : _address.text.trim(),
+          initialAddress:
+              _address.text.trim().isEmpty ? null : _address.text.trim(),
         ),
       ),
     );
@@ -142,27 +198,34 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
     });
   }
 
-  // ── Soumission finale ─────────────────────────────────────
   Future<void> _submitTerms() async {
-    if (!_accepted) { toast.error('Vous devez accepter les conditions'); return; }
+    if (!_accepted) {
+      toast.error('Vous devez accepter les conditions');
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
       await _api.post('/api/v1/auth/role-applications', body: {
         'requested_role': 'merchant',
         'business_name': _businessName.text.trim(),
-        'business_type_code': _businessTypeCodeByCategory[_category] ?? 'service',
+        'business_type_code':
+            _businessTypeCodeByCategory[_category] ?? 'service',
         'manager_name': _name.text.trim(),
         'manager_phone': _phone.text.trim(),
-        // "neighborhood" attend un quartier précis ; on n'a que la ville
-        // dans ce formulaire pour l'instant (toujours "Oumé" par défaut).
         'neighborhood': _city.text.trim(),
         'address_line': _address.text.trim(),
         'latitude': _lat,
         'longitude': _lng,
         'description': _description.text.trim(),
       });
-      toast.success('Demande envoyée');
+
+      if (_userId != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('pending_application_$_userId', true);
+      }
+
+      toast.success('Demande envoyée avec succès');
       setState(() => _step = _Step.pending);
     } on ANanNanApiException catch (e) {
       toast.error(e.statusCode == 404
@@ -175,13 +238,64 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
     }
   }
 
+  Future<void> _checkStatusAgain() async {
+    try {
+      final myMerchants = await _merchantService.getMine();
+      if (myMerchants.isNotEmpty) {
+        final current = myMerchants.first;
+        final status = current['status'] as String? ?? 'pending';
+        if (status == 'active') {
+          NeonSession.setCurrentMerchant(current);
+          final bType = (current['business_type'] as String?)?.toLowerCase();
+          final isPharmacy = bType == 'pharmacie' || bType == 'pharmacy';
+
+          if (mounted) {
+            toast.success('Félicitations ! Votre boutique a été validée.');
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(
+                  builder: (_) => MerchantShell(isPharmacy: isPharmacy)),
+              (_) => false,
+            );
+          }
+          return;
+        }
+      }
+      toast.info(
+          'Dossier reçu : en attente de validation par l\'administrateur.');
+    } catch (_) {
+      toast.error('Erreur de connexion lors de la vérification.');
+    }
+  }
+
+  Future<void> _contactSupport() async {
+    final uri = Uri.parse(
+        'https://wa.me/$_supportPhoneWa?text=Bonjour,%20je%20souhaite%20suivre%20la%20validation%20de%20ma%20boutique.');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      final telUri = Uri.parse('tel:$_supportPhoneDial');
+      await launchUrl(telUri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _logout() async {
+    await _api.logout();
+    NeonSession.clear();
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
 
     if (_checkingExisting) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)),
+        body: Center(
+            child: CircularProgressIndicator(
+                color: AppColors.primary, strokeWidth: 2)),
       );
     }
 
@@ -189,21 +303,22 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          // ── Header sticky (miroir React) ─────────────────
           Container(
             padding: EdgeInsets.fromLTRB(16, top + 8, 16, 12),
             color: AppColors.background.withValues(alpha: 0.95),
             child: Row(
               children: [
-                // Retour
                 GestureDetector(
                   onTap: widget.onBack,
                   child: Container(
-                    width: 36, height: 36,
+                    width: 36,
+                    height: 36,
                     decoration: const BoxDecoration(
                       color: AppColors.card,
                       shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: Color(0x0F000000), blurRadius: 8)],
+                      boxShadow: [
+                        BoxShadow(color: Color(0x0F000000), blurRadius: 8)
+                      ],
                     ),
                     child: const Icon(Icons.arrow_back_rounded, size: 16),
                   ),
@@ -215,11 +330,13 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
                     children: [
                       const Text(
                         'Devenir Marchand',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
-                            fontFamily: 'Sora', color: AppColors.foreground),
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Sora',
+                            color: AppColors.foreground),
                       ),
                       const SizedBox(height: 4),
-                      // Stepper 3 barres
                       Row(
                         children: List.generate(3, (i) {
                           final filled = switch (_step) {
@@ -232,7 +349,9 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
                               margin: const EdgeInsets.only(right: 3),
                               height: 4,
                               decoration: BoxDecoration(
-                                color: filled ? AppColors.primary : AppColors.border,
+                                color: filled
+                                    ? AppColors.primary
+                                    : AppColors.border,
                                 borderRadius: BorderRadius.circular(2),
                               ),
                             ),
@@ -244,32 +363,41 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
                 ),
                 const SizedBox(width: 12),
                 Container(
-                  width: 36, height: 36,
+                  width: 36,
+                  height: 36,
                   decoration: const BoxDecoration(
                     color: AppColors.primarySoft,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.store_rounded, color: AppColors.primary, size: 16),
+                  child: const Icon(Icons.store_rounded,
+                      color: AppColors.primary, size: 16),
                 ),
               ],
             ),
           ),
-
-          // ── Contenu scrollable ────────────────────────────
           Expanded(
             child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(
-                20, 8, 20, MediaQuery.of(context).padding.bottom + 24,
+                20,
+                8,
+                20,
+                MediaQuery.of(context).padding.bottom + 24,
               ),
               child: switch (_step) {
                 _Step.info => _StepInfo(
-                    name: _name, phone: _phone, city: _city,
-                    address: _address, businessName: _businessName,
-                    description: _description, category: _category,
-                    lat: _lat, lng: _lng,
+                    name: _name,
+                    phone: _phone,
+                    city: _city,
+                    address: _address,
+                    businessName: _businessName,
+                    description: _description,
+                    category: _category,
+                    lat: _lat,
+                    lng: _lng,
                     onCategoryChanged: (v) => setState(() => _category = v),
                     onNext: _submitInfo,
                     onPickLocation: _pickLocation,
+                    onGoToPending: () => setState(() => _step = _Step.pending),
                   ),
                 _Step.terms => _StepTerms(
                     accepted: _accepted,
@@ -280,7 +408,11 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
                   ),
                 _Step.pending => _StepPending(
                     approved: _existingApproved,
-                    onBack: widget.onBack,
+                    onCheckStatus: _checkStatusAgain,
+                    onContactSupport: _contactSupport,
+                    onModifyApplication: () =>
+                        setState(() => _step = _Step.info),
+                    onLogout: _logout,
                   ),
               },
             ),
@@ -293,19 +425,34 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
 
 // ── ÉTAPE 1 : INFORMATIONS ────────────────────────────────────────────────────
 class _StepInfo extends StatelessWidget {
-  final TextEditingController name, phone, city, address, businessName, description;
+  final TextEditingController name,
+      phone,
+      city,
+      address,
+      businessName,
+      description;
   final String category;
   final double? lat;
   final double? lng;
   final ValueChanged<String> onCategoryChanged;
   final VoidCallback onNext;
   final VoidCallback onPickLocation;
+  final VoidCallback onGoToPending;
 
   const _StepInfo({
-    required this.name, required this.phone, required this.city,
-    required this.address, required this.businessName, required this.description,
-    required this.category, this.lat, this.lng,
-    required this.onCategoryChanged, required this.onNext, required this.onPickLocation,
+    required this.name,
+    required this.phone,
+    required this.city,
+    required this.address,
+    required this.businessName,
+    required this.description,
+    required this.category,
+    this.lat,
+    this.lng,
+    required this.onCategoryChanged,
+    required this.onNext,
+    required this.onPickLocation,
+    required this.onGoToPending,
   });
 
   @override
@@ -313,18 +460,39 @@ class _StepInfo extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Étape 1/3 — Informations',
-            style: TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Étape 1/3 — Informations',
+                style:
+                    TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
+            GestureDetector(
+              onTap: onGoToPending,
+              child: const Text(
+                'Voir ma demande en attente',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
-
-        _Field(label: 'Nom complet', controller: name, placeholder: 'Aïcha Koné'),
+        _Field(
+            label: 'Nom complet', controller: name, placeholder: 'Aïcha Koné'),
         const SizedBox(height: 12),
-        _Field(label: 'Numéro de téléphone', controller: phone,
-            placeholder: '+225 07 00 00 00 00', type: TextInputType.phone),
+        _Field(
+            label: 'Numéro de téléphone',
+            controller: phone,
+            placeholder: '+225 07 00 00 00 00',
+            type: TextInputType.phone),
         const SizedBox(height: 12),
         _Field(label: 'Ville', controller: city),
         const SizedBox(height: 12),
-        _Field(label: 'Adresse du commerce', controller: address,
+        _Field(
+            label: 'Adresse du commerce',
+            controller: address,
             placeholder: 'Quartier, repère'),
         const SizedBox(height: 8),
         GestureDetector(
@@ -339,38 +507,49 @@ class _StepInfo extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  lat != null ? Icons.check_circle_rounded : Icons.location_on_outlined,
+                  lat != null
+                      ? Icons.check_circle_rounded
+                      : Icons.location_on_outlined,
                   size: 16,
-                  color: lat != null ? AppColors.success : AppColors.mutedForeground,
+                  color: lat != null
+                      ? AppColors.success
+                      : AppColors.mutedForeground,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    lat != null ? 'Position définie sur la carte' : 'Localiser mon commerce sur la carte',
+                    lat != null
+                        ? 'Position définie sur la carte'
+                        : 'Localiser mon commerce sur la carte',
                     style: TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w600,
-                      color: lat != null ? AppColors.success : AppColors.foreground,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: lat != null
+                          ? AppColors.success
+                          : AppColors.foreground,
                     ),
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.mutedForeground),
+                const Icon(Icons.chevron_right_rounded,
+                    size: 16, color: AppColors.mutedForeground),
               ],
             ),
           ),
         ),
         const SizedBox(height: 12),
-        _Field(label: 'Nom du commerce', controller: businessName,
+        _Field(
+            label: 'Nom du commerce',
+            controller: businessName,
             placeholder: 'Chez Tantie Awa'),
         const SizedBox(height: 12),
-
-        // Catégorie — grille 2 colonnes
         const _FieldLabel(text: 'Catégorie'),
         const SizedBox(height: 6),
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 8, mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
           childAspectRatio: 3.5,
           children: _categories.map((c) {
             final active = category == c.id;
@@ -378,7 +557,8 @@ class _StepInfo extends StatelessWidget {
               onTap: () => onCategoryChanged(c.id),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: active ? AppColors.primarySoft : AppColors.card,
                   border: Border.all(
@@ -386,15 +566,18 @@ class _StepInfo extends StatelessWidget {
                     width: 2,
                   ),
                   borderRadius: BorderRadius.circular(14),
-                  boxShadow: active ? null : const [
-                    BoxShadow(color: Color(0x0F000000), blurRadius: 8),
-                  ],
+                  boxShadow: active
+                      ? null
+                      : const [
+                          BoxShadow(color: Color(0x0F000000), blurRadius: 8),
+                        ],
                 ),
                 alignment: Alignment.centerLeft,
                 child: Text(
                   c.label,
                   style: TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                     color: active ? AppColors.primary : AppColors.foreground,
                   ),
                   maxLines: 1,
@@ -404,10 +587,7 @@ class _StepInfo extends StatelessWidget {
             );
           }).toList(),
         ),
-
         const SizedBox(height: 12),
-
-        // Description
         const _FieldLabel(text: 'Description détaillée'),
         const SizedBox(height: 4),
         TextField(
@@ -415,27 +595,33 @@ class _StepInfo extends StatelessWidget {
           maxLines: 3,
           decoration: InputDecoration(
             hintText: 'Spécialités, horaires, ambiance…',
-            hintStyle: const TextStyle(fontSize: 13, color: AppColors.mutedForeground),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14),
+            hintStyle:
+                const TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(color: AppColors.border)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(color: AppColors.border)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: AppColors.primary, width: 2)),
-            filled: true, fillColor: AppColors.card,
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide:
+                    const BorderSide(color: AppColors.primary, width: 2)),
+            filled: true,
+            fillColor: AppColors.card,
           ),
         ),
-
         const SizedBox(height: 24),
-
-        // Bouton continuer
         SizedBox(
-          width: double.infinity, height: 52,
+          width: double.infinity,
+          height: 52,
           child: ElevatedButton(
             onPressed: onNext,
             style: ElevatedButton.styleFrom(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999)),
             ),
             child: const Text('Continuer',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
@@ -455,8 +641,11 @@ class _StepTerms extends StatelessWidget {
   final bool submitting;
 
   const _StepTerms({
-    required this.accepted, required this.onAcceptChanged,
-    required this.onBack, required this.onSubmit, required this.submitting,
+    required this.accepted,
+    required this.onAcceptChanged,
+    required this.onBack,
+    required this.onSubmit,
+    required this.submitting,
   });
 
   @override
@@ -467,14 +656,17 @@ class _StepTerms extends StatelessWidget {
         const Text("Étape 2/3 — Conditions d'engagement",
             style: TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
         const SizedBox(height: 12),
-
-        // Scroll des conditions
         Container(
           constraints: const BoxConstraints(maxHeight: 340),
           decoration: BoxDecoration(
             color: AppColors.card,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: const [BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4))],
+            boxShadow: const [
+              BoxShadow(
+                  color: Color(0x0F000000),
+                  blurRadius: 16,
+                  offset: Offset(0, 4))
+            ],
           ),
           child: const SingleChildScrollView(
             padding: EdgeInsets.all(16),
@@ -482,31 +674,32 @@ class _StepTerms extends StatelessWidget {
               children: [
                 _Term(
                   title: 'Engagement de service',
-                  text: "Je m'engage à respecter les délais, la qualité et la courtoisie envers les clients d'A Nan-Nan.",
+                  text:
+                      "Je m'engage à respecter les délais, la qualité et la courtoisie envers les clients d'A Nan-Nan.",
                 ),
                 SizedBox(height: 12),
                 _Term(
                   title: 'Données & confidentialité',
-                  text: "Mes données personnelles sont utilisées uniquement pour les besoins du service A Nan-Nan.",
+                  text:
+                      "Mes données personnelles sont utilisées uniquement pour les besoins du service A Nan-Nan.",
                 ),
                 SizedBox(height: 12),
                 _Term(
                   title: 'Validation administrative',
-                  text: "Ma demande sera examinée sous 24 à 72h par l'équipe A Nan-Nan avant activation.",
+                  text:
+                      "Ma demande sera examinée sous 24 à 72h par l'équipe A Nan-Nan avant activation.",
                 ),
                 SizedBox(height: 12),
                 _Term(
                   title: 'Résiliation',
-                  text: "Je peux quitter le programme à tout moment depuis mon profil.",
+                  text:
+                      "Je peux quitter le programme à tout moment depuis mon profil.",
                 ),
               ],
             ),
           ),
         ),
-
         const SizedBox(height: 16),
-
-        // Checkbox acceptation
         GestureDetector(
           onTap: () => onAcceptChanged(!accepted),
           child: Container(
@@ -519,19 +712,23 @@ class _StepTerms extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  width: 20, height: 20,
+                  width: 20,
+                  height: 20,
                   child: Checkbox(
                     value: accepted,
                     onChanged: (v) => onAcceptChanged(v ?? false),
                     activeColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4)),
                   ),
                 ),
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
                     "J'ai lu et j'accepte les conditions ci-dessus pour devenir marchand.",
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                         color: AppColors.foreground),
                   ),
                 ),
@@ -539,10 +736,7 @@ class _StepTerms extends StatelessWidget {
             ),
           ),
         ),
-
         const SizedBox(height: 20),
-
-        // Boutons retour + soumettre
         Row(
           children: [
             Expanded(
@@ -551,10 +745,13 @@ class _StepTerms extends StatelessWidget {
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   side: const BorderSide(color: AppColors.border),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999)),
                 ),
                 child: const Text('Retour',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.foreground)),
               ),
             ),
@@ -564,13 +761,18 @@ class _StepTerms extends StatelessWidget {
                 onPressed: submitting ? null : onSubmit,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999)),
                 ),
                 child: submitting
-                    ? const SizedBox(width: 18, height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
                     : const Text('Soumettre',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w700)),
               ),
             ),
           ],
@@ -580,12 +782,21 @@ class _StepTerms extends StatelessWidget {
   }
 }
 
-// ── ÉTAPE 3 : PENDING ─────────────────────────────────────────────────────────
+// ── ÉTAPE 3 : PENDING (BOUTONS OPÉRATIONNELS) ──────────────────────────────────
 class _StepPending extends StatelessWidget {
   final bool approved;
-  final VoidCallback onBack;
+  final VoidCallback onCheckStatus;
+  final VoidCallback onContactSupport;
+  final VoidCallback onModifyApplication;
+  final VoidCallback onLogout;
 
-  const _StepPending({required this.approved, required this.onBack});
+  const _StepPending({
+    required this.approved,
+    required this.onCheckStatus,
+    required this.onContactSupport,
+    required this.onModifyApplication,
+    required this.onLogout,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -598,12 +809,18 @@ class _StepPending extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(28),
-              boxShadow: const [BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4))],
+              boxShadow: const [
+                BoxShadow(
+                    color: Color(0x0F000000),
+                    blurRadius: 16,
+                    offset: Offset(0, 4))
+              ],
             ),
             child: Column(
               children: [
                 Container(
-                  width: 64, height: 64,
+                  width: 64,
+                  height: 64,
                   decoration: BoxDecoration(
                     color: approved
                         ? AppColors.success.withValues(alpha: 0.15)
@@ -620,22 +837,29 @@ class _StepPending extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  approved ? 'Demande déjà acceptée !' : 'Votre demande est en cours d\'examen',
+                  approved
+                      ? 'Demande approuvée !'
+                      : 'Votre demande est en cours d\'examen',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700,
-                      fontFamily: 'Sora', color: AppColors.foreground),
+                  style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Sora',
+                      color: AppColors.foreground),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   approved
-                      ? 'Votre compte marchand est actif. Vous pouvez vous connecter.'
-                      : 'Nous vérifions votre dossier. Vous serez notifié dès la validation (sous 24 à 72h).',
+                      ? 'Votre boutique est active. Vous pouvez accéder à votre tableau de bord.'
+                      : 'Notre équipe vérifie votre dossier. Dès validation par l\'administrateur, votre boutique s\'ouvrira automatiquement.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+                  style: const TextStyle(
+                      fontSize: 13, color: AppColors.mutedForeground),
                 ),
                 const SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: AppColors.success.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
@@ -643,10 +867,13 @@ class _StepPending extends StatelessWidget {
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.verified_user_rounded, size: 14, color: AppColors.success),
+                      Icon(Icons.verified_user_rounded,
+                          size: 14, color: AppColors.success),
                       SizedBox(width: 6),
-                      Text('Demande enregistrée en sécurité',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                      Text('Candidature enregistrée',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.success)),
                     ],
                   ),
@@ -655,45 +882,75 @@ class _StepPending extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
 
+          // Bouton 1 : Vérifier l'activation
           SizedBox(
-            width: double.infinity, height: 52,
-            child: ElevatedButton(
-              // Si approuvé : retour au login pour se reconnecter avec le bon rôle.
-              // On ne peut pas naviguer directement vers MerchantShell depuis ici
-              // car _AuthGate doit recharger le rôle depuis la DB — une reconnexion
-              // est le moyen le plus simple et le plus fiable.
-              onPressed: approved
-                  ? () => _goToMerchantShell(context)
-                  : onBack,
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: onCheckStatus,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
               style: ElevatedButton.styleFrom(
-                backgroundColor: approved ? AppColors.success : AppColors.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999)),
               ),
-              child: Text(
-                approved ? 'Se connecter maintenant' : 'Retour au profil',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
-                    color: Colors.white),
+              label: Text(
+                approved
+                    ? 'Accéder à ma boutique'
+                    : 'Actualiser / Vérifier mon statut',
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          if (!approved)
-            SizedBox(
-              width: double.infinity, height: 48,
-              child: OutlinedButton.icon(
-                onPressed: onBack,
-                icon: const Icon(Icons.help_outline_rounded, size: 16),
-                label: const Text('Contacter le support',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                        color: AppColors.foreground)),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.border),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-                ),
+
+          const SizedBox(height: 12),
+
+          // Bouton 2 : Contacter le support WhatsApp
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: onContactSupport,
+              icon: const Icon(Icons.chat_rounded,
+                  size: 16, color: AppColors.success),
+              label: const Text(
+                'Contacter le support (WhatsApp)',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.foreground),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999)),
               ),
             ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Bouton 3 : Modifier la candidature si besoin
+          TextButton.icon(
+            onPressed: onModifyApplication,
+            icon: const Icon(Icons.edit_note_rounded,
+                size: 16, color: AppColors.mutedForeground),
+            label: const Text(
+              'Modifier ma candidature / Remplir à nouveau',
+              style: TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+            ),
+          ),
+
+          // Bouton 4 : Déconnexion
+          TextButton(
+            onPressed: onLogout,
+            child: const Text(
+              'Se déconnecter',
+              style: TextStyle(fontSize: 12, color: AppColors.destructive),
+            ),
+          ),
         ],
       ),
     );
@@ -708,8 +965,10 @@ class _Field extends StatelessWidget {
   final TextInputType type;
 
   const _Field({
-    required this.label, required this.controller,
-    this.placeholder, this.type = TextInputType.text,
+    required this.label,
+    required this.controller,
+    this.placeholder,
+    this.type = TextInputType.text,
   });
 
   @override
@@ -724,15 +983,22 @@ class _Field extends StatelessWidget {
           keyboardType: type,
           decoration: InputDecoration(
             hintText: placeholder,
-            hintStyle: const TextStyle(fontSize: 13, color: AppColors.mutedForeground),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14),
+            hintStyle:
+                const TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(color: AppColors.border)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(color: AppColors.border)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: AppColors.primary, width: 2)),
-            filled: true, fillColor: AppColors.card,
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide:
+                    const BorderSide(color: AppColors.primary, width: 2)),
+            filled: true,
+            fillColor: AppColors.card,
           ),
           style: const TextStyle(fontSize: 13),
         ),
@@ -747,10 +1013,13 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-    text.toUpperCase(),
-    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-        color: AppColors.mutedForeground, letterSpacing: 0.8),
-  );
+        text.toUpperCase(),
+        style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: AppColors.mutedForeground,
+            letterSpacing: 0.8),
+      );
 }
 
 class _Term extends StatelessWidget {
@@ -773,53 +1042,18 @@ class _Term extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.foreground)),
               const SizedBox(height: 2),
               Text(text,
-                  style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
+                  style: const TextStyle(
+                      fontSize: 11, color: AppColors.mutedForeground)),
             ],
           ),
         ),
       ],
     );
-  }
-}
-
-// ── Navigation directe vers MerchantShell après approbation ─────────────────
-// refreshSession() force Supabase à émettre un nouveau JWT avec le rôle
-// mis à jour — sans ça, même si la DB dit 'merchant', l'app ne le saurait
-// pas avant la prochaine reconnexion.
-Future<void> _goToMerchantShell(BuildContext context) async {
-  try {
-    // Rafraîchir le token pour que _AuthGate voie le nouveau rôle
-    await Supabase.instance.client.auth.refreshSession();
-    // Charger isPharmacy depuis la DB
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    bool isPharmacy = false;
-    if (uid != null) {
-      final m = await Supabase.instance.client
-          .from('merchants')
-          .select('category')
-          .eq('owner_id', uid)
-          .maybeSingle();
-      isPharmacy = categoryNeedsPrescriptionFlow(m?['category'] as String?);
-    }
-    if (context.mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => MerchantShell(isPharmacy: isPharmacy),
-        ),
-        (_) => false,
-      );
-    }
-  } catch (_) {
-    // Si le refresh échoue, retour au login — l'utilisateur se reconnecte
-    if (context.mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (_) => false,
-      );
-    }
   }
 }

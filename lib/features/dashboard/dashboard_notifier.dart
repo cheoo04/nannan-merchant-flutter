@@ -1,19 +1,18 @@
+// --- Fichier : lib/features/dashboard/dashboard_notifier.dart ---
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/models/models.dart';
 import '../orders/orders_repository.dart';
 import '../../core/utils/error_message.dart';
+import '../../core/services/a_nan_nan_api_client.dart';
+import '../../core/services/a_nan_nan_services.dart';
+import '../../core/services/neon_session.dart';
 
-SupabaseClient get _db => Supabase.instance.client;
-
-/// ChangeNotifier qui maintient en temps réel :
-/// - Le marchand connecté (via owner_id)
-/// - Ses commandes (via merchant_id)
-/// Se désabonne proprement dans dispose().
 class DashboardNotifier extends ChangeNotifier {
   final OrdersRepository _ordersRepo;
+  final ANanNanApiClient _api = ANanNanApiClient();
+  late final MerchantService _merchantService = MerchantService(_api);
 
   MerchantModel? merchant;
   List<OrderModel> orders = [];
@@ -21,72 +20,51 @@ class DashboardNotifier extends ChangeNotifier {
   bool loadingOrders = true;
   String? error;
 
-  RealtimeChannel? _merchantChannel;
-  RealtimeChannel? _ordersChannel;
-
-  DashboardNotifier({OrdersRepository ordersRepo = const OrdersRepository()})
-      : _ordersRepo = ordersRepo {
+  DashboardNotifier({OrdersRepository? ordersRepo})
+      : _ordersRepo = ordersRepo ?? OrdersRepository() {
     _init();
   }
 
   Future<void> _init() async {
-    final user = _db.auth.currentUser;
-    if (user == null) {
-      loadingMerchant = false;
-      loadingOrders = false;
-      notifyListeners();
-      return;
-    }
-
-    await _loadMerchant(user.id);
-    _subscribeMerchant(user.id);
+    await _loadMerchant();
   }
 
   // ── Merchant ──────────────────────────────────────────────
 
-  Future<void> _loadMerchant(String userId) async {
-    try {
-      final data = await _db
-          .from('merchants')
-          .select()
-          .eq('owner_id', userId)
-          .maybeSingle();
+  Future<void> _loadMerchant() async {
+    loadingMerchant = true;
+    notifyListeners();
 
-      merchant = data != null ? MerchantModel.fromJson(data) : null;
-      if (merchant != null) {
+    try {
+      final myMerchants = await _merchantService.getMine();
+      if (myMerchants.isNotEmpty) {
+        final data = myMerchants.first;
+        NeonSession.setCurrentMerchant(data);
+        merchant = MerchantModel.fromJson(data);
         await _loadOrders(merchant!.id);
-        _subscribeOrders(merchant!.id);
+      } else {
+        merchant = null;
+        loadingOrders = false;
       }
+      error = null;
     } catch (e) {
       error = friendlyError(e);
+      loadingOrders = false;
     } finally {
       loadingMerchant = false;
       notifyListeners();
     }
-  }
-
-  void _subscribeMerchant(String userId) {
-    _merchantChannel = _db
-        .channel('dashboard-merchant-$userId')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'merchants',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'owner_id',
-            value: userId,
-          ),
-          callback: (_) => _loadMerchant(userId),
-        )
-        .subscribe();
   }
 
   // ── Orders ────────────────────────────────────────────────
 
   Future<void> _loadOrders(String merchantId) async {
+    loadingOrders = true;
+    notifyListeners();
+
     try {
       orders = await _ordersRepo.fetchOrders(merchantId);
+      error = null;
     } catch (e) {
       error = friendlyError(e);
     } finally {
@@ -95,12 +73,17 @@ class DashboardNotifier extends ChangeNotifier {
     }
   }
 
-  /// Rechargement manuel (pull-to-refresh) — filet de sécurité si le
-  /// realtime ne diffuse pas un changement.
+  /// Rechargement manuel (pull-to-refresh)
   Future<void> refresh() async {
-    if (merchant == null) return;
+    if (merchant == null) {
+      await _loadMerchant();
+      return;
+    }
     try {
       orders = await _ordersRepo.fetchOrders(merchant!.id);
+      final refreshedMerchant = await _merchantService.getById(merchant!.id);
+      merchant = MerchantModel.fromJson(refreshedMerchant);
+      error = null;
       notifyListeners();
     } catch (e) {
       error = friendlyError(e);
@@ -108,15 +91,7 @@ class DashboardNotifier extends ChangeNotifier {
     }
   }
 
-  void _subscribeOrders(String merchantId) {
-    _ordersChannel = _ordersRepo.subscribeOrders(
-      merchantId: merchantId,
-      channelName: 'dashboard-orders-$merchantId',
-      onChange: () => _loadOrders(merchantId),
-    );
-  }
-
-  // ── KPIs calculés (même logique que le React) ─────────────
+  // ── KPIs calculés ─────────────────────────────────────────
 
   int get pendingCount =>
       orders.where((o) => o.status == OrderStatus.pending).length;
@@ -132,13 +107,12 @@ class DashboardNotifier extends ChangeNotifier {
 
   int get totalCount => orders.length;
 
-  // CA basé sur itemsAmount (articles uniquement), pas totalAmount — les
-  // frais de livraison reviennent au livreur, pas au marchand. Voir
-  // OrderModel.itemsAmount. Diverge volontairement du React de référence
-  // sur ce point précis (React additionne encore total_xof brut).
   int get revenueDay {
     final startOfDay = DateTime.now().copyWith(
-      hour: 0, minute: 0, second: 0, millisecond: 0,
+      hour: 0,
+      minute: 0,
+      second: 0,
+      millisecond: 0,
     );
     return orders
         .where((o) =>
@@ -165,17 +139,12 @@ class DashboardNotifier extends ChangeNotifier {
         .fold(0, (s, o) => s + o.itemsAmount);
   }
 
-  /// CA total, toutes dates confondues — pour le résumé du profil.
-  /// Distinct de revenueDay/Week/Month qui filtrent par période.
   int get revenueTotal => orders
       .where((o) => o.status == OrderStatus.delivered)
       .fold(0, (s, o) => s + o.itemsAmount);
 
-  /// Commandes pas encore terminées (ni livrées, ni annulées/remboursées) —
-  /// utilisé pour le résumé "en attente" du profil.
   int get activeCount => pendingCount + acceptedCount + inDeliveryCount;
 
-  /// Alertes à afficher (même logique que le React, max 3)
   List<({String id, String title, String body})> get alerts {
     final list = <({String id, String title, String body})>[];
     if (pendingCount > 0) {
@@ -202,17 +171,16 @@ class DashboardNotifier extends ChangeNotifier {
     return list.take(3).toList();
   }
 
-  // ── Actions ───────────────────────────────────────────────
+  // ── Actions Marchand ──────────────────────────────────────
 
   Future<void> toggleOpen() async {
     if (merchant == null) return;
     try {
-      final patch = <String, dynamic>{'is_open': !merchant!.isOpen};
-      if (!merchant!.isOpen) patch['pause_until'] = null;
-      await _db.from('merchants').update(patch).eq('id', merchant!.id);
-      // Rechargement explicite — ne pas attendre uniquement le realtime
-      final userId = _db.auth.currentUser?.id;
-      if (userId != null) await _loadMerchant(userId);
+      final newStatus = merchant!.isOpen ? 'closed' : 'active';
+      await _api.patch('/api/v1/merchants/${merchant!.id}', body: {
+        'status': newStatus,
+      });
+      await refresh();
     } catch (e) {
       error = friendlyError(e);
       notifyListeners();
@@ -223,11 +191,10 @@ class DashboardNotifier extends ChangeNotifier {
     if (merchant == null) return;
     try {
       final until = DateTime.now().add(Duration(minutes: minutes));
-      await _db.from('merchants')
-          .update({'pause_until': until.toIso8601String()})
-          .eq('id', merchant!.id);
-      final userId = _db.auth.currentUser?.id;
-      if (userId != null) await _loadMerchant(userId);
+      await _api.patch('/api/v1/merchants/${merchant!.id}', body: {
+        'settings': {'pause_until': until.toIso8601String()}
+      });
+      await refresh();
     } catch (e) {
       error = friendlyError(e);
       notifyListeners();
@@ -237,37 +204,34 @@ class DashboardNotifier extends ChangeNotifier {
   Future<void> resumeMerchant() async {
     if (merchant == null) return;
     try {
-      await _db.from('merchants').update({'pause_until': null}).eq('id', merchant!.id);
-      final userId = _db.auth.currentUser?.id;
-      if (userId != null) await _loadMerchant(userId);
+      await _api.patch('/api/v1/merchants/${merchant!.id}', body: {
+        'settings': {'pause_until': null}
+      });
+      await refresh();
     } catch (e) {
       error = friendlyError(e);
       notifyListeners();
     }
   }
 
-  Future<void> saveSchedule({required bool enabled, String? opening, String? closing}) async {
+  Future<void> saveSchedule(
+      {required bool enabled, String? opening, String? closing}) async {
     if (merchant == null) return;
     try {
-      await _db.from('merchants').update({
-        'auto_schedule_enabled': enabled,
-        'opening_time': enabled ? opening : null,
-        'closing_time': enabled ? closing : null,
-      }).eq('id', merchant!.id);
-      final userId = _db.auth.currentUser?.id;
-      if (userId != null) await _loadMerchant(userId);
+      await _api.patch('/api/v1/merchants/${merchant!.id}', body: {
+        'settings': {
+          'auto_schedule_enabled': enabled,
+          'opening_time': enabled ? opening : null,
+          'closing_time': enabled ? closing : null,
+        }
+      });
+      await refresh();
     } catch (e) {
       error = friendlyError(e);
       notifyListeners();
     }
   }
 
-  /// Contrairement aux méthodes ci-dessus (toggleOpen, pauseMerchant,
-  /// resumeMerchant, saveSchedule) qui avalent l'erreur en interne sans la
-  /// relancer, celle-ci fait un `rethrow` après avoir enregistré l'état —
-  /// c'est une action utilisateur explicite (bouton "Confirmer" du sélecteur
-  /// de position) et l'écran appelant doit pouvoir afficher un toast d'échec
-  /// via son propre try/catch.
   Future<void> updateLocation({
     required double lat,
     required double lng,
@@ -275,13 +239,13 @@ class DashboardNotifier extends ChangeNotifier {
   }) async {
     if (merchant == null) return;
     try {
-      final patch = <String, dynamic>{'lat': lat, 'lng': lng};
-      if (address != null && address.trim().isNotEmpty) {
-        patch['address'] = address.trim();
-      }
-      await _db.from('merchants').update(patch).eq('id', merchant!.id);
-      final userId = _db.auth.currentUser?.id;
-      if (userId != null) await _loadMerchant(userId);
+      await _merchantService.update(
+        merchant!.id,
+        latitude: lat,
+        longitude: lng,
+        address: address,
+      );
+      await refresh();
     } catch (e) {
       error = friendlyError(e);
       notifyListeners();
@@ -291,29 +255,23 @@ class DashboardNotifier extends ChangeNotifier {
 
   Future<void> updateImage(String? imageUrl) async {
     if (merchant == null) return;
-    await _db
-        .from('merchants')
-        .update({'image_url': imageUrl}).eq('id', merchant!.id);
+    await _merchantService.update(merchant!.id, logoUrl: imageUrl);
+    await refresh();
   }
 
-  /// Upload réel de la photo de commerce vers le bucket 'merchant-images'.
-  /// Chemin = $userId/... (pas merchant.id) pour respecter la policy
-  /// Storage : (storage.foldername(name))[1] = auth.uid().
   Future<String?> uploadShopImage(File file) async {
     if (merchant == null) return null;
     try {
-      final userId = _db.auth.currentUser!.id;
-      final ext = file.path.split('.').last.toLowerCase();
-      final path = '$userId/cover_${DateTime.now().millisecondsSinceEpoch}.$ext';
       final bytes = await file.readAsBytes();
+      final ext = file.path.split('.').last.toLowerCase();
+      final filename = 'cover_${DateTime.now().millisecondsSinceEpoch}.$ext';
 
-      await _db.storage.from('merchant-images').uploadBinary(
-            path,
-            bytes,
-            fileOptions: const FileOptions(upsert: true),
-          );
+      final url = await _api.uploadFile(
+        bytes: bytes,
+        filename: filename,
+        folder: 'merchants',
+      );
 
-      final url = _db.storage.from('merchant-images').getPublicUrl(path);
       await updateImage(url);
       return url;
     } catch (e) {
@@ -321,14 +279,5 @@ class DashboardNotifier extends ChangeNotifier {
       notifyListeners();
       return null;
     }
-  }
-
-  // ── Dispose ───────────────────────────────────────────────
-
-  @override
-  void dispose() {
-    if (_merchantChannel != null) _db.removeChannel(_merchantChannel!);
-    if (_ordersChannel != null) _ordersRepo.removeChannel(_ordersChannel!);
-    super.dispose();
   }
 }

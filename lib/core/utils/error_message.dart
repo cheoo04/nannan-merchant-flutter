@@ -1,19 +1,11 @@
+// --- Fichier : lib/core/utils/error_message.dart ---
 import 'dart:async';
 import 'dart:io';
-
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/a_nan_nan_api_client.dart';
 
 /// Transforme n'importe quelle exception technique (SocketException,
-/// ClientException, TimeoutException, PostgrestException, StorageException,
-/// AuthException, ...) en un message clair, en français, présentable à
-/// l'utilisateur final.
-///
-/// Objectif : aucun message brut du type
-/// "ClientException with SocketException: Failed host lookup..."
-/// ne doit jamais s'afficher dans l'UI. On log toujours l'erreur d'origine
-/// pour le debug, et on renvoie un message humain pour l'affichage.
+/// TimeoutException, ANanNanApiException, ...) en un message clair en français.
 String friendlyError(Object error, {String? fallback}) {
-  // Erreurs réseau bas niveau (pas de connexion, DNS, hôte injoignable...)
   if (error is SocketException) {
     return 'Pas de connexion internet. Vérifiez votre réseau et réessayez.';
   }
@@ -30,53 +22,20 @@ String friendlyError(Object error, {String? fallback}) {
     return 'Une erreur inattendue est survenue. Réessayez.';
   }
 
-  // Erreurs d'authentification Supabase — le message est déjà écrit pour un
-  // humain côté Supabase mais on filtre les cas les plus fréquents pour
-  // proposer un texte plus naturel en français.
-  if (error is AuthException) {
-    final msg = error.message.toLowerCase();
-    if (msg.contains('already registered') || msg.contains('already exists')) {
-      return 'Un compte existe déjà avec ces informations.';
+  // Erreurs retournées par l'API Neon/FastAPI
+  if (error is ANanNanApiException) {
+    if (error.statusCode == 401) {
+      return 'Session expirée ou identifiants incorrects.';
     }
-    if (msg.contains('invalid login credentials') || msg.contains('invalid credentials')) {
-      return 'Identifiants incorrects. \nVérifiez votre email/téléphone et mot de passe.';
+    if (error.statusCode == 404) {
+      return 'Ressource introuvable.';
     }
-    if (msg.contains('email not confirmed')) {
-      return 'Veuillez confirmer votre email avant de continuer.';
-    }
-    // AuthRetryableFetchException (requête réseau qui échoue au niveau
-    // transport — ex: connexion coupée en pleine requête) hérite de
-    // AuthException, donc passe par cette branche AVANT le filet de
-    // sécurité générique plus bas. Sans ce bloc, un message brut du type
-    // "ClientException: Software caused connection abort, uri=..." finit
-    // par s'afficher tel quel (bug vu en prod le 23/08).
-    if (error is AuthRetryableFetchException ||
-        msg.contains('network') ||
-        msg.contains('socket') ||
-        msg.contains('failed host lookup') ||
-        msg.contains('clientexception') ||
-        msg.contains('connection abort') ||
-        msg.contains('connection refused') ||
-        msg.contains('connection reset') ||
-        msg.contains('handshakeexception')) {
-      return 'Pas de connexion internet. Vérifiez votre réseau et réessayez.';
+    if (error.statusCode == 422) {
+      return error.message.isNotEmpty ? error.message : 'Données invalides.';
     }
     return error.message;
   }
 
-  // Erreurs base de données (Postgrest / Supabase)
-  if (error is PostgrestException) {
-    return 'Une erreur est survenue lors de la communication avec le serveur. Réessayez.';
-  }
-
-  if (error is StorageException) {
-    return "Une erreur est survenue lors de l'envoi du fichier. Réessayez.";
-  }
-
-  // Dernier filet de sécurité : si le message contient des indices
-  // techniques réseau connus, on les remplace quand même par un message
-  // générique au lieu de laisser passer le texte brut (ex: ClientException
-  // levée par package:http, qui n'a pas de type dédié détectable ci-dessus).
   final raw = error.toString().toLowerCase();
   if (raw.contains('socketexception') ||
       raw.contains('clientexception') ||

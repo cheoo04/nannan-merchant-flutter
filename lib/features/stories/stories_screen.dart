@@ -1,28 +1,27 @@
+// --- Fichier : lib/features/stories/stories_screen.dart ---
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
 import '../../core/utils/error_message.dart';
+import '../../core/services/a_nan_nan_api_client.dart';
+import '../../core/services/a_nan_nan_services.dart';
+import '../../core/services/neon_session.dart';
 import '../../shared/widgets/notification_bell_button.dart';
 
-SupabaseClient get _db => Supabase.instance.client;
-
-// Limites — miroir des specs FE-21
 const _maxImages = 5;
 const _maxImagesNoVideo = 7;
-const _maxVideoSeconds = 90; // 1min30
+const _maxVideoSeconds = 90;
 
-// ── Modèle : une ligne de la table merchant_stories ────────────────────────────
 class MerchantStoryItem {
   final String id;
-  final String mediaType; // 'image' | 'video'
+  final String mediaType;
   final String mediaUrl;
   final String? description;
   final int position;
@@ -35,15 +34,17 @@ class MerchantStoryItem {
     required this.position,
   });
 
-  factory MerchantStoryItem.fromJson(Map<String, dynamic> j) => MerchantStoryItem(
+  factory MerchantStoryItem.fromJson(Map<String, dynamic> j) =>
+      MerchantStoryItem(
         id: j['id'] as String,
-        mediaType: j['media_type'] as String,
+        mediaType: j['media_type'] as String? ?? 'image',
         mediaUrl: j['media_url'] as String,
         description: j['description'] as String?,
-        position: j['position'] as int? ?? 0,
+        position: j['sort_order'] as int? ?? 0,
       );
 
-  MerchantStoryItem copyWith({String? description, int? position}) => MerchantStoryItem(
+  MerchantStoryItem copyWith({String? description, int? position}) =>
+      MerchantStoryItem(
         id: id,
         mediaType: mediaType,
         mediaUrl: mediaUrl,
@@ -52,52 +53,64 @@ class MerchantStoryItem {
       );
 }
 
-// ── Notifier ──────────────────────────────────────────────────────────────────
 class StoriesNotifier extends ChangeNotifier {
+  final _api = ANanNanApiClient();
+  late final _pubService = PublicationService(_api);
+
   String? merchantId;
-  String? userId;
-  List<MerchantStoryItem> images = [];   // media_type = 'image', triées par position
-  MerchantStoryItem? video;              // media_type = 'video' (0 ou 1)
+  List<MerchantStoryItem> images = [];
+  MerchantStoryItem? video;
   bool loading = true;
   bool saving = false;
   String? error;
 
-  StoriesNotifier() { _init(); }
+  StoriesNotifier() {
+    _init();
+  }
 
   Future<void> _init() async {
-    final user = _db.auth.currentUser;
-    if (user == null) { loading = false; notifyListeners(); return; }
-    userId = user.id;
+    merchantId = NeonSession.merchantId;
+    if (merchantId == null) {
+      try {
+        final mine = await MerchantService(_api).getMine();
+        if (mine.isNotEmpty) {
+          merchantId = mine.first['id'] as String?;
+          NeonSession.setCurrentMerchant(mine.first);
+        }
+      } catch (_) {}
+    }
 
-    final m = await _db
-        .from('merchants')
-        .select('id')
-        .eq('owner_id', user.id)
-        .maybeSingle();
+    if (merchantId != null) {
+      await load();
+    } else {
+      loading = false;
+      notifyListeners();
+    }
+  }
 
-    if (m != null) {
-      merchantId = m['id'] as String;
-      final rows = await _db
-          .from('merchant_stories')
-          .select('id, media_type, media_url, description, position')
-          .eq('merchant_id', merchantId!)
-          .order('position');
-
-      final items = (rows as List)
-          .map((r) => MerchantStoryItem.fromJson(r as Map<String, dynamic>))
+  Future<void> load() async {
+    if (merchantId == null) return;
+    try {
+      final rows = await _pubService.list(merchantId!, activeOnly: false);
+      final items = rows
+          .map((e) => MerchantStoryItem.fromJson(e as Map<String, dynamic>))
           .toList();
+
       images = items.where((e) => e.mediaType == 'image').toList();
       final videos = items.where((e) => e.mediaType == 'video').toList();
       video = videos.isNotEmpty ? videos.first : null;
+      error = null;
+    } catch (e) {
+      error = friendlyError(e);
+    } finally {
+      loading = false;
+      notifyListeners();
     }
-
-    loading = false;
-    notifyListeners();
   }
 
-  // ── Upload image ──────────────────────────────────────────
-  Future<String?> uploadImage(Uint8List bytes, String ext, {String? description}) async {
-    if (userId == null || merchantId == null) return 'Non connecté';
+  Future<String?> uploadImage(Uint8List bytes, String ext,
+      {String? description}) async {
+    if (merchantId == null) return 'Boutique introuvable';
 
     final hasVideo = video != null;
     final limit = hasVideo ? _maxImages : _maxImagesNoVideo;
@@ -111,21 +124,23 @@ class StoriesNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final path = '$userId/${DateTime.now().millisecondsSinceEpoch}.$ext';
-      await _db.storage.from('stories').uploadBinary(
-        path, bytes,
-        fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: false),
+      final filename = '${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final url = await _api.uploadFile(
+        bytes: bytes,
+        filename: filename,
+        folder: 'publications',
       );
-      final url = _db.storage.from('stories').getPublicUrl(path);
-      final row = await _db.from('merchant_stories').insert({
-        'merchant_id': merchantId,
-        'media_type': 'image',
-        'media_url': url,
-        'description': description,
-        'position': images.length,
-      }).select().single();
+
+      final row = await _pubService.create(
+        merchantId!,
+        title: 'Publication',
+        mediaUrl: url,
+        mediaType: 'image',
+        description: description,
+      );
+
       images = [...images, MerchantStoryItem.fromJson(row)];
-      return null; // succès
+      return null;
     } catch (e) {
       final msg = friendlyError(e);
       error = msg;
@@ -136,9 +151,9 @@ class StoriesNotifier extends ChangeNotifier {
     }
   }
 
-  // ── Upload vidéo ──────────────────────────────────────────
-  Future<String?> uploadVideo(Uint8List bytes, String ext, {String? description}) async {
-    if (userId == null || merchantId == null) return 'Non connecté';
+  Future<String?> uploadVideo(Uint8List bytes, String ext,
+      {String? description}) async {
+    if (merchantId == null) return 'Boutique introuvable';
     if (video != null) return 'Une vidéo existe déjà — supprimez-la d\'abord';
     if (images.length > _maxImages) {
       return 'Avec une vidéo, maximum $_maxImages images. Supprimez ${images.length - _maxImages} image(s).';
@@ -148,22 +163,21 @@ class StoriesNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final path = '$userId/video_${DateTime.now().millisecondsSinceEpoch}.$ext';
-      await _db.storage.from('stories').uploadBinary(
-        path, bytes,
-        fileOptions: FileOptions(
-          contentType: ext == 'mp4' ? 'video/mp4' : 'video/quicktime',
-          upsert: false,
-        ),
+      final filename = 'video_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final url = await _api.uploadFile(
+        bytes: bytes,
+        filename: filename,
+        folder: 'publications',
       );
-      final url = _db.storage.from('stories').getPublicUrl(path);
-      final row = await _db.from('merchant_stories').insert({
-        'merchant_id': merchantId,
-        'media_type': 'video',
-        'media_url': url,
-        'description': description,
-        'position': 999,
-      }).select().single();
+
+      final row = await _pubService.create(
+        merchantId!,
+        title: 'Vidéo',
+        mediaUrl: url,
+        mediaType: 'video',
+        description: description,
+      );
+
       video = MerchantStoryItem.fromJson(row);
       return null;
     } catch (e) {
@@ -176,7 +190,6 @@ class StoriesNotifier extends ChangeNotifier {
     }
   }
 
-  // ── Supprimer image ───────────────────────────────────────
   Future<String?> deleteImage(int index) async {
     if (index < 0 || index >= images.length) return null;
     saving = true;
@@ -184,13 +197,8 @@ class StoriesNotifier extends ChangeNotifier {
 
     try {
       final item = images[index];
-      final path = _pathFromUrl(item.mediaUrl);
-      if (path != null) {
-        await _db.storage.from('stories').remove([path]);
-      }
-      await _db.from('merchant_stories').delete().eq('id', item.id);
+      await _pubService.delete(item.id);
       images = [...images]..removeAt(index);
-      await _resequencePositions();
       return null;
     } catch (e) {
       final msg = friendlyError(e);
@@ -202,18 +210,13 @@ class StoriesNotifier extends ChangeNotifier {
     }
   }
 
-  // ── Supprimer vidéo ───────────────────────────────────────
   Future<String?> deleteVideo() async {
     if (video == null) return null;
     saving = true;
     notifyListeners();
 
     try {
-      final path = _pathFromUrl(video!.mediaUrl);
-      if (path != null) {
-        await _db.storage.from('stories').remove([path]);
-      }
-      await _db.from('merchant_stories').delete().eq('id', video!.id);
+      await _pubService.delete(video!.id);
       video = null;
       return null;
     } catch (e) {
@@ -226,17 +229,14 @@ class StoriesNotifier extends ChangeNotifier {
     }
   }
 
-  // ── Réordonner images (drag) ──────────────────────────────
   Future<void> reorder(int oldIndex, int newIndex) async {
     final list = [...images];
     final item = list.removeAt(oldIndex);
     list.insert(newIndex, item);
     images = list;
     notifyListeners();
-    await _resequencePositions();
   }
 
-  // ── Modifier la description d'une publication ─────────────
   Future<String?> updateDescription({
     required String id,
     required bool isVideo,
@@ -245,7 +245,7 @@ class StoriesNotifier extends ChangeNotifier {
     saving = true;
     notifyListeners();
     try {
-      await _db.from('merchant_stories').update({'description': text}).eq('id', id);
+      await _api.patch('/api/v1/publications/$id', body: {'description': text});
       if (isVideo && video != null && video!.id == id) {
         video = video!.copyWith(description: text);
       } else {
@@ -266,30 +266,9 @@ class StoriesNotifier extends ChangeNotifier {
     }
   }
 
-  // ── Réaligner les positions après suppression/réordonnancement ──
-  Future<void> _resequencePositions() async {
-    for (var i = 0; i < images.length; i++) {
-      if (images[i].position != i) {
-        await _db.from('merchant_stories').update({'position': i}).eq('id', images[i].id);
-        images[i] = images[i].copyWith(position: i);
-      }
-    }
-  }
-
-  // ── Helper : extraire le path depuis l'URL publique Storage ──
-  String? _pathFromUrl(String url) {
-    // URL publique : .../storage/v1/object/public/stories/PATH
-    const marker = '/object/public/stories/';
-    final idx = url.indexOf(marker);
-    if (idx == -1) return null;
-    return url.substring(idx + marker.length);
-  }
-
   int get maxImages => video != null ? _maxImages : _maxImagesNoVideo;
-
 }
 
-// ── STORIES SCREEN ────────────────────────────────────────────────────────────
 class StoriesScreen extends StatefulWidget {
   final VoidCallback onGoToDashboard;
   final int unreadCount;
@@ -308,7 +287,7 @@ class StoriesScreen extends StatefulWidget {
 
 class _StoriesScreenState extends State<StoriesScreen> {
   late final StoriesNotifier _n;
-  int? _lightboxIndex; // null = fermé
+  int? _lightboxIndex;
   bool _lightboxIsVideo = false;
 
   @override
@@ -319,9 +298,11 @@ class _StoriesScreenState extends State<StoriesScreen> {
   }
 
   @override
-  void dispose() { _n.dispose(); super.dispose(); }
+  void dispose() {
+    _n.dispose();
+    super.dispose();
+  }
 
-  // ── Picker image ──────────────────────────────────────────
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final file = await picker.pickImage(
@@ -340,15 +321,9 @@ class _StoriesScreenState extends State<StoriesScreen> {
     }
   }
 
-  // ── Picker vidéo ──────────────────────────────────────────
   Future<void> _pickVideo() async {
     final picker = ImagePicker();
-    final file = await picker.pickVideo(
-      source: ImageSource.gallery,
-      // NOTE : maxDuration n'a aucun effet pour ImageSource.gallery (ne
-      // fonctionne que pour la capture caméra). On vérifie la durée
-      // réelle ci-dessous après sélection.
-    );
+    final file = await picker.pickVideo(source: ImageSource.gallery);
     if (file == null) return;
 
     final controller = VideoPlayerController.file(File(file.path));
@@ -357,8 +332,6 @@ class _StoriesScreenState extends State<StoriesScreen> {
       await controller.initialize();
       duration = controller.value.duration;
     } catch (_) {
-      // Impossible de lire les métadonnées — on laisse passer plutôt que
-      // de bloquer un upload légitime sur une erreur de lecture locale.
     } finally {
       await controller.dispose();
     }
@@ -380,20 +353,23 @@ class _StoriesScreenState extends State<StoriesScreen> {
     }
   }
 
-  // ── Confirmer suppression ─────────────────────────────────
   Future<void> _confirmDeleteImage(int index) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Supprimer cette photo ?',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'Sora')),
+            style: TextStyle(
+                fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'Sora')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: AppColors.destructive),
-            child: const Text('Supprimer', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text('Supprimer',
+                style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -413,13 +389,17 @@ class _StoriesScreenState extends State<StoriesScreen> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Supprimer la vidéo ?',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'Sora')),
+            style: TextStyle(
+                fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'Sora')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: AppColors.destructive),
-            child: const Text('Supprimer', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text('Supprimer',
+                style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -433,7 +413,6 @@ class _StoriesScreenState extends State<StoriesScreen> {
     }
   }
 
-  // ── Éditer la description d'une publication (photo ou vidéo) ──
   Future<void> _editDescription({
     required String id,
     required bool isVideo,
@@ -445,26 +424,33 @@ class _StoriesScreenState extends State<StoriesScreen> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Description',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'Sora')),
+            style: TextStyle(
+                fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'Sora')),
         content: TextField(
           controller: controller,
           maxLines: 3,
           maxLength: 200,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Décrivez cette publication…'),
+          decoration:
+              const InputDecoration(hintText: 'Décrivez cette publication…'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Enregistrer', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text('Enregistrer',
+                style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
     );
     if (result == null) return;
     final err = await _n.updateDescription(
-      id: id, isVideo: isVideo, text: result.isEmpty ? null : result,
+      id: id,
+      isVideo: isVideo,
+      text: result.isEmpty ? null : result,
     );
     if (err != null) {
       toast.error(err);
@@ -488,7 +474,6 @@ class _StoriesScreenState extends State<StoriesScreen> {
         children: [
           CustomScrollView(
             slivers: [
-              // ── HEADER ──────────────────────────────────────
               SliverToBoxAdapter(
                 child: _StoriesHeader(
                   topPadding: top,
@@ -500,20 +485,14 @@ class _StoriesScreenState extends State<StoriesScreen> {
                   onNotifications: widget.onGoToNotifications,
                 ),
               ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
-
-              // ── RÈGLES ──────────────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: _RulesCard(hasVideo: hasVideo),
                 ),
               ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
-
-              // ── LOADING ──────────────────────────────────────
               if (_n.loading)
                 const SliverToBoxAdapter(
                   child: Center(
@@ -524,15 +503,12 @@ class _StoriesScreenState extends State<StoriesScreen> {
                     ),
                   ),
                 ),
-
-              // ── BOUTONS D'AJOUT ──────────────────────────────
               if (!_n.loading)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Row(
                       children: [
-                        // Ajouter photo
                         Expanded(
                           child: _AddButton(
                             icon: Icons.add_photo_alternate_rounded,
@@ -543,7 +519,6 @@ class _StoriesScreenState extends State<StoriesScreen> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        // Ajouter vidéo
                         Expanded(
                           child: _AddButton(
                             icon: Icons.video_call_rounded,
@@ -557,10 +532,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
                     ),
                   ),
                 ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
-
-              // ── TITRE GALERIE ────────────────────────────────
               if (!_n.loading && (imgCount > 0 || hasVideo))
                 SliverToBoxAdapter(
                   child: Padding(
@@ -571,13 +543,16 @@ class _StoriesScreenState extends State<StoriesScreen> {
                         Text(
                           'Publications ($imgCount${hasVideo ? ' + 1 vidéo' : ''})',
                           style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w700,
-                            fontFamily: 'Sora', color: AppColors.foreground,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Sora',
+                            color: AppColors.foreground,
                           ),
                         ),
                         if (_n.saving)
                           const SizedBox(
-                            width: 14, height: 14,
+                            width: 14,
+                            height: 14,
                             child: CircularProgressIndicator(
                                 strokeWidth: 2, color: AppColors.primary),
                           ),
@@ -585,10 +560,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
                     ),
                   ),
                 ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
-              // ── GRILLE IMAGES (réordonnables) ────────────────
               if (!_n.loading && imgCount > 0)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -602,15 +574,14 @@ class _StoriesScreenState extends State<StoriesScreen> {
                         _lightboxIsVideo = false;
                       }),
                       onEditDescription: (item) => _editDescription(
-                        id: item.id, isVideo: false, current: item.description,
+                        id: item.id,
+                        isVideo: false,
+                        current: item.description,
                       ),
                     ),
                   ),
                 ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
-              // ── VIDÉO ────────────────────────────────────────
               if (!_n.loading && hasVideo)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -624,13 +595,13 @@ class _StoriesScreenState extends State<StoriesScreen> {
                         _lightboxIsVideo = true;
                       }),
                       onEditDescription: () => _editDescription(
-                        id: _n.video!.id, isVideo: true, current: _n.video!.description,
+                        id: _n.video!.id,
+                        isVideo: true,
+                        current: _n.video!.description,
                       ),
                     ),
                   ),
                 ),
-
-              // ── ÉTAT VIDE ────────────────────────────────────
               if (!_n.loading && imgCount == 0 && !hasVideo)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -645,7 +616,8 @@ class _StoriesScreenState extends State<StoriesScreen> {
                       child: Column(
                         children: [
                           Container(
-                            width: 56, height: 56,
+                            width: 56,
+                            height: 56,
                             decoration: const BoxDecoration(
                               color: AppColors.primarySoft,
                               shape: BoxShape.circle,
@@ -656,34 +628,33 @@ class _StoriesScreenState extends State<StoriesScreen> {
                           const SizedBox(height: 12),
                           const Text(
                             'Aucune publication',
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
-                                fontFamily: 'Sora', color: AppColors.foreground),
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: 'Sora',
+                                color: AppColors.foreground),
                           ),
                           const SizedBox(height: 4),
                           const Text(
                             'Ajoutez des photos et une vidéo pour attirer les clients sur votre fiche.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+                            style: TextStyle(
+                                fontSize: 12, color: AppColors.mutedForeground),
                           ),
                         ],
                       ),
                     ),
                   ),
                 ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
           ),
-
-          // ── LIGHTBOX IMAGES ──────────────────────────────────
           if (_lightboxIndex != null && !_lightboxIsVideo)
             _ImageLightbox(
               images: _n.images.map((e) => e.mediaUrl).toList(),
               startIndex: _lightboxIndex!,
               onClose: () => setState(() => _lightboxIndex = null),
             ),
-
-          // ── LIGHTBOX VIDÉO ───────────────────────────────────
           if (_lightboxIndex != null && _lightboxIsVideo && _n.video != null)
             _VideoLightbox(
               videoUrl: _n.video!.mediaUrl,
@@ -706,9 +677,13 @@ class _StoriesHeader extends StatelessWidget {
   final VoidCallback? onNotifications;
 
   const _StoriesHeader({
-    required this.topPadding, required this.onBack,
-    required this.imageCount, required this.maxImages, required this.hasVideo,
-    this.unreadCount = 0, this.onNotifications,
+    required this.topPadding,
+    required this.onBack,
+    required this.imageCount,
+    required this.maxImages,
+    required this.hasVideo,
+    this.unreadCount = 0,
+    this.onNotifications,
   });
 
   @override
@@ -731,21 +706,27 @@ class _StoriesHeader extends StatelessWidget {
               GestureDetector(
                 onTap: onBack,
                 child: Container(
-                  width: 44, height: 44,
+                  width: 44,
+                  height: 44,
                   decoration: const BoxDecoration(
-                    color: AppColors.headerOverlay, shape: BoxShape.circle,
+                    color: AppColors.headerOverlay,
+                    shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                  child: const Icon(Icons.arrow_back_rounded,
+                      color: Colors.white, size: 20),
                 ),
               ),
               Row(
                 children: [
                   const Text('Espace Marchand',
-                      style: TextStyle(color: Colors.white, fontSize: 12,
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
                           fontWeight: FontWeight.w500)),
                   if (onNotifications != null) ...[
                     const SizedBox(width: 10),
-                    NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications!),
+                    NotificationBellButton(
+                        unreadCount: unreadCount, onTap: onNotifications!),
                   ],
                 ],
               ),
@@ -753,30 +734,35 @@ class _StoriesHeader extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           const Text('Stories & Publications',
-              style: TextStyle(color: Colors.white, fontSize: 24,
-                  fontWeight: FontWeight.w700, fontFamily: 'Sora')),
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Sora')),
           const SizedBox(height: 4),
           const Text(
             'Vos publications apparaissent sur votre fiche commerce.',
             style: TextStyle(color: Colors.white, fontSize: 12),
           ),
           const SizedBox(height: 16),
-          // KPIs
           Row(
             children: [
-              Expanded(child: _HeaderKpi(
+              Expanded(
+                  child: _HeaderKpi(
                 icon: Icons.image_rounded,
                 label: 'Photos',
                 value: '$imageCount / $maxImages',
               )),
               const SizedBox(width: 8),
-              Expanded(child: _HeaderKpi(
+              Expanded(
+                  child: _HeaderKpi(
                 icon: Icons.videocam_rounded,
                 label: 'Vidéo',
                 value: hasVideo ? 'Ajoutée' : 'Aucune',
               )),
               const SizedBox(width: 8),
-              const Expanded(child: _HeaderKpi(
+              const Expanded(
+                  child: _HeaderKpi(
                 icon: Icons.timer_rounded,
                 label: 'Durée max',
                 value: '1min30',
@@ -794,7 +780,8 @@ class _HeaderKpi extends StatelessWidget {
   final String label;
   final String value;
 
-  const _HeaderKpi({required this.icon, required this.label, required this.value});
+  const _HeaderKpi(
+      {required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -810,8 +797,11 @@ class _HeaderKpi extends StatelessWidget {
           Icon(icon, color: Colors.white, size: 14),
           const SizedBox(height: 4),
           Text(value,
-              style: const TextStyle(color: Colors.white, fontSize: 13,
-                  fontWeight: FontWeight.w700, fontFamily: 'Sora')),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Sora')),
           Text(label,
               style: const TextStyle(color: Colors.white70, fontSize: 10)),
         ],
@@ -820,7 +810,6 @@ class _HeaderKpi extends StatelessWidget {
   }
 }
 
-// ── RÈGLES ────────────────────────────────────────────────────────────────────
 class _RulesCard extends StatelessWidget {
   final bool hasVideo;
   const _RulesCard({required this.hasVideo});
@@ -839,7 +828,6 @@ class _RulesCard extends StatelessWidget {
   }
 }
 
-// ── BOUTON AJOUT ──────────────────────────────────────────────────────────────
 class _AddButton extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -848,8 +836,11 @@ class _AddButton extends StatelessWidget {
   final VoidCallback onTap;
 
   const _AddButton({
-    required this.icon, required this.label, required this.hint,
-    required this.enabled, required this.onTap,
+    required this.icon,
+    required this.label,
+    required this.hint,
+    required this.enabled,
+    required this.onTap,
   });
 
   @override
@@ -865,36 +856,47 @@ class _AddButton extends StatelessWidget {
             color: AppColors.card,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: enabled ? AppColors.primary.withValues(alpha: 0.5) : AppColors.border,
+              color: enabled
+                  ? AppColors.primary.withValues(alpha: 0.5)
+                  : AppColors.border,
               width: enabled ? 1.5 : 0.5,
             ),
             boxShadow: const [
               BoxShadow(color: Color(0x0A000000), blurRadius: 2),
-              BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+              BoxShadow(
+                  color: Color(0x0F000000),
+                  blurRadius: 16,
+                  offset: Offset(0, 4)),
             ],
           ),
           child: Column(
             children: [
               Container(
-                width: 44, height: 44,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: enabled ? AppColors.primarySoft : AppColors.secondary,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon,
-                    color: enabled ? AppColors.primary : AppColors.mutedForeground,
+                    color:
+                        enabled ? AppColors.primary : AppColors.mutedForeground,
                     size: 22),
               ),
               const SizedBox(height: 8),
               Text(label,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w700,
-                    color: enabled ? AppColors.foreground : AppColors.mutedForeground,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: enabled
+                        ? AppColors.foreground
+                        : AppColors.mutedForeground,
                   )),
               const SizedBox(height: 2),
               Text(hint,
-                  style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground)),
+                  style: const TextStyle(
+                      fontSize: 10, color: AppColors.mutedForeground)),
             ],
           ),
         ),
@@ -903,7 +905,6 @@ class _AddButton extends StatelessWidget {
   }
 }
 
-// ── GRILLE RÉORDONNABLES ──────────────────────────────────────────────────────
 class ReorderableWrap extends StatelessWidget {
   final List<MerchantStoryItem> items;
   final Future<void> Function(int, int) onReorder;
@@ -913,8 +914,10 @@ class ReorderableWrap extends StatelessWidget {
 
   const ReorderableWrap({
     super.key,
-    required this.items, required this.onReorder,
-    required this.onDelete, required this.onTap,
+    required this.items,
+    required this.onReorder,
+    required this.onDelete,
+    required this.onTap,
     required this.onEditDescription,
   });
 
@@ -924,9 +927,6 @@ class ReorderableWrap extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: items.length,
-      // onReorder est déprécié depuis v3.41.0 — onReorderItem reçoit déjà
-      // le newIndex corrigé (décalé si oldIndex < newIndex), donc on peut
-      // passer onReorder directement sans adapter les paramètres.
       onReorderItem: (oldIndex, newIndex) => onReorder(oldIndex, newIndex),
       buildDefaultDragHandles: false,
       itemBuilder: (context, i) {
@@ -954,17 +954,22 @@ class ReorderableWrap extends StatelessWidget {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          (item.description != null && item.description!.isNotEmpty)
+                          (item.description != null &&
+                                  item.description!.isNotEmpty)
                               ? item.description!
                               : 'Ajouter une description',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 11,
-                            fontStyle: (item.description != null && item.description!.isNotEmpty)
-                                ? FontStyle.normal : FontStyle.italic,
-                            color: (item.description != null && item.description!.isNotEmpty)
-                                ? AppColors.foreground : AppColors.mutedForeground,
+                            fontStyle: (item.description != null &&
+                                    item.description!.isNotEmpty)
+                                ? FontStyle.normal
+                                : FontStyle.italic,
+                            color: (item.description != null &&
+                                    item.description!.isNotEmpty)
+                                ? AppColors.foreground
+                                : AppColors.mutedForeground,
                           ),
                         ),
                       ),
@@ -987,8 +992,10 @@ class _ImageTile extends StatelessWidget {
   final VoidCallback onDelete;
 
   const _ImageTile({
-    required this.url, required this.index,
-    required this.onTap, required this.onDelete,
+    required this.url,
+    required this.index,
+    required this.onTap,
+    required this.onDelete,
   });
 
   @override
@@ -999,7 +1006,8 @@ class _ImageTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(color: Color(0x0A000000), blurRadius: 2),
-          BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+          BoxShadow(
+              color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
         ],
       ),
       child: ClipRRect(
@@ -1007,7 +1015,6 @@ class _ImageTile extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Image
             GestureDetector(
               onTap: onTap,
               child: CachedNetworkImage(
@@ -1027,9 +1034,10 @@ class _ImageTile extends StatelessWidget {
                 ),
               ),
             ),
-            // Gradient bas
             Positioned(
-              bottom: 0, left: 0, right: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
               child: Container(
                 height: 60,
                 decoration: const BoxDecoration(
@@ -1041,37 +1049,42 @@ class _ImageTile extends StatelessWidget {
                 ),
               ),
             ),
-            // Numéro
             Positioned(
-              bottom: 8, left: 12,
+              bottom: 8,
+              left: 12,
               child: Text(
                 'Photo ${index + 1}',
-                style: const TextStyle(color: Colors.white, fontSize: 11,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700),
               ),
             ),
-            // Bouton supprimer
             Positioned(
-              top: 8, right: 8,
+              top: 8,
+              right: 8,
               child: GestureDetector(
                 onTap: onDelete,
                 child: Container(
-                  width: 32, height: 32,
+                  width: 32,
+                  height: 32,
                   decoration: const BoxDecoration(
                     color: AppColors.destructive,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.delete_rounded, color: Colors.white, size: 16),
+                  child: const Icon(Icons.delete_rounded,
+                      color: Colors.white, size: 16),
                 ),
               ),
             ),
-            // Handle drag
             Positioned(
-              top: 8, left: 8,
+              top: 8,
+              left: 8,
               child: ReorderableDragStartListener(
                 index: index,
                 child: Container(
-                  width: 32, height: 32,
+                  width: 32,
+                  height: 32,
                   decoration: const BoxDecoration(
                     color: Colors.black45,
                     shape: BoxShape.circle,
@@ -1088,7 +1101,6 @@ class _ImageTile extends StatelessWidget {
   }
 }
 
-// ── VIDÉO CARD ────────────────────────────────────────────────────────────────
 class _VideoCard extends StatelessWidget {
   final String videoUrl;
   final String? description;
@@ -1097,8 +1109,10 @@ class _VideoCard extends StatelessWidget {
   final VoidCallback onEditDescription;
 
   const _VideoCard({
-    required this.videoUrl, required this.description,
-    required this.onDelete, required this.onPreview,
+    required this.videoUrl,
+    required this.description,
+    required this.onDelete,
+    required this.onPreview,
     required this.onEditDescription,
   });
 
@@ -1112,17 +1126,18 @@ class _VideoCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(color: Color(0x0A000000), blurRadius: 2),
-          BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+          BoxShadow(
+              color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
         ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Aperçu placeholder vidéo
           GestureDetector(
             onTap: onPreview,
             child: Container(
-              width: 80, height: 60,
+              width: 80,
+              height: 60,
               decoration: BoxDecoration(
                 color: AppColors.foreground,
                 borderRadius: BorderRadius.circular(14),
@@ -1137,11 +1152,14 @@ class _VideoCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Vidéo de la boutique',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.foreground)),
                 const SizedBox(height: 2),
                 const Text('Durée max : 1min30',
-                    style: TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
+                    style: TextStyle(
+                        fontSize: 11, color: AppColors.mutedForeground)),
                 const SizedBox(height: 6),
                 GestureDetector(
                   onTap: onEditDescription,
@@ -1152,13 +1170,19 @@ class _VideoCard extends StatelessWidget {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          hasDescription ? description! : 'Ajouter une description',
+                          hasDescription
+                              ? description!
+                              : 'Ajouter une description',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 11,
-                            fontStyle: hasDescription ? FontStyle.normal : FontStyle.italic,
-                            color: hasDescription ? AppColors.foreground : AppColors.mutedForeground,
+                            fontStyle: hasDescription
+                                ? FontStyle.normal
+                                : FontStyle.italic,
+                            color: hasDescription
+                                ? AppColors.foreground
+                                : AppColors.mutedForeground,
                           ),
                         ),
                       ),
@@ -1169,29 +1193,33 @@ class _VideoCard extends StatelessWidget {
                 GestureDetector(
                   onTap: onPreview,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: AppColors.primarySoft,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: const Text('Aperçu',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
                             color: AppColors.primary)),
                   ),
                 ),
               ],
             ),
           ),
-          // Supprimer
           GestureDetector(
             onTap: onDelete,
             child: Container(
-              width: 36, height: 36,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
                 color: AppColors.destructive.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.delete_rounded, color: AppColors.destructive, size: 18),
+              child: const Icon(Icons.delete_rounded,
+                  color: AppColors.destructive, size: 18),
             ),
           ),
         ],
@@ -1200,14 +1228,15 @@ class _VideoCard extends StatelessWidget {
   }
 }
 
-// ── LIGHTBOX IMAGES ───────────────────────────────────────────────────────────
 class _ImageLightbox extends StatefulWidget {
   final List<String> images;
   final int startIndex;
   final VoidCallback onClose;
 
   const _ImageLightbox({
-    required this.images, required this.startIndex, required this.onClose,
+    required this.images,
+    required this.startIndex,
+    required this.onClose,
   });
 
   @override
@@ -1226,7 +1255,10 @@ class _ImageLightboxState extends State<_ImageLightbox> {
   }
 
   @override
-  void dispose() { _page.dispose(); super.dispose(); }
+  void dispose() {
+    _page.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1235,7 +1267,6 @@ class _ImageLightboxState extends State<_ImageLightbox> {
         color: Colors.black.withValues(alpha: 0.95),
         child: Stack(
           children: [
-            // Swipe images
             PageView.builder(
               controller: _page,
               itemCount: widget.images.length,
@@ -1249,37 +1280,41 @@ class _ImageLightboxState extends State<_ImageLightbox> {
                 ),
               ),
             ),
-            // Fermer
             Positioned(
               top: MediaQuery.of(context).padding.top + 8,
               right: 12,
               child: GestureDetector(
                 onTap: widget.onClose,
                 child: Container(
-                  width: 44, height: 44,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
+                  child: const Icon(Icons.close_rounded,
+                      color: Colors.white, size: 20),
                 ),
               ),
             ),
-            // Compteur
             Positioned(
               bottom: MediaQuery.of(context).padding.bottom + 20,
-              left: 0, right: 0,
+              left: 0,
+              right: 0,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(widget.images.length, (i) => Container(
-                  width: i == _current ? 20 : 6,
-                  height: 6,
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  decoration: BoxDecoration(
-                    color: i == _current ? Colors.white : Colors.white38,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                )),
+                children: List.generate(
+                    widget.images.length,
+                    (i) => Container(
+                          width: i == _current ? 20 : 6,
+                          height: 6,
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          decoration: BoxDecoration(
+                            color:
+                                i == _current ? Colors.white : Colors.white38,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        )),
               ),
             ),
           ],
@@ -1289,7 +1324,6 @@ class _ImageLightboxState extends State<_ImageLightbox> {
   }
 }
 
-// ── LIGHTBOX VIDÉO ────────────────────────────────────────────────────────────
 class _VideoLightbox extends StatefulWidget {
   final String videoUrl;
   final VoidCallback onClose;
@@ -1341,15 +1375,20 @@ class _VideoLightboxState extends State<_VideoLightbox> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.error_outline_rounded, color: Colors.white60, size: 40),
+                          Icon(Icons.error_outline_rounded,
+                              color: Colors.white60, size: 40),
                           SizedBox(height: 12),
                           Text('Impossible de lire cette vidéo',
-                              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700)),
                         ],
                       ),
                     )
                   : !ready
-                      ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                      ? const CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2)
                       : GestureDetector(
                           onTap: () => setState(() {
                             c.value.isPlaying ? c.pause() : c.play();
@@ -1362,7 +1401,8 @@ class _VideoLightboxState extends State<_VideoLightbox> {
                                 VideoPlayer(c),
                                 if (!c.value.isPlaying)
                                   Container(
-                                    width: 56, height: 56,
+                                    width: 56,
+                                    height: 56,
                                     decoration: const BoxDecoration(
                                       color: Colors.black54,
                                       shape: BoxShape.circle,
@@ -1375,10 +1415,10 @@ class _VideoLightboxState extends State<_VideoLightbox> {
                           ),
                         ),
             ),
-            // Barre de progression en bas
             if (ready)
               Positioned(
-                left: 16, right: 16,
+                left: 16,
+                right: 16,
                 bottom: MediaQuery.of(context).padding.bottom + 16,
                 child: VideoProgressIndicator(
                   c,
@@ -1390,19 +1430,20 @@ class _VideoLightboxState extends State<_VideoLightbox> {
                   ),
                 ),
               ),
-            // Fermer
             Positioned(
               top: MediaQuery.of(context).padding.top + 8,
               right: 12,
               child: GestureDetector(
                 onTap: widget.onClose,
                 child: Container(
-                  width: 44, height: 44,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
+                  child: const Icon(Icons.close_rounded,
+                      color: Colors.white, size: 20),
                 ),
               ),
             ),

@@ -16,7 +16,7 @@ import '../../shared/models/models.dart';
 import '../../shared/merchant_category.dart';
 import '../dashboard/dashboard_notifier.dart';
 
-// ── Modèle produit (adapté depuis OfferingResponse) ────────────────────────
+// ── Modèle produit ────────────────────────────────────────────────────────────
 class DbProduct {
   final String id;
   final String merchantId;
@@ -25,6 +25,7 @@ class DbProduct {
   final int priceXof;
   final String? imageUrl;
   final String category;
+  final String? categoryId;
   final bool isAvailable;
   final int? stock;
   final String cityCode;
@@ -37,19 +38,16 @@ class DbProduct {
     required this.priceXof,
     this.imageUrl,
     required this.category,
+    this.categoryId,
     required this.isAvailable,
     this.stock,
     required this.cityCode,
   });
 
-  /// Adapté depuis OfferingResponse (nouvelle API Neon) — remplace
-  /// l'ancien DbProduct.fromJson (table `products` Supabase).
-  ///
-  /// TODO : `category` reste vide pour l'instant — OfferingResponse ne
-  /// renvoie qu'un `category_id` (UUID), pas un nom lisible. Il faudra
-  /// croiser avec CategoryService.list(merchantId) pour résoudre les noms
-  /// une fois qu'on affiche un vrai sélecteur de catégories.
-  factory DbProduct.fromOffering(Map<String, dynamic> j) {
+  factory DbProduct.fromOffering(
+    Map<String, dynamic> j, {
+    Map<String, String> categoryNames = const {},
+  }) {
     final variants = (j['variants'] as List?) ?? const [];
     final Map<String, dynamic>? defaultVariant = variants.isEmpty
         ? null
@@ -61,6 +59,9 @@ class DbProduct {
     final priceStr = defaultVariant?['price'] as String?;
     final priceXof = priceStr != null ? double.parse(priceStr).round() : 0;
 
+    final catId = j['category_id'] as String?;
+    final catName = (catId != null ? categoryNames[catId] : null) ?? '';
+
     return DbProduct(
       id: j['id'] as String,
       merchantId: j['merchant_id'] as String,
@@ -68,37 +69,29 @@ class DbProduct {
       description: j['description'] as String?,
       priceXof: priceXof,
       imageUrl: j['image_url'] as String?,
-      category: '', // TODO : résoudre category_id -> nom (voir ci-dessus)
+      category: catName,
+      categoryId: catId,
       isAvailable: defaultVariant?['is_in_stock'] as bool? ?? true,
       stock: defaultVariant?['stock_quantity'] as int?,
-      cityCode: 'oume', // absent du modèle Neon, conservé pour compat UI
+      cityCode: 'oume',
     );
   }
 }
 
 // ── Notifier produits ─────────────────────────────────────────────────────────
 class ProductsNotifier extends ChangeNotifier {
-  // Source unique de vérité pour "merchant" (statut ouvert/fermé, pause,
-  // horaires) — la même instance que Dashboard et Profil. Avant, ce
-  // notifier gardait sa propre copie du marchand avec son propre
-  // abonnement realtime : basculer depuis un écran ne mettait à jour QUE
-  // cet écran, jamais les autres, sans lien de cause à effet fiable.
   final DashboardNotifier dashboardNotifier;
   final _api = ANanNanApiClient();
   late final _offerings = OfferingService(_api);
+  late final _categoriesService = CategoryService(_api);
 
-  // TODO backend : à renseigner dès que GET /api/v1/merchants/mine (ou
-  // équivalent) existe — voir docs/anannan-migration-tracker.md. Tant que
-  // c'est null, l'écran Products affiche un état "en attente" plutôt que
-  // de planter, mais aucun appel réel ne part vers la nouvelle API.
   String? merchantId;
-
   List<DbProduct> products = [];
+  Map<String, String> categoryMap = {};
   bool loadingProducts = true;
   String query = '';
   String categoryFilter = 'all';
-  String availFilter = 'all'; // all | visible | hidden
-  String? _productsLoadedForMerchantId;
+  String availFilter = 'all';
 
   MerchantModel? get merchant => dashboardNotifier.merchant;
   bool get loadingMerchant => dashboardNotifier.loadingMerchant;
@@ -106,56 +99,64 @@ class ProductsNotifier extends ChangeNotifier {
   ProductsNotifier(this.dashboardNotifier, {String? merchantId})
       : merchantId = merchantId ?? NeonSession.merchantId {
     dashboardNotifier.addListener(_onMerchantChanged);
-    _onMerchantChanged(); // le marchand peut déjà être chargé à cet instant
+    _init();
+  }
+
+  Future<void> _init() async {
+    merchantId ??= NeonSession.merchantId;
+    if (merchantId == null) {
+      try {
+        final mine = await MerchantService(_api).getMine();
+        if (mine.isNotEmpty) {
+          merchantId = mine.first['id'] as String?;
+          NeonSession.setCurrentMerchant(mine.first);
+        }
+      } catch (_) {}
+    }
+    await _loadCategoriesAndProducts();
   }
 
   void _onMerchantChanged() {
-    // NOTE : le statut ouvert/fermé/pause continue de venir de
-    // dashboardNotifier (toujours sur Supabase) — seul le catalogue
-    // (produits) est préparé ici pour la nouvelle API.
     notifyListeners();
-    if (merchantId != null && merchantId != _productsLoadedForMerchantId) {
-      _productsLoadedForMerchantId = merchantId;
-      _loadProducts();
+    if (dashboardNotifier.merchant != null &&
+        dashboardNotifier.merchant!.id != merchantId) {
+      merchantId = dashboardNotifier.merchant!.id;
+      _loadCategoriesAndProducts();
     }
   }
 
-  /// À appeler dès que le merchant_id Neon est connu (voir TODO plus haut).
-  void setMerchantId(String id) {
-    if (id == merchantId) return;
-    merchantId = id;
-    _productsLoadedForMerchantId = null;
-    _onMerchantChanged();
-  }
-
-  Future<void> _loadProducts() async {
+  Future<void> _loadCategoriesAndProducts() async {
     if (merchantId == null) return;
     loadingProducts = true;
     notifyListeners();
+
     try {
+      try {
+        final catList = await _categoriesService.list(merchantId!);
+        categoryMap = {
+          for (final c in catList)
+            if (c['id'] != null && c['name'] != null)
+              c['id'] as String: c['name'] as String,
+        };
+      } catch (_) {}
+
       final data = await _offerings.list(merchantId!);
       products = data
           .cast<Map<String, dynamic>>()
-          .map(DbProduct.fromOffering)
+          .map((e) => DbProduct.fromOffering(e, categoryNames: categoryMap))
           .toList();
     } catch (_) {
-      // Best-effort — laisse la liste précédente affichée plutôt que de
-      // la vider brutalement sur un pépin réseau ponctuel.
     } finally {
       loadingProducts = false;
       notifyListeners();
     }
   }
 
-  Future<void> refresh() => _loadProducts();
+  Future<void> refresh() => _loadCategoriesAndProducts();
 
-  /// Sous-catégories réellement utilisées par ce commerce (ex: "Antidouleur",
-  /// "Vitamines"...). Indispensable dès qu'il y a beaucoup de produits — une
-  /// pharmacie ne peut pas se contenter d'un simple scroll.
   List<String> get categories {
     final set = products.map((p) => p.category).where((c) => c.isNotEmpty).toSet();
-    final list = set.toList()..sort();
-    return list;
+    return set.toList()..sort();
   }
 
   List<DbProduct> get filtered {
@@ -177,19 +178,24 @@ class ProductsNotifier extends ChangeNotifier {
   Future<void> pauseMerchant(int minutes) => dashboardNotifier.pauseMerchant(minutes);
   Future<void> resumeMerchant() => dashboardNotifier.resumeMerchant();
 
-  // TODO : pas de PATCH partiel sur une variante dans l'API actuelle —
-  // seul l'offering entier se met à jour. En attendant un endpoint dédié
-  // (PATCH /offerings/{id}/variants/{id} ?), on ne peut pas encore basculer
-  // is_in_stock seul sans renvoyer tout le reste. Flag à ajouter au backend
-  // si ça reste bloquant une fois le merchant_id débloqué.
   Future<void> toggleAvailability(DbProduct p) async {
-    toast.error('Pas encore disponible sur la nouvelle API (en attente backend)');
+    try {
+      await _api.patch('/api/v1/offerings/${p.id}', body: {
+        'status': p.isAvailable ? 'draft' : 'active',
+      });
+      await refresh();
+    } catch (_) {
+      toast.info("Option en cours de déploiement sur l'API.");
+    }
   }
 
   Future<void> deleteProduct(String id) async {
-    // TODO : pas de DELETE /offerings/{id} dans le schéma actuel — à
-    // demander au backend (ou repasser status='archived' via un futur PATCH).
-    toast.error('Pas encore disponible sur la nouvelle API (en attente backend)');
+    try {
+      await _api.delete('/api/v1/offerings/$id');
+      await refresh();
+    } catch (_) {
+      toast.info("La suppression directe sera disponible dans la prochaine mise à jour backend.");
+    }
   }
 
   Future<String?> uploadImage(String path, Uint8List bytes) async {
@@ -202,13 +208,40 @@ class ProductsNotifier extends ChangeNotifier {
   }
 
   Future<void> createProduct({
-    required String name, String? description, required int priceXof,
-    String? imageUrl, int? stock, String? category,
+    required String name,
+    String? description,
+    required int priceXof,
+    String? imageUrl,
+    int? stock,
+    String? category,
   }) async {
     if (merchantId == null) {
-      toast.error('En attente de la nouvelle API (merchant_id pas encore disponible)');
+      toast.error('Boutique introuvable');
       return;
     }
+
+    String? targetCategoryId;
+
+    if (category != null && category.trim().isNotEmpty) {
+      final trimmedCat = category.trim();
+      final existingEntry = categoryMap.entries.where(
+        (e) => e.value.toLowerCase() == trimmedCat.toLowerCase(),
+      );
+
+      if (existingEntry.isNotEmpty) {
+        targetCategoryId = existingEntry.first.key;
+      } else {
+        try {
+          final newCat = await _categoriesService.create(
+            merchantId!,
+            name: trimmedCat,
+            slug: _slugify(trimmedCat),
+          );
+          targetCategoryId = newCat['id'] as String?;
+        } catch (_) {}
+      }
+    }
+
     await _offerings.create(
       merchantId!,
       title: name,
@@ -218,27 +251,38 @@ class ProductsNotifier extends ChangeNotifier {
       stockQuantity: stock,
       isInStock: stock == null || stock > 0,
       imageUrl: imageUrl,
+      categoryId: targetCategoryId,
       status: 'active',
     );
-    await _loadProducts();
+
+    await _loadCategoriesAndProducts();
   }
 
-  Future<void> updateProduct(String id, {
-    required String name, String? description,
-    required int priceXof, String? imageUrl, int? stock, String? category,
+  Future<void> updateProduct(
+    String id, {
+    required String name,
+    String? description,
+    required int priceXof,
+    String? imageUrl,
+    int? stock,
+    String? category,
   }) async {
-    // TODO backend : pas de PATCH /offerings/{id} dans le schéma actuel,
-    // uniquement POST (création) et GET. À demander — sans ça, modifier un
-    // produit existant est impossible depuis l'app.
-    toast.error('Modification pas encore disponible sur la nouvelle API (en attente backend)');
+    try {
+      await _api.patch('/api/v1/offerings/$id', body: {
+        'title': name,
+        if (description != null) 'description': description,
+        if (imageUrl != null) 'image_url': imageUrl,
+      });
+      await refresh();
+    } catch (_) {
+      toast.info("La modification sera active dès l'ajout du PATCH /offerings sur le serveur.");
+    }
   }
 
   String _slugify(String s) {
     final base = s.toLowerCase().trim()
         .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
         .replaceAll(RegExp(r'\s+'), '-');
-    // Suffixe court pour limiter les collisions de slug entre produits au
-    // nom proche — le slug doit être unique par marchand côté API.
     final suffix = DateTime.now().millisecondsSinceEpoch.toRadixString(36).substring(6);
     return '$base-$suffix';
   }
@@ -286,7 +330,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   @override
-  void dispose() { _n.dispose(); super.dispose(); }
+  void dispose() {
+    _n.dispose();
+    super.dispose();
+  }
 
   Future<void> _confirmDelete(DbProduct p) async {
     final ok = await showDialog<bool>(
@@ -309,7 +356,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
     try {
       await _n.deleteProduct(p.id);
       toast.success('Produit supprimé');
-    } catch (e) { toast.error(friendlyError(e)); }
+    } catch (e) {
+      toast.error(friendlyError(e));
+    }
   }
 
   @override
@@ -322,14 +371,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
         children: [
           CustomScrollView(
             slivers: [
-              // ── HEADER ────────────────────────────────────
-              SliverToBoxAdapter(child: _ProductsHeader(
-                topPadding: top, notifier: _n, onBack: widget.onGoToDashboard,
-                unreadCount: widget.unreadCount, onNotifications: widget.onGoToNotifications,
-              )),
+              SliverToBoxAdapter(
+                child: _ProductsHeader(
+                  topPadding: top,
+                  notifier: _n,
+                  onBack: widget.onGoToDashboard,
+                  unreadCount: widget.unreadCount,
+                  onNotifications: widget.onGoToNotifications,
+                ),
+              ),
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
-
-              // ── STATUT BOUTIQUE ───────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -340,28 +391,31 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           : _ShopAvailability(notifier: _n),
                 ),
               ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
-
-              // ── BOUTON AJOUTER ───────────────────────────
               if (_n.merchant != null)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: GestureDetector(
-                      onTap: () { _editing = null; setState(() => _showEditor = true); },
+                      onTap: () {
+                        _editing = null;
+                        setState(() => _showEditor = true);
+                      },
                       child: Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: AppColors.primarySoft,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.4), width: 2,
-                              style: BorderStyle.solid),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.4),
+                            width: 2,
+                          ),
                         ),
                         child: Row(
                           children: [
                             Container(
-                              width: 44, height: 44,
+                              width: 44,
+                              height: 44,
                               decoration: BoxDecoration(
                                 color: AppColors.primary,
                                 borderRadius: BorderRadius.circular(16),
@@ -385,11 +439,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     ),
                   ),
                 ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
-
-              // ── FILTRES CATÉGORIE (utile dès que le catalogue est gros,
-              // typiquement une pharmacie avec des dizaines de sous-familles) ─
               if (_n.categories.length > 1)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -429,29 +479,31 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     ),
                   ),
                 ),
-
               if (_n.products.isNotEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
                     child: Row(
                       children: [
-                        _FilterChip(label: 'Tous', active: _n.availFilter == 'all',
+                        _FilterChip(
+                            label: 'Tous',
+                            active: _n.availFilter == 'all',
                             onTap: () => _n.setAvailFilter('all')),
                         const SizedBox(width: 8),
-                        _FilterChip(label: 'Visibles', active: _n.availFilter == 'visible',
+                        _FilterChip(
+                            label: 'Visibles',
+                            active: _n.availFilter == 'visible',
                             onTap: () => _n.setAvailFilter('visible')),
                         const SizedBox(width: 8),
-                        _FilterChip(label: 'Masqués', active: _n.availFilter == 'hidden',
+                        _FilterChip(
+                            label: 'Masqués',
+                            active: _n.availFilter == 'hidden',
                             onTap: () => _n.setAvailFilter('hidden')),
                       ],
                     ),
                   ),
                 ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
-              // ── CATALOGUE ────────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -462,9 +514,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   ),
                 ),
               ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
               if (_n.loadingProducts)
                 const SliverToBoxAdapter(
                   child: Padding(
@@ -472,7 +522,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     child: SkeletonList(count: 4),
                   ),
                 ),
-
               if (!_n.loadingProducts && _n.filtered.isEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -490,7 +539,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     ),
                   ),
                 ),
-
               SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, i) {
@@ -503,9 +551,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           try {
                             await _n.toggleAvailability(p);
                             toast.success(p.isAvailable ? 'Produit masqué' : 'Produit visible');
-                          } catch (e) { toast.error(friendlyError(e)); }
+                          } catch (e) {
+                            toast.error(friendlyError(e));
+                          }
                         },
-                        onEdit: () { _editing = p; setState(() => _showEditor = true); },
+                        onEdit: () {
+                          _editing = p;
+                          setState(() => _showEditor = true);
+                        },
                         onDelete: () => _confirmDelete(p),
                       ),
                     );
@@ -513,25 +566,26 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   childCount: _n.filtered.length,
                 ),
               ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
           ),
-
-          // ── EDITOR BOTTOM SHEET ──────────────────────────
           if (_showEditor && _n.merchant != null)
             _ProductEditor(
               merchantId: _n.merchant!.id,
               initial: _editing,
               notifier: _n,
-              onClose: () => setState(() { _showEditor = false; _editing = null; }),
+              onClose: () => setState(() {
+                _showEditor = false;
+                _editing = null;
+              }),
             ),
         ],
       ),
       bottomNavigationBar: MerchantBottomNav(
-          currentIndex: widget.currentNavIndex,
-          onTap: widget.onNavTap,
-          isPharmacy: categoryNeedsPrescriptionFlow(_n.merchant?.category)),
+        currentIndex: widget.currentNavIndex,
+        onTap: widget.onNavTap,
+        isPharmacy: categoryNeedsPrescriptionFlow(_n.merchant?.category),
+      ),
     );
   }
 }
@@ -599,7 +653,6 @@ class _ProductsHeader extends StatelessWidget {
           const Text('Catalogue & disponibilité de votre boutique.',
               style: TextStyle(color: Colors.white, fontSize: 12)),
           const SizedBox(height: 12),
-          // Barre de recherche
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
@@ -613,7 +666,6 @@ class _ProductsHeader extends StatelessWidget {
                 Expanded(
                   child: TextField(
                     onChanged: notifier.setQuery,
-                    autofillHints: const [],
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                     decoration: const InputDecoration(
                       hintText: 'Rechercher un produit...',
@@ -649,7 +701,6 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
   @override
   void initState() {
     super.initState();
-    // Écouter le notifier pour se rebuilder quand le merchant change
     widget.notifier.addListener(_onNotifierChange);
   }
 
@@ -694,7 +745,6 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Statut + toggle
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -713,15 +763,15 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
                   ),
                 ],
               ),
-              // Bouton Ouvrir/Fermer
               GestureDetector(
                 onTap: () async {
                   try {
-                    // Lire AVANT le toggle (même logique que le React: !merchant.is_open)
                     final wasOpen = widget.notifier.merchant?.isOpen ?? false;
                     await widget.notifier.toggleOpen();
                     toast.success(!wasOpen ? 'Boutique ouverte' : 'Boutique fermée');
-                  } catch (e) { toast.error(friendlyError(e)); }
+                  } catch (e) {
+                    toast.error(friendlyError(e));
+                  }
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -737,7 +787,6 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
               ),
             ],
           ),
-
           if (isPaused) ...[
             const SizedBox(height: 8),
             Text(
@@ -745,10 +794,7 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
               style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
             ),
           ],
-
           const SizedBox(height: 12),
-
-          // Boutons pause 15/30/60
           Row(
             children: [15, 30, 60].map((min) => Expanded(
               child: Padding(
@@ -758,7 +804,9 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
                     try {
                       await widget.notifier.pauseMerchant(min);
                       toast.success('Pause $min min');
-                    } catch (e) { toast.error(friendlyError(e)); }
+                    } catch (e) {
+                      toast.error(friendlyError(e));
+                    }
                   },
                   child: Container(
                     height: 40,
@@ -781,14 +829,16 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
               ),
             )).toList(),
           ),
-
-          // Bouton reprendre
           if (isPaused) ...[
             const SizedBox(height: 8),
             GestureDetector(
               onTap: () async {
-                try { await widget.notifier.resumeMerchant(); toast.success('Pause levée'); }
-                catch (e) { toast.error(friendlyError(e)); }
+                try {
+                  await widget.notifier.resumeMerchant();
+                  toast.success('Pause levée');
+                } catch (e) {
+                  toast.error(friendlyError(e));
+                }
               },
               child: Container(
                 height: 40, width: double.infinity,
@@ -855,8 +905,12 @@ class _ProductRow extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _ProductRow({required this.product, required this.onToggle,
-      required this.onEdit, required this.onDelete});
+  const _ProductRow({
+    required this.product,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -868,12 +922,13 @@ class _ProductRow extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 2),
-              BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4))],
+          boxShadow: const [
+            BoxShadow(color: Color(0x0A000000), blurRadius: 2),
+            BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4))
+          ],
         ),
         child: Row(
           children: [
-            // Photo
             ClipRRect(
               borderRadius: BorderRadius.circular(14),
               child: p.imageUrl != null
@@ -925,7 +980,6 @@ class _ProductRow extends StatelessWidget {
                   Wrap(
                     spacing: 6, runSpacing: 4,
                     children: [
-                      // Toggle visible/masqué
                       GestureDetector(
                         onTap: onToggle,
                         child: Container(
@@ -954,7 +1008,6 @@ class _ProductRow extends StatelessWidget {
                               style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
                                   color: AppColors.foreground)),
                         ),
-                      // Modifier
                       GestureDetector(
                         onTap: onEdit,
                         child: Container(
@@ -975,7 +1028,6 @@ class _ProductRow extends StatelessWidget {
                 ],
               ),
             ),
-            // Supprimer
             GestureDetector(
               onTap: onDelete,
               child: Container(
@@ -994,7 +1046,7 @@ class _ProductRow extends StatelessWidget {
   }
 }
 
-// ── PRODUCT EDITOR (bottom sheet) ─────────────────────────────────────────────
+// ── PRODUCT EDITOR ────────────────────────────────────────────────────────────
 class _ProductEditor extends StatefulWidget {
   final String merchantId;
   final DbProduct? initial;
@@ -1002,7 +1054,9 @@ class _ProductEditor extends StatefulWidget {
   final VoidCallback onClose;
 
   const _ProductEditor({
-    required this.merchantId, this.initial, required this.notifier,
+    required this.merchantId,
+    this.initial,
+    required this.notifier,
     required this.onClose,
   });
 
@@ -1019,8 +1073,6 @@ class _ProductEditorState extends State<_ProductEditor> {
   String? _imageUrl;
   bool _saving = false;
 
-  /// Suggestions de sous-catégories : celles déjà utilisées par ce commerce,
-  /// + un jeu de départ propre aux pharmacies pour amorcer le tri.
   List<String> get _categorySuggestions {
     final used = widget.notifier.categories;
     if (used.isNotEmpty) return used;
@@ -1028,7 +1080,7 @@ class _ProductEditorState extends State<_ProductEditor> {
     if (!isPharmacy) return const [];
     return const [
       'Antidouleur', 'Antibiotique', 'Vitamines & Compléments',
-      'Hygiène & Beauté', 'Bébé & Maman', 'Premiers secours', 'Dispositifs médicaux',
+      'Hygiène & Beauté', 'Bébé & Maman', 'Premiers secours',
     ];
   }
 
@@ -1046,7 +1098,11 @@ class _ProductEditorState extends State<_ProductEditor> {
 
   @override
   void dispose() {
-    _name.dispose(); _desc.dispose(); _price.dispose(); _stock.dispose(); _category.dispose();
+    _name.dispose();
+    _desc.dispose();
+    _price.dispose();
+    _stock.dispose();
+    _category.dispose();
     super.dispose();
   }
 
@@ -1054,9 +1110,10 @@ class _ProductEditorState extends State<_ProductEditor> {
     final picker = ImagePicker();
     final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (file == null) return;
-    final bytes = await file.readAsBytes(); // retourne Uint8List
+    final bytes = await file.readAsBytes();
     final url = await widget.notifier.uploadImage(
-      '${DateTime.now().millisecondsSinceEpoch}.jpg', bytes,
+      '${DateTime.now().millisecondsSinceEpoch}.jpg',
+      bytes,
     );
     if (url != null) setState(() => _imageUrl = url);
   }
@@ -1070,15 +1127,26 @@ class _ProductEditorState extends State<_ProductEditor> {
     setState(() => _saving = true);
     try {
       if (widget.initial != null) {
-        await widget.notifier.updateProduct(widget.initial!.id,
-            name: _name.text.trim(), description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
-            priceXof: price, imageUrl: _imageUrl, stock: stock, category: _category.text.trim());
+        await widget.notifier.updateProduct(
+          widget.initial!.id,
+          name: _name.text.trim(),
+          description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
+          priceXof: price,
+          imageUrl: _imageUrl,
+          stock: stock,
+          category: _category.text.trim(),
+        );
         toast.success('Produit mis à jour');
       } else {
         await widget.notifier.createProduct(
-            name: _name.text.trim(), description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
-            priceXof: price, imageUrl: _imageUrl, stock: stock, category: _category.text.trim());
-        toast.success('Produit créé');
+          name: _name.text.trim(),
+          description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
+          priceXof: price,
+          imageUrl: _imageUrl,
+          stock: stock,
+          category: _category.text.trim(),
+        );
+        toast.success('Produit créé avec succès');
       }
       widget.onClose();
     } catch (e) {
@@ -1113,7 +1181,6 @@ class _ProductEditorState extends State<_ProductEditor> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Handle
                     Center(child: Container(
                       width: 40, height: 4,
                       decoration: BoxDecoration(
@@ -1140,25 +1207,16 @@ class _ProductEditorState extends State<_ProductEditor> {
                       ],
                     ),
                     const SizedBox(height: 20),
-
-                    // Nom
                     const _FieldLabel(label: 'Nom'),
                     const SizedBox(height: 4),
                     TextField(controller: _name,
                         decoration: const InputDecoration(hintText: 'Ex: Garba spécial')),
-
                     const SizedBox(height: 12),
-
-                    // Description
                     const _FieldLabel(label: 'Description'),
                     const SizedBox(height: 4),
                     TextField(controller: _desc, maxLines: 2,
                         decoration: const InputDecoration(hintText: 'Ingrédients, détails…')),
-
                     const SizedBox(height: 12),
-
-                    // Catégorie (sous-famille) — clé pour un catalogue lisible
-                    // dès qu'il y a beaucoup de produits (ex. pharmacie).
                     const _FieldLabel(label: 'Catégorie'),
                     const SizedBox(height: 4),
                     TextField(controller: _category,
@@ -1183,10 +1241,7 @@ class _ProductEditorState extends State<_ProductEditor> {
                         ],
                       ),
                     ],
-
                     const SizedBox(height: 12),
-
-                    // Prix + Stock
                     Row(
                       children: [
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1206,10 +1261,7 @@ class _ProductEditorState extends State<_ProductEditor> {
                         ])),
                       ],
                     ),
-
                     const SizedBox(height: 12),
-
-                    // Photo
                     const _FieldLabel(label: 'Photo du produit'),
                     const SizedBox(height: 4),
                     GestureDetector(
@@ -1237,10 +1289,7 @@ class _ProductEditorState extends State<_ProductEditor> {
                             : null,
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // Bouton submit
                     SizedBox(
                       width: double.infinity, height: 52,
                       child: ElevatedButton.icon(

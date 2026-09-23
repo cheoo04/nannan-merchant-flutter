@@ -1,24 +1,12 @@
-// lib/core/services/a_nan_nan_services.dart
-//
-// Services métier au-dessus de ANanNanApiClient. Mis à jour le 19/09 après
-// que le backend a ajouté : image_url/images sur les offerings, logo_url/
-// story_images sur les merchants, stock_quantity/is_in_stock sur les
-// variantes, et un vrai système de catégories. Les anciens TODO temporaires
-// (metadata_ comme solution de contournement pour l'image) sont retirés.
-
 import 'a_nan_nan_api_client.dart';
 
 class MerchantService {
   final ANanNanApiClient _api;
   const MerchantService(this._api);
 
-  /// GET /api/v1/merchants/me — livré par le backend le 20/09, résout le
-  /// blocage central de la migration. Retourne les marchands dont
-  /// l'utilisateur connecté est owner/staff. Vide = pas encore marchand,
-  /// un seul = cas normal, plusieurs = multi-boutiques (pas encore géré
-  /// dans l'UI — à faire quand un vrai cas se présente).
   Future<List<Map<String, dynamic>>> getMine() async =>
-      (await _api.get('/api/v1/merchants/me') as List).cast<Map<String, dynamic>>();
+      (await _api.get('/api/v1/merchants/me') as List)
+          .cast<Map<String, dynamic>>();
 
   Future<Map<String, dynamic>> getById(String merchantId) async =>
       await _api.get('/api/v1/merchants/$merchantId') as Map<String, dynamic>;
@@ -82,7 +70,8 @@ class CategoryService {
   const CategoryService(this._api);
 
   Future<List<dynamic>> list(String merchantId) async =>
-      await _api.get('/api/v1/merchants/$merchantId/categories') as List<dynamic>;
+      await _api.get('/api/v1/merchants/$merchantId/categories')
+          as List<dynamic>;
 
   Future<Map<String, dynamic>> create(
     String merchantId, {
@@ -110,9 +99,6 @@ class OfferingService {
   Future<Map<String, dynamic>> get(String offeringId) async =>
       await _api.get('/api/v1/offerings/$offeringId') as Map<String, dynamic>;
 
-  /// type: physical_product | restaurant_meal | service | digital_product | bundle
-  /// Chaque offre doit avoir au moins 1 variante (prix, éventuellement sku,
-  /// stockQuantity/isInStock).
   Future<Map<String, dynamic>> create(
     String merchantId, {
     required String title,
@@ -154,7 +140,8 @@ class OrderService {
   final ANanNanApiClient _api;
   const OrderService(this._api);
 
-  Future<List<dynamic>> listForMerchant(String merchantId, {String? statusFilter}) async =>
+  Future<List<dynamic>> listForMerchant(String merchantId,
+          {String? statusFilter}) async =>
       await _api.get('/api/v1/orders', query: {
         'merchant_id': merchantId,
         if (statusFilter != null) 'status_filter': statusFilter,
@@ -163,23 +150,18 @@ class OrderService {
   Future<Map<String, dynamic>> get(String orderId) async =>
       await _api.get('/api/v1/orders/$orderId') as Map<String, dynamic>;
 
-  /// target_status: confirmed | preparing | ready_for_pickup | delivering | delivered | cancelled
-  Future<Map<String, dynamic>> updateStatus(String orderId, String targetStatus) async =>
+  Future<Map<String, dynamic>> updateStatus(
+          String orderId, String targetStatus) async =>
       await _api.patch('/api/v1/orders/$orderId/status',
           body: {'target_status': targetStatus}) as Map<String, dynamic>;
 }
 
-/// Substitut aux "stories" en attendant un vrai endpoint dédié — utilise
-/// /api/v1/merchants/{id}/publications (image/vidéo + description, pas
-/// d'expiration 24h contrairement aux vraies stories, contrôlé par is_active).
-/// NOTE: merchants.story_images (tableau simple) existe aussi maintenant —
-/// à choisir avec le backend lequel des deux est la voie officielle pour
-/// les stories avant de s'engager dans l'un ou l'autre côté Marchand.
 class PublicationService {
   final ANanNanApiClient _api;
   const PublicationService(this._api);
 
-  Future<List<dynamic>> list(String merchantId, {bool activeOnly = true}) async =>
+  Future<List<dynamic>> list(String merchantId,
+          {bool activeOnly = true}) async =>
       await _api.get('/api/v1/merchants/$merchantId/publications',
           query: {'active_only': activeOnly.toString()}) as List<dynamic>;
 
@@ -197,9 +179,84 @@ class PublicationService {
         if (description != null) 'description': description,
       }) as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> toggleActive(String publicationId, {bool? isActive}) async =>
+  Future<Map<String, dynamic>> toggleActive(String publicationId,
+          {bool? isActive}) async =>
       await _api.patch('/api/v1/publications/$publicationId/toggle-active',
-          body: isActive != null ? {'is_active': isActive} : null) as Map<String, dynamic>;
+              body: isActive != null ? {'is_active': isActive} : null)
+          as Map<String, dynamic>;
 
-  Future<void> delete(String publicationId) => _api.delete('/api/v1/publications/$publicationId');
+  Future<void> delete(String publicationId) =>
+      _api.delete('/api/v1/publications/$publicationId');
+}
+
+// ── Ordonnances Médicales ─────────────────────────────────────────────────────
+class PrescriptionService {
+  final ANanNanApiClient _api;
+  const PrescriptionService(this._api);
+
+  Future<List<dynamic>> listForMerchant(String merchantId,
+          {String? status}) async =>
+      await _api.get('/api/v1/prescriptions', query: {
+        'merchant_id': merchantId,
+        if (status != null) 'status': status,
+      }) as List<dynamic>;
+
+  Future<Map<String, dynamic>> get(String prescriptionId) async =>
+      await _api.get('/api/v1/prescriptions/$prescriptionId')
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> submitQuote(
+    String prescriptionId, {
+    required String merchantId,
+    required double quotedAmount,
+    String? details,
+  }) async =>
+      await _api.post(
+        '/api/v1/prescriptions/$prescriptionId/quote?merchant_id=$merchantId',
+        body: {
+          'quoted_amount': quotedAmount,
+          'currency': 'XOF',
+          if (details != null) 'details': details,
+        },
+      ) as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> reject(
+    String prescriptionId, {
+    String? reason,
+  }) async =>
+      await _api.post('/api/v1/prescriptions/$prescriptionId/reject', body: {
+        if (reason != null) 'reason': reason,
+      }) as Map<String, dynamic>;
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+class NotificationService {
+  final ANanNanApiClient _api;
+  const NotificationService(this._api);
+
+  Future<List<dynamic>> list({int limit = 50, bool unreadOnly = false}) async =>
+      await _api.get('/api/v1/notifications', query: {
+        'limit': limit.toString(),
+        'unread_only': unreadOnly.toString(),
+      }) as List<dynamic>;
+
+  Future<int> getUnreadCount() async {
+    try {
+      final res = await _api.get('/api/v1/notifications/unread-count')
+          as Map<String, dynamic>;
+      return res['unread_count'] as int? ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> markAsRead(String notificationId) async =>
+      await _api.patch('/api/v1/notifications/$notificationId/read');
+
+  Future<void> registerDeviceToken(
+          {required String pushToken, String platform = 'android'}) async =>
+      await _api.post('/api/v1/notifications/devices', body: {
+        'push_token': pushToken,
+        'platform': platform,
+      });
 }
