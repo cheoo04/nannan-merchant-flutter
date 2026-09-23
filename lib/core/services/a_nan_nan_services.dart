@@ -1,3 +1,4 @@
+// --- Fichier : lib/core/services/a_nan_nan_services.dart ---
 import 'a_nan_nan_api_client.dart';
 
 class MerchantService {
@@ -83,8 +84,10 @@ class CategoryService {
       await _api.post('/api/v1/merchants/$merchantId/categories', body: {
         'name': name,
         'slug': slug,
-        if (parentCategoryId != null) 'parent_category_id': parentCategoryId,
-        if (description != null) 'description': description,
+        if (parentCategoryId != null && parentCategoryId.isNotEmpty)
+          'parent_category_id': parentCategoryId,
+        if (description != null && description.isNotEmpty)
+          'description': description,
       }) as Map<String, dynamic>;
 }
 
@@ -105,7 +108,7 @@ class OfferingService {
     required String slug,
     String type = 'physical_product',
     String? description,
-    String status = 'draft',
+    String status = 'active',
     required double price,
     int? stockQuantity,
     bool isInStock = true,
@@ -118,12 +121,16 @@ class OfferingService {
         'type': type,
         'title': title,
         'slug': slug,
-        if (description != null) 'description': description,
+        if (description != null && description.isNotEmpty)
+          'description': description,
         'status': status,
-        if (imageUrl != null) 'image_url': imageUrl,
-        if (images != null) 'images': images,
-        if (categoryId != null) 'category_id': categoryId,
-        if (categoryIds != null) 'category_ids': categoryIds,
+        if (imageUrl != null && imageUrl.isNotEmpty) 'image_url': imageUrl,
+        if (images != null && images.isNotEmpty) 'images': images,
+        // Ne jamais envoyer une chaîne vide comme UUID
+        if (categoryId != null && categoryId.trim().isNotEmpty)
+          'category_id': categoryId.trim(),
+        if (categoryIds != null && categoryIds.isNotEmpty)
+          'category_ids': categoryIds,
         'variants': [
           {
             'price': price,
@@ -176,7 +183,8 @@ class PublicationService {
         'title': title,
         'media_url': mediaUrl,
         'media_type': mediaType,
-        if (description != null) 'description': description,
+        if (description != null && description.isNotEmpty)
+          'description': description,
       }) as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> toggleActive(String publicationId,
@@ -216,7 +224,7 @@ class PrescriptionService {
         body: {
           'quoted_amount': quotedAmount,
           'currency': 'XOF',
-          if (details != null) 'details': details,
+          if (details != null && details.isNotEmpty) 'details': details,
         },
       ) as Map<String, dynamic>;
 
@@ -225,7 +233,7 @@ class PrescriptionService {
     String? reason,
   }) async =>
       await _api.post('/api/v1/prescriptions/$prescriptionId/reject', body: {
-        if (reason != null) 'reason': reason,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
       }) as Map<String, dynamic>;
 }
 

@@ -73,7 +73,6 @@ class DashboardNotifier extends ChangeNotifier {
     }
   }
 
-  /// Rechargement manuel (pull-to-refresh)
   Future<void> refresh() async {
     if (merchant == null) {
       await _loadMerchant();
@@ -171,14 +170,18 @@ class DashboardNotifier extends ChangeNotifier {
     return list.take(3).toList();
   }
 
-  // ── Actions Marchand ──────────────────────────────────────
+  // ── Actions Marchand 100% compatibles OpenAPI ─────────────
 
   Future<void> toggleOpen() async {
     if (merchant == null) return;
     try {
-      final newStatus = merchant!.isOpen ? 'closed' : 'active';
+      final willBeOpen = !merchant!.isOpen;
+      // Envoyé dans settings pour respecter MerchantUpdateRequest (additionalProperties: false)
       await _api.patch('/api/v1/merchants/${merchant!.id}', body: {
-        'status': newStatus,
+        'settings': {
+          'is_open': willBeOpen,
+          'status': willBeOpen ? 'active' : 'closed',
+        }
       });
       await refresh();
     } catch (e) {
