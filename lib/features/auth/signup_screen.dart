@@ -1,10 +1,10 @@
+// --- Fichier : lib/features/auth/signup_screen.dart ---
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/ci_phone.dart';
 import '../../core/services/a_nan_nan_api_client.dart';
 import '../become_merchant/become_merchant_screen.dart';
 
-// ── SIGNUP SCREEN ─────────────────────────────────────────────────────────
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
@@ -14,7 +14,8 @@ class SignupScreen extends StatefulWidget {
 
 class _SignupScreenState extends State<SignupScreen> {
   final _api = ANanNanApiClient();
-  final _name = TextEditingController();
+  final _firstName = TextEditingController();
+  final _lastName = TextEditingController();
   final _phone = TextEditingController();
   final _pin = TextEditingController();
   final _confirmPin = TextEditingController();
@@ -24,7 +25,8 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   void dispose() {
-    _name.dispose();
+    _firstName.dispose();
+    _lastName.dispose();
     _phone.dispose();
     _pin.dispose();
     _confirmPin.dispose();
@@ -32,12 +34,17 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Future<void> _signup() async {
+    final firstName = _firstName.text.trim();
+    final lastName = _lastName.text.trim();
     final phone = CiPhone.normalize(_phone.text);
     final pin = _pin.text.trim();
 
-    final name = _name.text.trim();
-    if (name.length < 2) {
-      setState(() => _error = 'Veuillez entrer votre nom complet');
+    if (firstName.length < 2) {
+      setState(() => _error = 'Veuillez entrer votre prénom');
+      return;
+    }
+    if (lastName.length < 2) {
+      setState(() => _error = 'Veuillez entrer votre nom de famille');
       return;
     }
     if (!CiPhone.isValid(phone)) {
@@ -53,14 +60,17 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
     try {
-      final parts = name.split(RegExp(r'\s+'));
       await _api.register(
         phone: phone,
         pin: pin,
-        firstName: parts.first,
-        lastName: parts.length > 1 ? parts.sublist(1).join(' ') : null,
+        firstName: firstName,
+        lastName: lastName,
       );
 
       if (mounted) {
@@ -107,7 +117,8 @@ class _SignupScreenState extends State<SignupScreen> {
               child: Column(
                 children: [
                   Container(
-                    width: 64, height: 64,
+                    width: 64,
+                    height: 64,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(18),
@@ -117,8 +128,11 @@ class _SignupScreenState extends State<SignupScreen> {
                   const SizedBox(height: 12),
                   const Text(
                     'Créer un compte',
-                    style: TextStyle(color: Colors.white, fontSize: 22,
-                        fontWeight: FontWeight.w700, fontFamily: 'Sora'),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'Sora'),
                   ),
                   const SizedBox(height: 4),
                   const Text(
@@ -134,15 +148,45 @@ class _SignupScreenState extends State<SignupScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const _FieldLabel(text: 'Nom complet'),
-                  const SizedBox(height: 4),
-                  TextField(
-                    controller: _name,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: _inputDecoration(
-                      hint: 'Ex: Yah Mardochée Kouakou',
-                      icon: Icons.person_outline_rounded,
-                    ),
+                  // Prénom + Nom
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const _FieldLabel(text: 'Prénom'),
+                            const SizedBox(height: 4),
+                            TextField(
+                              controller: _firstName,
+                              textCapitalization: TextCapitalization.words,
+                              decoration: _inputDecoration(
+                                hint: 'Aïcha',
+                                icon: Icons.person_outline_rounded,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const _FieldLabel(text: 'Nom'),
+                            const SizedBox(height: 4),
+                            TextField(
+                              controller: _lastName,
+                              textCapitalization: TextCapitalization.characters,
+                              decoration: _inputDecoration(
+                                hint: 'Koné',
+                                icon: Icons.badge_outlined,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
 
                   const SizedBox(height: 12),
@@ -174,7 +218,8 @@ class _SignupScreenState extends State<SignupScreen> {
                         onTap: () => setState(() => _obscure = !_obscure),
                         child: Icon(
                           _obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
-                          color: AppColors.mutedForeground, size: 18,
+                          color: AppColors.mutedForeground,
+                          size: 18,
                         ),
                       ),
                     ).copyWith(counterText: ''),
@@ -220,14 +265,17 @@ class _SignupScreenState extends State<SignupScreen> {
                   const SizedBox(height: 24),
 
                   SizedBox(
-                    width: double.infinity, height: 52,
+                    width: double.infinity,
+                    height: 52,
                     child: ElevatedButton(
                       onPressed: _loading ? null : _signup,
                       style: ElevatedButton.styleFrom(
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                       ),
                       child: _loading
-                          ? const SizedBox(width: 20, height: 20,
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                           : const Text('Créer mon compte',
                               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
@@ -272,13 +320,17 @@ class _SignupScreenState extends State<SignupScreen> {
       hintStyle: const TextStyle(color: AppColors.mutedForeground),
       prefixIcon: Icon(icon, color: AppColors.mutedForeground, size: 18),
       suffixIcon: suffix,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.border)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.border)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.primary, width: 2)),
-      filled: true, fillColor: AppColors.card,
+      filled: true,
+      fillColor: AppColors.card,
     );
   }
 }
@@ -289,8 +341,11 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-    text.toUpperCase(),
-    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-        color: AppColors.mutedForeground, letterSpacing: 0.8),
-  );
+        text.toUpperCase(),
+        style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: AppColors.mutedForeground,
+            letterSpacing: 0.8),
+      );
 }

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/ci_phone.dart';
 import '../../core/utils/toast.dart';
 import '../../core/services/a_nan_nan_api_client.dart';
 import '../../core/services/a_nan_nan_services.dart';
@@ -14,22 +15,23 @@ import '../location_picker/location_picker_screen.dart';
 const String _supportPhoneDial = '+2250565074868';
 const String _supportPhoneWa = '2250565074868';
 
+// Codes conformes aux types d'activité attendus par le backend Neon
 const _businessTypeCodeByCategory = {
-  'maquis': 'restaurant',
-  'boulangerie': 'boulangerie',
-  'boutique': 'epicerie',
-  'gaz': 'service',
-  'pharmacie': 'pharmacie',
+  'restaurant': 'restaurant',
+  'fast_food': 'fast_food',
+  'boulangerie': 'bakery',
+  'boutique': 'grocery',
+  'pharmacie': 'pharmacy',
   'autre': 'service',
 };
 
 const _categories = [
-  (id: 'maquis', label: 'Maquis / Restaurant'),
-  (id: 'boulangerie', label: 'Boulangerie'),
-  (id: 'boutique', label: 'Boutique / Alimentation'),
-  (id: 'gaz', label: 'Recharge bouteilles de gaz'),
+  (id: 'restaurant', label: 'Restaurant / Maquis'),
+  (id: 'fast_food', label: 'Fast-Food'),
+  (id: 'boulangerie', label: 'Boulangerie / Pâtisserie'),
+  (id: 'boutique', label: 'Épicerie / Boutique'),
   (id: 'pharmacie', label: 'Pharmacie'),
-  (id: 'autre', label: 'Autre'),
+  (id: 'autre', label: 'Autre commerce'),
 ];
 
 enum _Step { info, terms, pending }
@@ -55,8 +57,12 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
   bool _checkingExisting = true;
   String? _userId;
 
-  final _name = TextEditingController();
+  // Champs gérant
+  final _firstName = TextEditingController();
+  final _lastName = TextEditingController();
   final _phone = TextEditingController();
+
+  // Champs boutique
   final _city = TextEditingController(text: 'Oumé');
   final _address = TextEditingController();
   double? _lat;
@@ -78,7 +84,8 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
 
   @override
   void dispose() {
-    _name.dispose();
+    _firstName.dispose();
+    _lastName.dispose();
     _phone.dispose();
     _city.dispose();
     _address.dispose();
@@ -96,37 +103,27 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
 
       final first = me['first_name'] as String?;
       final last = me['last_name'] as String?;
-      final fullName =
-          [first, last].where((s) => s != null && s.isNotEmpty).join(' ');
-      if (fullName.isNotEmpty) _name.text = fullName;
+      if (first != null && first.isNotEmpty) _firstName.text = first;
+      if (last != null && last.isNotEmpty) _lastName.text = last;
+
       final phone = me['phone'] as String?;
       if (phone != null && phone.isNotEmpty) _phone.text = phone;
 
-      // 1. Vérifier si l'utilisateur a une boutique active sur Neon
+      // Vérifier si un commerce est déjà approuvé
       final myMerchants = await _merchantService.getMine();
       if (myMerchants.isNotEmpty) {
         final current = myMerchants.first;
         NeonSession.setCurrentMerchant(current);
         final status = current['status'] as String? ?? 'pending';
 
-        if (status == 'active') {
-          setState(() {
-            _step = _Step.pending;
-            _existingApproved = true;
-            _checkingExisting = false;
-          });
-          return;
-        } else {
-          setState(() {
-            _step = _Step.pending;
-            _existingApproved = false;
-            _checkingExisting = false;
-          });
-          return;
-        }
+        setState(() {
+          _step = _Step.pending;
+          _existingApproved = status == 'active';
+          _checkingExisting = false;
+        });
+        return;
       }
 
-      // 2. Vérifier si une candidature locale ou paramètre demande l'écran d'attente
       if (widget.startAtPending) {
         setState(() {
           _step = _Step.pending;
@@ -154,20 +151,20 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
   }
 
   void _submitInfo() {
-    if (_name.text.trim().isEmpty || _phone.text.trim().isEmpty) {
-      toast.error('Renseignez votre nom et numéro');
+    if (_firstName.text.trim().isEmpty || _lastName.text.trim().isEmpty) {
+      toast.error('Renseignez le prénom et le nom du gérant');
+      return;
+    }
+    if (_phone.text.trim().isEmpty) {
+      toast.error('Renseignez le numéro de téléphone');
       return;
     }
     if (_businessName.text.trim().isEmpty) {
       toast.error('Indiquez le nom de votre commerce');
       return;
     }
-    if (_description.text.trim().isEmpty) {
-      toast.error('Ajoutez une description');
-      return;
-    }
     if (_address.text.trim().isEmpty) {
-      toast.error("Indiquez l'adresse du commerce");
+      toast.error("Indiquez l'adresse ou repère du commerce");
       return;
     }
     if (_lat == null || _lng == null) {
@@ -206,18 +203,24 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
 
     setState(() => _submitting = true);
     try {
+      final managerFullName =
+          '${_firstName.text.trim()} ${_lastName.text.trim()}';
+      final cleanPhone = CiPhone.normalize(_phone.text);
+
       await _api.post('/api/v1/auth/role-applications', body: {
         'requested_role': 'merchant',
         'business_name': _businessName.text.trim(),
         'business_type_code':
-            _businessTypeCodeByCategory[_category] ?? 'service',
-        'manager_name': _name.text.trim(),
-        'manager_phone': _phone.text.trim(),
-        'neighborhood': _city.text.trim(),
+            _businessTypeCodeByCategory[_category] ?? 'restaurant',
+        'manager_name': managerFullName,
+        'manager_phone': cleanPhone,
+        'neighborhood':
+            _city.text.trim().isEmpty ? 'Oumé Centre' : _city.text.trim(),
         'address_line': _address.text.trim(),
         'latitude': _lat,
         'longitude': _lng,
-        'description': _description.text.trim(),
+        if (_description.text.trim().isNotEmpty)
+          'description': _description.text.trim(),
       });
 
       if (_userId != null) {
@@ -229,7 +232,7 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
       setState(() => _step = _Step.pending);
     } on ANanNanApiException catch (e) {
       toast.error(e.statusCode == 404
-          ? "Type d'activité non reconnu par le serveur"
+          ? "Code d'activité non reconnu par le serveur"
           : e.message);
     } catch (e) {
       toast.error('Erreur de connexion. Réessayez.');
@@ -385,7 +388,8 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
               ),
               child: switch (_step) {
                 _Step.info => _StepInfo(
-                    name: _name,
+                    firstName: _firstName,
+                    lastName: _lastName,
                     phone: _phone,
                     city: _city,
                     address: _address,
@@ -425,7 +429,8 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
 
 // ── ÉTAPE 1 : INFORMATIONS ────────────────────────────────────────────────────
 class _StepInfo extends StatelessWidget {
-  final TextEditingController name,
+  final TextEditingController firstName,
+      lastName,
       phone,
       city,
       address,
@@ -440,7 +445,8 @@ class _StepInfo extends StatelessWidget {
   final VoidCallback onGoToPending;
 
   const _StepInfo({
-    required this.name,
+    required this.firstName,
+    required this.lastName,
     required this.phone,
     required this.city,
     required this.address,
@@ -463,7 +469,7 @@ class _StepInfo extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Étape 1/3 — Informations',
+            const Text('Étape 1/3 — Responsable & Commerce',
                 style:
                     TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
             GestureDetector(
@@ -479,22 +485,55 @@ class _StepInfo extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        _Field(
-            label: 'Nom complet', controller: name, placeholder: 'Aïcha Koné'),
+
+        // Prénom et Nom distincts du gérant
+        Row(
+          children: [
+            Expanded(
+              child: _Field(
+                label: 'Prénom du gérant',
+                controller: firstName,
+                placeholder: 'Marie',
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _Field(
+                label: 'Nom du gérant',
+                controller: lastName,
+                placeholder: 'Kouassi',
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
+
         _Field(
-            label: 'Numéro de téléphone',
-            controller: phone,
-            placeholder: '+225 07 00 00 00 00',
-            type: TextInputType.phone),
+          label: 'Numéro WhatsApp / Contact',
+          controller: phone,
+          placeholder: '07 00 00 00 00',
+          type: TextInputType.phone,
+        ),
         const SizedBox(height: 12),
-        _Field(label: 'Ville', controller: city),
-        const SizedBox(height: 12),
+
         _Field(
-            label: 'Adresse du commerce',
+            label: 'Nom du commerce',
+            controller: businessName,
+            placeholder: 'Restaurant Chez Marie'),
+        const SizedBox(height: 12),
+
+        _Field(
+            label: 'Quartier / Ville',
+            controller: city,
+            placeholder: 'Oumé Centre'),
+        const SizedBox(height: 12),
+
+        _Field(
+            label: 'Adresse ou repère précis',
             controller: address,
-            placeholder: 'Quartier, repère'),
+            placeholder: 'Face Mairie, à côté de la pharmacie'),
         const SizedBox(height: 8),
+
         GestureDetector(
           onTap: onPickLocation,
           child: Container(
@@ -519,8 +558,8 @@ class _StepInfo extends StatelessWidget {
                 Expanded(
                   child: Text(
                     lat != null
-                        ? 'Position définie sur la carte'
-                        : 'Localiser mon commerce sur la carte',
+                        ? 'Position GPS définie'
+                        : 'Positionner sur la carte (GPS)',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -537,12 +576,8 @@ class _StepInfo extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _Field(
-            label: 'Nom du commerce',
-            controller: businessName,
-            placeholder: 'Chez Tantie Awa'),
-        const SizedBox(height: 12),
-        const _FieldLabel(text: 'Catégorie'),
+
+        const _FieldLabel(text: 'Secteur d\'activité'),
         const SizedBox(height: 6),
         GridView.count(
           crossAxisCount: 2,
@@ -569,7 +604,7 @@ class _StepInfo extends StatelessWidget {
                   boxShadow: active
                       ? null
                       : const [
-                          BoxShadow(color: Color(0x0F000000), blurRadius: 8),
+                          BoxShadow(color: Color(0x0F000000), blurRadius: 8)
                         ],
                 ),
                 alignment: Alignment.centerLeft,
@@ -587,14 +622,16 @@ class _StepInfo extends StatelessWidget {
             );
           }).toList(),
         ),
+
         const SizedBox(height: 12),
-        const _FieldLabel(text: 'Description détaillée'),
+
+        const _FieldLabel(text: 'Courte description (optionnelle)'),
         const SizedBox(height: 4),
         TextField(
           controller: description,
-          maxLines: 3,
+          maxLines: 2,
           decoration: InputDecoration(
-            hintText: 'Spécialités, horaires, ambiance…',
+            hintText: 'Spécialités, horaires ou informations utiles…',
             hintStyle:
                 const TextStyle(fontSize: 13, color: AppColors.mutedForeground),
             contentPadding:
@@ -613,7 +650,9 @@ class _StepInfo extends StatelessWidget {
             fillColor: AppColors.card,
           ),
         ),
+
         const SizedBox(height: 24),
+
         SizedBox(
           width: double.infinity,
           height: 52,
@@ -681,19 +720,13 @@ class _StepTerms extends StatelessWidget {
                 _Term(
                   title: 'Données & confidentialité',
                   text:
-                      "Mes données personnelles sont utilisées uniquement pour les besoins du service A Nan-Nan.",
+                      "Mes données sont utilisées uniquement pour les besoins opérationnels du service A Nan-Nan.",
                 ),
                 SizedBox(height: 12),
                 _Term(
                   title: 'Validation administrative',
                   text:
-                      "Ma demande sera examinée sous 24 à 72h par l'équipe A Nan-Nan avant activation.",
-                ),
-                SizedBox(height: 12),
-                _Term(
-                  title: 'Résiliation',
-                  text:
-                      "Je peux quitter le programme à tout moment depuis mon profil.",
+                      "Ma demande sera examinée sous 24 à 48h par l'équipe A Nan-Nan avant activation de ma vitrine.",
                 ),
               ],
             ),
@@ -725,7 +758,7 @@ class _StepTerms extends StatelessWidget {
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
-                    "J'ai lu et j'accepte les conditions ci-dessus pour devenir marchand.",
+                    "J'ai lu et j'accepte les conditions ci-dessus pour ouvrir mon commerce.",
                     style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -770,7 +803,7 @@ class _StepTerms extends StatelessWidget {
                         height: 18,
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white))
-                    : const Text('Soumettre',
+                    : const Text('Soumettre mon dossier',
                         style: TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w700)),
               ),
@@ -839,7 +872,7 @@ class _StepPending extends StatelessWidget {
                 Text(
                   approved
                       ? 'Demande approuvée !'
-                      : 'Votre demande est en cours d\'examen',
+                      : 'Votre dossier est en cours d\'examen',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                       fontSize: 17,
@@ -851,7 +884,7 @@ class _StepPending extends StatelessWidget {
                 Text(
                   approved
                       ? 'Votre boutique est active. Vous pouvez accéder à votre tableau de bord.'
-                      : 'Notre équipe vérifie votre dossier. Dès validation par l\'administrateur, votre boutique s\'ouvrira automatiquement.',
+                      : 'Notre équipe vérifie vos informations et votre position. Votre commerce sera activé sous 24 à 48h.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                       fontSize: 13, color: AppColors.mutedForeground),
@@ -881,10 +914,7 @@ class _StepPending extends StatelessWidget {
               ],
             ),
           ),
-
           const SizedBox(height: 24),
-
-          // Bouton 1 : Vérifier l'activation
           SizedBox(
             width: double.infinity,
             height: 52,
@@ -904,10 +934,7 @@ class _StepPending extends StatelessWidget {
               ),
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // Bouton 2 : Contacter le support WhatsApp
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -929,10 +956,7 @@ class _StepPending extends StatelessWidget {
               ),
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // Bouton 3 : Modifier la candidature si besoin
           TextButton.icon(
             onPressed: onModifyApplication,
             icon: const Icon(Icons.edit_note_rounded,
@@ -942,8 +966,6 @@ class _StepPending extends StatelessWidget {
               style: TextStyle(fontSize: 12, color: AppColors.mutedForeground),
             ),
           ),
-
-          // Bouton 4 : Déconnexion
           TextButton(
             onPressed: onLogout,
             child: const Text(
