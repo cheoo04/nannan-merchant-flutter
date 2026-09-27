@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../core/services/a_nan_nan_api_client.dart';
 import '../../core/services/a_nan_nan_services.dart';
 import '../../core/utils/error_message.dart';
@@ -54,17 +55,13 @@ class OrdersRepository {
         .toList();
   }
 
-  // Tente de confirmer ou de préparer la commande sur le serveur Neon
+  // Envoie directement 'confirmed' pour valider la commande depuis l'état 'pending'
   Future<String?> acceptOrder(String orderId, {OrderStatus? currentStatus}) async {
     try {
-      try {
-        await _orderService.updateStatus(orderId, 'preparing');
-        return null;
-      } catch (_) {
-        await _orderService.updateStatus(orderId, 'confirmed');
-        return null;
-      }
+      await _orderService.updateStatus(orderId, 'confirmed');
+      return null;
     } catch (e) {
+      debugPrint('[OrdersRepository] Erreur acceptOrder: $e');
       return friendlyError(e);
     }
   }
@@ -74,6 +71,7 @@ class OrdersRepository {
       await _orderService.updateStatus(orderId, 'cancelled');
       return null;
     } catch (e) {
+      debugPrint('[OrdersRepository] Erreur refuseOrder: $e');
       return friendlyError(e);
     }
   }
