@@ -343,6 +343,13 @@ class _OrderCardState extends State<_OrderCard> {
     final shortId = o.id.length >= 8 ? o.id.substring(0, 8).toUpperCase() : o.id.toUpperCase();
     final timeStr = formatTime(o.createdAt);
 
+    // Détection anti-doublon entre le repère client et l'adresse de livraison
+    final commentText = o.clientComment?.trim() ?? '';
+    final addressText = o.deliveryAddressText?.trim() ?? '';
+    final isDuplicate = commentText.isNotEmpty && 
+                        addressText.isNotEmpty && 
+                        commentText.toLowerCase() == addressText.toLowerCase();
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card,
@@ -472,7 +479,8 @@ class _OrderCardState extends State<_OrderCard> {
                         ),
                       )),
 
-                if (o.clientComment != null && o.clientComment!.trim().isNotEmpty) ...[
+                // Notes ou instructions du client
+                if (commentText.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Container(
                     width: double.infinity,
@@ -489,7 +497,7 @@ class _OrderCardState extends State<_OrderCard> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            o.clientComment!.trim(),
+                            commentText,
                             style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppColors.foreground),
                           ),
                         ),
@@ -498,7 +506,8 @@ class _OrderCardState extends State<_OrderCard> {
                   ),
                 ],
 
-                if (o.deliveryAddressText != null && o.deliveryAddressText!.trim().isNotEmpty) ...[
+                // Adresse de livraison : masquée si elle répète mot pour mot la note au-dessus
+                if (addressText.isNotEmpty && !isDuplicate) ...[
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -506,7 +515,7 @@ class _OrderCardState extends State<_OrderCard> {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          o.deliveryAddressText!.trim(),
+                          addressText,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
