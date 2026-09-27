@@ -137,9 +137,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     decoration: BoxDecoration(
                       color: active ? AppColors.primary : AppColors.card,
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: active ? AppColors.primary : AppColors.border,
-                      ),
+                      border: Border.all(color: active ? AppColors.primary : AppColors.border),
                       boxShadow: active
                           ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 2))]
                           : null,
@@ -343,7 +341,6 @@ class _OrderCardState extends State<_OrderCard> {
     final shortId = o.id.length >= 8 ? o.id.substring(0, 8).toUpperCase() : o.id.toUpperCase();
     final timeStr = formatTime(o.createdAt);
 
-    // Détection anti-doublon entre le repère client et l'adresse de livraison
     final commentText = o.clientComment?.trim() ?? '';
     final addressText = o.deliveryAddressText?.trim() ?? '';
     final isDuplicate = commentText.isNotEmpty && 
@@ -479,7 +476,6 @@ class _OrderCardState extends State<_OrderCard> {
                         ),
                       )),
 
-                // Notes ou instructions du client
                 if (commentText.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Container(
@@ -506,7 +502,6 @@ class _OrderCardState extends State<_OrderCard> {
                   ),
                 ],
 
-                // Adresse de livraison : masquée si elle répète mot pour mot la note au-dessus
                 if (addressText.isNotEmpty && !isDuplicate) ...[
                   const SizedBox(height: 8),
                   Row(
@@ -528,6 +523,7 @@ class _OrderCardState extends State<_OrderCard> {
             ),
           ),
 
+          // Action Accepter / Refuser (pour les nouvelles commandes)
           if (o.status == OrderStatus.pending) ...[
             Container(
               decoration: const BoxDecoration(
@@ -541,14 +537,9 @@ class _OrderCardState extends State<_OrderCard> {
                       onPressed: isBusy ? null : widget.onRefuse,
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(bottomLeft: Radius.circular(20)),
-                        ),
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.only(bottomLeft: Radius.circular(20))),
                       ),
-                      child: const Text(
-                        'Refuser',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.destructive),
-                      ),
+                      child: const Text('Refuser', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.destructive)),
                     ),
                   ),
                   Container(width: 1, height: 48, color: AppColors.border),
@@ -560,9 +551,7 @@ class _OrderCardState extends State<_OrderCard> {
                         backgroundColor: AppColors.success,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         elevation: 0,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(bottomRight: Radius.circular(20)),
-                        ),
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.only(bottomRight: Radius.circular(20))),
                       ),
                       icon: isBusy
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -578,6 +567,7 @@ class _OrderCardState extends State<_OrderCard> {
             ),
           ],
 
+          // Commande acceptée en cours : affichage universel du code retrait pour le coursier
           if (o.status == OrderStatus.accepted) ...[
             Container(
               width: double.infinity,
@@ -591,7 +581,7 @@ class _OrderCardState extends State<_OrderCard> {
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.soup_kitchen_rounded, size: 18, color: AppColors.primary),
+                      Icon(Icons.inventory_2_rounded, size: 18, color: AppColors.primary),
                       SizedBox(width: 8),
                       Text(
                         'En préparation',
@@ -643,7 +633,7 @@ class _OrderCardState extends State<_OrderCard> {
                   Icon(Icons.two_wheeler_rounded, size: 18, color: AppColors.warm),
                   SizedBox(width: 8),
                   Text(
-                    'Prise en charge par le livreur en route vers le client',
+                    'Prise en charge par le coursier en route vers le client',
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.warm),
                   ),
                 ],

@@ -139,7 +139,7 @@ class MerchantModel {
   }
 
   bool get isOpenNow {
-    if (status != 'active' && !isOpen) return false;
+    if (status != 'active' || !isOpen) return false;
     if (pauseUntil != null) {
       final d = DateTime.tryParse(pauseUntil!);
       if (d != null && d.toUtc().isAfter(DateTime.now().toUtc())) {
@@ -171,7 +171,6 @@ enum OrderStatus {
   cancelled,
   refunded;
 
-  // 'confirmed' est le statut post-acceptation sur Neon -> il bascule dans 'accepted' (En cours)
   static OrderStatus fromString(String s) => switch (s.toLowerCase()) {
         'pending' => OrderStatus.pending,
         'confirmed' || 'accepted' || 'preparing' || 'ready_for_pickup' => OrderStatus.accepted,
