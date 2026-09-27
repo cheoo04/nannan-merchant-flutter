@@ -15,23 +15,14 @@ import '../location_picker/location_picker_screen.dart';
 const String _supportPhoneDial = '+2250565074868';
 const String _supportPhoneWa = '2250565074868';
 
-// Codes conformes aux types d'activité attendus par le backend Neon
-const _businessTypeCodeByCategory = {
-  'restaurant': 'restaurant',
-  'fast_food': 'fast_food',
-  'boulangerie': 'bakery',
-  'boutique': 'grocery',
-  'pharmacie': 'pharmacy',
-  'autre': 'service',
-};
-
-const _categories = [
-  (id: 'restaurant', label: 'Restaurant / Maquis'),
-  (id: 'fast_food', label: 'Fast-Food'),
-  (id: 'boulangerie', label: 'Boulangerie / Pâtisserie'),
-  (id: 'boutique', label: 'Épicerie / Boutique'),
-  (id: 'pharmacie', label: 'Pharmacie'),
-  (id: 'autre', label: 'Autre commerce'),
+// Catégories par défaut en cas de coupure réseau (codes réels de la BD Neon)
+const _fallbackCategories = [
+  (code: 'restaurant', label: 'Restaurant / Maquis'),
+  (code: 'epicerie', label: 'Épicerie / Boutique'),
+  (code: 'boulangerie', label: 'Boulangerie'),
+  (code: 'pharmacie', label: 'Pharmacie'),
+  (code: 'fast_food', label: 'Fast-Food'),
+  (code: 'service', label: 'Autre commerce'),
 ];
 
 enum _Step { info, terms, pending }
@@ -57,6 +48,10 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
   bool _checkingExisting = true;
   String? _userId;
 
+  // Catégories chargées dynamiquement depuis l'API Neon
+  List<({String code, String label})> _availableCategories =
+      _fallbackCategories;
+
   // Champs gérant
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
@@ -69,7 +64,7 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
   double? _lng;
   final _businessName = TextEditingController();
   final _description = TextEditingController();
-  String _category = _categories[0].id;
+  String _selectedCategoryCode = 'restaurant';
 
   bool _accepted = false;
 
@@ -96,6 +91,28 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
 
   Future<void> _checkExistingAndPrefill() async {
     try {
+      // 1. Charger les types d'activité réels depuis GET /api/v1/business-types
+      try {
+        final types = await _api.get('/api/v1/business-types?only_active=true');
+        if (types is List && types.isNotEmpty) {
+          final loaded = <({String code, String label})>[];
+          for (final t in types) {
+            final code = t['code'] as String?;
+            final name = t['name'] as String?;
+            if (code != null && name != null) {
+              loaded.add((code: code, label: name));
+            }
+          }
+          if (loaded.isNotEmpty && mounted) {
+            setState(() {
+              _availableCategories = loaded;
+              _selectedCategoryCode = loaded.first.code;
+            });
+          }
+        }
+      } catch (_) {}
+
+      // 2. Pré-remplir profil
       final me = await _api.me();
       _userId = me['id'] as String?;
 
@@ -109,7 +126,7 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
       final phone = me['phone'] as String?;
       if (phone != null && phone.isNotEmpty) _phone.text = phone;
 
-      // Vérifier si un commerce est déjà approuvé
+      // 3. Vérifier si un commerce est déjà approuvé
       final myMerchants = await _merchantService.getMine();
       if (myMerchants.isNotEmpty) {
         final current = myMerchants.first;
@@ -210,8 +227,7 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
       await _api.post('/api/v1/auth/role-applications', body: {
         'requested_role': 'merchant',
         'business_name': _businessName.text.trim(),
-        'business_type_code':
-            _businessTypeCodeByCategory[_category] ?? 'restaurant',
+        'business_type_code': _selectedCategoryCode,
         'manager_name': managerFullName,
         'manager_phone': cleanPhone,
         'neighborhood':
@@ -395,10 +411,12 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
                     address: _address,
                     businessName: _businessName,
                     description: _description,
-                    category: _category,
+                    categories: _availableCategories,
+                    selectedCode: _selectedCategoryCode,
                     lat: _lat,
                     lng: _lng,
-                    onCategoryChanged: (v) => setState(() => _category = v),
+                    onCategoryChanged: (v) =>
+                        setState(() => _selectedCategoryCode = v),
                     onNext: _submitInfo,
                     onPickLocation: _pickLocation,
                     onGoToPending: () => setState(() => _step = _Step.pending),
@@ -436,7 +454,8 @@ class _StepInfo extends StatelessWidget {
       address,
       businessName,
       description;
-  final String category;
+  final List<({String code, String label})> categories;
+  final String selectedCode;
   final double? lat;
   final double? lng;
   final ValueChanged<String> onCategoryChanged;
@@ -452,7 +471,8 @@ class _StepInfo extends StatelessWidget {
     required this.address,
     required this.businessName,
     required this.description,
-    required this.category,
+    required this.categories,
+    required this.selectedCode,
     this.lat,
     this.lng,
     required this.onCategoryChanged,
@@ -466,16 +486,19 @@ class _StepInfo extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Ligne d'en-tête responsive sans risque d'overflow
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Étape 1/3 — Responsable & Commerce',
-                style:
-                    TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
+            const Text('Étape 1/3',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.mutedForeground)),
             GestureDetector(
               onTap: onGoToPending,
               child: const Text(
-                'Voir ma demande en attente',
+                'Suivre ma demande',
                 style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
@@ -486,7 +509,6 @@ class _StepInfo extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
-        // Prénom et Nom distincts du gérant
         Row(
           children: [
             Expanded(
@@ -586,10 +608,10 @@ class _StepInfo extends StatelessWidget {
           crossAxisSpacing: 8,
           mainAxisSpacing: 8,
           childAspectRatio: 3.5,
-          children: _categories.map((c) {
-            final active = category == c.id;
+          children: categories.map((c) {
+            final active = selectedCode == c.code;
             return GestureDetector(
-              onTap: () => onCategoryChanged(c.id),
+              onTap: () => onCategoryChanged(c.code),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
                 padding:
@@ -692,7 +714,7 @@ class _StepTerms extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("Étape 2/3 — Conditions d'engagement",
+        const Text("Étape 2/3 : Conditions d'engagement",
             style: TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
         const SizedBox(height: 12),
         Container(

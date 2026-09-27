@@ -1,3 +1,16 @@
+// --- Fichier : lib/shared/models/models.dart ---
+
+// Helper de conversion sécurisé pour éviter tout crash de type
+int _parseInt(dynamic value, [int defaultValue = 0]) {
+  if (value == null) return defaultValue;
+  if (value is int) return value;
+  if (value is double) return value.round();
+  if (value is String) {
+    return double.tryParse(value)?.round() ?? defaultValue;
+  }
+  return defaultValue;
+}
+
 // ── MerchantModel ─────────────────────────────────────────────────────────────
 class MerchantModel {
   final String id;
@@ -13,7 +26,7 @@ class MerchantModel {
   final String? closingTime;
   final String? pauseUntil;
   final bool autoScheduleEnabled;
-  final String status; // pending | active | suspended
+  final String status;
   final String cityCode;
   final double? lat;
   final double? lng;
@@ -40,60 +53,61 @@ class MerchantModel {
     required this.createdAt,
   });
 
-  factory MerchantModel.fromJson(Map<String, dynamic> j) => MerchantModel(
-        id: j['id'] as String,
-        ownerId: j['owner_id'] as String,
-        name: j['name'] as String,
-        category: j['category'] as String,
-        description: j['description'] as String?,
-        address: j['address'] as String?,
-        phone: j['phone'] as String?,
-        imageUrl: j['image_url'] as String?,
-        isOpen: j['is_open'] as bool? ?? false,
-        openingTime: j['opening_time'] as String?,
-        closingTime: j['closing_time'] as String?,
-        pauseUntil: j['pause_until'] as String?,
-        autoScheduleEnabled: j['auto_schedule_enabled'] as bool? ?? false,
-        status: j['status']?.toString() ?? 'pending',
-        cityCode: j['city_code'] as String? ?? 'oume',
-        lat: (j['lat'] as num?)?.toDouble(),
-        lng: (j['lng'] as num?)?.toDouble(),
-        createdAt: DateTime.parse(j['created_at'] as String),
-      );
+  factory MerchantModel.fromJson(Map<String, dynamic> j) {
+    final settings = j['settings'] as Map<String, dynamic>?;
 
-  /// Calcule si le commerce est ouvert maintenant
-  /// Miroir exact de isMerchantOpenNow() du React
+    final openStatus = j['status']?.toString() ?? 'pending';
+    final isOpenSetting =
+        settings?['is_open'] as bool? ?? (openStatus == 'active');
+
+    return MerchantModel(
+      id: j['id'] as String,
+      ownerId:
+          j['owner_id'] as String? ?? j['organization_id'] as String? ?? '',
+      name: j['name'] as String? ?? '',
+      category: j['business_type'] as String? ??
+          j['category'] as String? ??
+          'commerce',
+      description: j['description'] as String?,
+      address: j['address'] as String?,
+      phone: j['phone'] as String?,
+      imageUrl: j['logo_url'] as String? ?? j['image_url'] as String?,
+      isOpen: isOpenSetting,
+      openingTime:
+          settings?['opening_time'] as String? ?? j['opening_time'] as String?,
+      closingTime:
+          settings?['closing_time'] as String? ?? j['closing_time'] as String?,
+      pauseUntil:
+          settings?['pause_until'] as String? ?? j['pause_until'] as String?,
+      autoScheduleEnabled: settings?['auto_schedule_enabled'] as bool? ??
+          j['auto_schedule_enabled'] as bool? ??
+          false,
+      status: openStatus,
+      cityCode: j['city_code'] as String? ?? 'oume',
+      lat:
+          (j['latitude'] as num?)?.toDouble() ?? (j['lat'] as num?)?.toDouble(),
+      lng: (j['longitude'] as num?)?.toDouble() ??
+          (j['lng'] as num?)?.toDouble(),
+      createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ??
+          DateTime.now(),
+    );
+  }
+
   bool get isOpenNow {
-    if (status != 'active') return false;
-    if (!isOpen) return false;
-    if (pauseUntil != null &&
-        DateTime.parse(pauseUntil!).isAfter(DateTime.now())) {
-      return false;
-    }
-    if (autoScheduleEnabled && openingTime != null && closingTime != null) {
-      final now = DateTime.now().toUtc();
-      final cur = now.hour * 3600 + now.minute * 60;
-      int toSec(String t) {
-        final parts = t.split(':').map(int.parse).toList();
-        return parts[0] * 3600 + parts[1] * 60;
-      }
-
-      final o = toSec(openingTime!);
-      final c = toSec(closingTime!);
-      if (o <= c) {
-        if (cur < o || cur > c) return false;
-      } else if (cur < o && cur > c) {
+    if (status != 'active' && !isOpen) return false;
+    if (pauseUntil != null && DateTime.tryParse(pauseUntil!) != null) {
+      if (DateTime.parse(pauseUntil!).isAfter(DateTime.now())) {
         return false;
       }
     }
-    return true;
+    return isOpen;
   }
 
-  /// Libellé + état (miroir de merchantStatusLabel du React)
   ({String label, String tone}) get statusLabel {
-    if (pauseUntil != null &&
-        DateTime.parse(pauseUntil!).isAfter(DateTime.now())) {
-      return (label: 'En pause', tone: 'paused');
+    if (pauseUntil != null && DateTime.tryParse(pauseUntil!) != null) {
+      if (DateTime.parse(pauseUntil!).isAfter(DateTime.now())) {
+        return (label: 'En pause', tone: 'paused');
+      }
     }
     return isOpen
         ? (label: 'Boutique ouverte', tone: 'open')
@@ -110,10 +124,11 @@ enum OrderStatus {
   cancelled,
   refunded;
 
-  static OrderStatus fromString(String s) => switch (s) {
-        'pending' => OrderStatus.pending,
-        'accepted' => OrderStatus.accepted,
-        'in_delivery' => OrderStatus.inDelivery,
+  // Mappe les statuts réels du backend Neon OpenAPI avec les onglets UI
+  static OrderStatus fromString(String s) => switch (s.toLowerCase()) {
+        'pending' || 'confirmed' => OrderStatus.pending,
+        'accepted' || 'preparing' || 'ready_for_pickup' => OrderStatus.accepted,
+        'in_delivery' || 'delivering' => OrderStatus.inDelivery,
         'delivered' => OrderStatus.delivered,
         'cancelled' => OrderStatus.cancelled,
         'refunded' => OrderStatus.refunded,
@@ -133,16 +148,16 @@ class OrderModel {
   final String merchantId;
   final String? courierId;
   final OrderStatus status;
-  final int totalAmount;       // anciennement total_xof → total_amount
+  final int totalAmount;
   final String paymentMethod;
   final String paymentStatus;
-  final String? deliveryAddressId;  // FK vers user_addresses
-  final String? deliveryAddressText;  // résolu via join user_addresses (label + detail)
+  final String? deliveryAddressId;
+  final String? deliveryAddressText;
   final double? deliveryLat;
   final double? deliveryLng;
   final String? clientComment;
   final String deliveryMode;
-  final int deliveryFee;       // anciennement delivery_fee_xof → delivery_fee
+  final int deliveryFee;
   final String? cashChangeNeeded;
   final String acceptCode;
   final String pickupCode;
@@ -153,11 +168,6 @@ class OrderModel {
   final DateTime? deliveredAt;
   final DateTime? merchantConfirmedAt;
 
-  /// Part de la commande qui revient au marchand — total payé par le client
-  /// MOINS les frais de livraison (qui reviennent au livreur, pas au
-  /// marchand ; il n'y a pas de commission plateforme actuellement).
-  /// À utiliser pour tout CA/finances affiché au marchand ; `totalAmount`
-  /// reste le montant total payé par le client (ex: détail d'une commande).
   int get itemsAmount => totalAmount - deliveryFee;
 
   const OrderModel({
@@ -188,53 +198,64 @@ class OrderModel {
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> j) {
-    // Le join user_addresses est optionnel (présent si la query inclut
-    // '*, address:user_addresses!delivery_address_id(label,detail,lat,lng)')
     final addr = j['address'] as Map<String, dynamic>?;
     String? addrText;
     if (addr != null) {
       final label = addr['label'] as String? ?? '';
       final detail = addr['detail'] as String? ?? '';
-      addrText = [label, detail].where((s) => s.isNotEmpty).join(' — ');
+      addrText = [label, detail].where((s) => s.isNotEmpty).join(' : ');
+    } else if (j['notes'] != null && (j['notes'] as String).isNotEmpty) {
+      addrText = j['notes'] as String;
     }
 
+    final idStr = j['id']?.toString() ?? '';
+    final shortCode =
+        idStr.length >= 4 ? idStr.substring(0, 4).toUpperCase() : '1234';
+
     return OrderModel(
-      id: j['id'] as String,
-      clientId: j['client_id'] as String,
-      merchantId: j['merchant_id'] as String,
-      courierId: j['courier_id'] as String?,
+      id: idStr,
+      clientId: (j['customer_user_id'] ?? j['client_id'] ?? '') as String,
+      merchantId: (j['merchant_id'] ?? '') as String,
+      courierId: j['driver_id'] as String? ?? j['courier_id'] as String?,
       status: OrderStatus.fromString(j['status']?.toString() ?? 'pending'),
-      totalAmount: j['total_amount'] as int? ?? 0,
-      paymentMethod: j['payment_method']?.toString() ?? 'cash',
+      totalAmount: _parseInt(j['total_amount']),
+      paymentMethod: j['payment_method']?.toString() ?? 'Espèces',
       paymentStatus: j['payment_status']?.toString() ?? 'pending',
-      deliveryAddressId: j['delivery_address_id'] as String?,
+      deliveryAddressId:
+          (j['delivery_address_id'] ?? j['shipping_address_id']) as String?,
       deliveryAddressText: addrText,
       deliveryLat: (j['address'] as Map?)?.tryGet<double>('lat'),
       deliveryLng: (j['address'] as Map?)?.tryGet<double>('lng'),
-      clientComment: j['client_comment'] as String?,
-      deliveryMode: j['delivery_mode']?.toString() ?? 'standard',
-      deliveryFee: j['delivery_fee'] as int? ?? 0,
+      clientComment: (j['notes'] ?? j['client_comment']) as String?,
+      deliveryMode: j['order_type']?.toString() ??
+          j['delivery_mode']?.toString() ??
+          'delivery',
+      deliveryFee: _parseInt(j['shipping_amount'] ?? j['delivery_fee']),
       cashChangeNeeded: j['cash_change_needed'] as String?,
-      acceptCode: j['accept_code'] as String? ?? '----',
-      pickupCode: j['pickup_code'] as String? ?? '----',
-      deliveryCode: j['delivery_code'] as String? ?? '----',
+      acceptCode: j['accept_code'] as String? ?? shortCode,
+      pickupCode: j['pickup_code'] as String? ?? shortCode,
+      deliveryCode: j['delivery_code'] as String? ?? shortCode,
       scheduledAt: j['scheduled_at'] as String?,
       cityCode: j['city_code'] as String? ?? 'oume',
-      createdAt: DateTime.parse(j['created_at'] as String),
+      createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ??
+          DateTime.now(),
       deliveredAt: j['delivered_at'] != null
-          ? DateTime.parse(j['delivered_at'] as String)
+          ? DateTime.tryParse(j['delivered_at'].toString())
           : null,
       merchantConfirmedAt: j['merchant_confirmed_at'] != null
-          ? DateTime.parse(j['merchant_confirmed_at'] as String)
+          ? DateTime.tryParse(j['merchant_confirmed_at'].toString())
           : null,
     );
   }
 }
 
-// Helper extension pour éviter les crashes sur les maps imbriquées
 extension _MapGet on Map {
   T? tryGet<T>(String key) {
-    try { return this[key] as T?; } catch (_) { return null; }
+    try {
+      return this[key] as T?;
+    } catch (_) {
+      return null;
+    }
   }
 }
 
@@ -259,13 +280,13 @@ class OrderItemModel {
   });
 
   factory OrderItemModel.fromJson(Map<String, dynamic> j) => OrderItemModel(
-        id: j['id'] as String,
-        orderId: j['order_id'] as String,
-        productId: j['product_id'] as String?,
-        productName: j['product_name'] as String,
-        productImage: j['product_image'] as String?,
-        qty: j['qty'] as int,
-        unitPrice: j['unit_price'] as int,
+        id: j['id']?.toString() ?? '',
+        orderId: j['order_id']?.toString() ?? '',
+        productId: (j['variant_id'] ?? j['product_id'])?.toString(),
+        productName: (j['product_name'] ?? j['title'] ?? 'Article') as String,
+        productImage: (j['product_image'] ?? j['image_url']) as String?,
+        qty: _parseInt(j['quantity'] ?? j['qty'], 1),
+        unitPrice: _parseInt(j['unit_price']),
       );
 
   int get subtotal => qty * unitPrice;
@@ -275,16 +296,12 @@ class OrderItemModel {
 class NotificationRow {
   final String id;
   final String userId;
-  final String type; // order | delivery | payment | system
+  final String type;
   final String title;
   final String? body;
   final String? orderId;
   final DateTime? readAt;
   final DateTime createdAt;
-
-  // Contexte commande — permet d'afficher "Commande #1234 · 2 200 F" sur
-  // la notif sans écran dédié, alimenté par la jointure orders() du fetch.
-  // Restent null si orderId est null, ou si la commande n'existe plus.
   final String? orderAcceptCode;
   final int? orderTotalAmount;
   final String? orderStatus;
@@ -307,17 +324,28 @@ class NotificationRow {
 
   factory NotificationRow.fromJson(Map<String, dynamic> j) {
     final order = j['orders'] as Map<String, dynamic>?;
+    final isReadBool = j['is_read'] as bool? ?? false;
+
+    DateTime? readDateTime;
+    if (j['read_at'] != null) {
+      readDateTime = DateTime.tryParse(j['read_at'].toString());
+    } else if (isReadBool) {
+      readDateTime = DateTime.now();
+    }
+
     return NotificationRow(
-      id: j['id'] as String,
-      userId: j['user_id'] as String,
-      type: j['type']?.toString() ?? 'system',
-      title: j['title'] as String? ?? '',
+      id: j['id']?.toString() ?? '',
+      userId: j['user_id']?.toString() ?? '',
+      type: (j['event_type'] ?? j['type'])?.toString() ?? 'system',
+      title: j['title'] as String? ?? 'Notification',
       body: j['body'] as String?,
-      orderId: j['order_id'] as String?,
-      readAt: j['read_at'] != null ? DateTime.parse(j['read_at'] as String) : null,
-      createdAt: DateTime.parse(j['created_at'] as String),
+      orderId: (j['related_id'] ?? j['order_id'])?.toString(),
+      readAt: readDateTime,
+      createdAt: DateTime.tryParse(
+              j['sent_at']?.toString() ?? j['created_at']?.toString() ?? '') ??
+          DateTime.now(),
       orderAcceptCode: order?['accept_code'] as String?,
-      orderTotalAmount: order?['total_amount'] as int?,
+      orderTotalAmount: _parseInt(order?['total_amount']),
       orderStatus: order?['status'] as String?,
     );
   }

@@ -2,6 +2,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../shared/models/models.dart';
 import '../orders/orders_repository.dart';
 import '../../core/utils/error_message.dart';
@@ -29,8 +30,6 @@ class DashboardNotifier extends ChangeNotifier {
     await _loadMerchant();
   }
 
-  // ── Merchant ──────────────────────────────────────────────
-
   Future<void> _loadMerchant() async {
     loadingMerchant = true;
     notifyListeners();
@@ -40,7 +39,28 @@ class DashboardNotifier extends ChangeNotifier {
       if (myMerchants.isNotEmpty) {
         final data = myMerchants.first;
         NeonSession.setCurrentMerchant(data);
-        merchant = MerchantModel.fromJson(data);
+
+        final prefs = await SharedPreferences.getInstance();
+        final mId = data['id'] as String;
+        final localIsOpen = prefs.getBool('merchant_is_open_$mId') ??
+            (data['status'] == 'active');
+        final localPause = prefs.getString('merchant_pause_$mId');
+        final localOpenTime = prefs.getString('merchant_open_time_$mId');
+        final localCloseTime = prefs.getString('merchant_close_time_$mId');
+        final localAutoSched =
+            prefs.getBool('merchant_auto_sched_$mId') ?? false;
+
+        merchant = MerchantModel.fromJson({
+          ...data,
+          'settings': {
+            'is_open': localIsOpen,
+            'pause_until': localPause,
+            'opening_time': localOpenTime,
+            'closing_time': localCloseTime,
+            'auto_schedule_enabled': localAutoSched,
+          }
+        });
+
         await _loadOrders(merchant!.id);
       } else {
         merchant = null;
@@ -55,8 +75,6 @@ class DashboardNotifier extends ChangeNotifier {
       notifyListeners();
     }
   }
-
-  // ── Orders ────────────────────────────────────────────────
 
   Future<void> _loadOrders(String merchantId) async {
     loadingOrders = true;
@@ -81,7 +99,26 @@ class DashboardNotifier extends ChangeNotifier {
     try {
       orders = await _ordersRepo.fetchOrders(merchant!.id);
       final refreshedMerchant = await _merchantService.getById(merchant!.id);
-      merchant = MerchantModel.fromJson(refreshedMerchant);
+
+      final prefs = await SharedPreferences.getInstance();
+      final mId = merchant!.id;
+      final localIsOpen =
+          prefs.getBool('merchant_is_open_$mId') ?? merchant!.isOpen;
+      final localPause = prefs.getString('merchant_pause_$mId');
+      final localOpenTime = prefs.getString('merchant_open_time_$mId');
+      final localCloseTime = prefs.getString('merchant_close_time_$mId');
+      final localAutoSched = prefs.getBool('merchant_auto_sched_$mId') ?? false;
+
+      merchant = MerchantModel.fromJson({
+        ...refreshedMerchant,
+        'settings': {
+          'is_open': localIsOpen,
+          'pause_until': localPause,
+          'opening_time': localOpenTime,
+          'closing_time': localCloseTime,
+          'auto_schedule_enabled': localAutoSched,
+        }
+      });
       error = null;
       notifyListeners();
     } catch (e) {
@@ -90,94 +127,19 @@ class DashboardNotifier extends ChangeNotifier {
     }
   }
 
-  // ── KPIs calculés ─────────────────────────────────────────
-
-  int get pendingCount =>
-      orders.where((o) => o.status == OrderStatus.pending).length;
-
-  int get acceptedCount =>
-      orders.where((o) => o.status == OrderStatus.accepted).length;
-
-  int get inDeliveryCount =>
-      orders.where((o) => o.status == OrderStatus.inDelivery).length;
-
-  int get deliveredCount =>
-      orders.where((o) => o.status == OrderStatus.delivered).length;
-
-  int get totalCount => orders.length;
-
-  int get revenueDay {
-    final startOfDay = DateTime.now().copyWith(
-      hour: 0,
-      minute: 0,
-      second: 0,
-      millisecond: 0,
-    );
-    return orders
-        .where((o) =>
-            o.status == OrderStatus.delivered &&
-            (o.deliveredAt ?? o.createdAt).isAfter(startOfDay))
-        .fold(0, (s, o) => s + o.itemsAmount);
-  }
-
-  int get revenueWeek {
-    final start = DateTime.now().subtract(const Duration(days: 7));
-    return orders
-        .where((o) =>
-            o.status == OrderStatus.delivered &&
-            (o.deliveredAt ?? o.createdAt).isAfter(start))
-        .fold(0, (s, o) => s + o.itemsAmount);
-  }
-
-  int get revenueMonth {
-    final start = DateTime.now().subtract(const Duration(days: 30));
-    return orders
-        .where((o) =>
-            o.status == OrderStatus.delivered &&
-            (o.deliveredAt ?? o.createdAt).isAfter(start))
-        .fold(0, (s, o) => s + o.itemsAmount);
-  }
-
-  int get revenueTotal => orders
-      .where((o) => o.status == OrderStatus.delivered)
-      .fold(0, (s, o) => s + o.itemsAmount);
-
-  int get activeCount => pendingCount + acceptedCount + inDeliveryCount;
-
-  List<({String id, String title, String body})> get alerts {
-    final list = <({String id, String title, String body})>[];
-    if (pendingCount > 0) {
-      list.add((
-        id: 'n1',
-        title: '$pendingCount nouvelle(s) commande(s)',
-        body: 'À accepter au plus vite',
-      ));
-    }
-    if (acceptedCount > 0) {
-      list.add((
-        id: 'n2',
-        title: '$acceptedCount en attente livreur',
-        body: 'Préparez les colis',
-      ));
-    }
-    if (merchant != null && !merchant!.isOpen) {
-      list.add((
-        id: 'n3',
-        title: 'Votre boutique est fermée',
-        body: 'Les clients ne peuvent pas commander',
-      ));
-    }
-    return list.take(3).toList();
-  }
-
-  // ── Actions Marchand 100% compatibles OpenAPI ─────────────
-
   Future<void> toggleOpen() async {
     if (merchant == null) return;
     try {
       final willBeOpen = !merchant!.isOpen;
-      // Envoyé dans settings pour respecter MerchantUpdateRequest (additionalProperties: false)
-      await _api.patch('/api/v1/merchants/${merchant!.id}', body: {
+      final mId = merchant!.id;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('merchant_is_open_$mId', willBeOpen);
+      if (willBeOpen) {
+        await prefs.remove('merchant_pause_$mId');
+      }
+
+      await _api.patch('/api/v1/merchants/$mId', body: {
         'settings': {
           'is_open': willBeOpen,
           'status': willBeOpen ? 'active' : 'closed',
@@ -194,7 +156,12 @@ class DashboardNotifier extends ChangeNotifier {
     if (merchant == null) return;
     try {
       final until = DateTime.now().add(Duration(minutes: minutes));
-      await _api.patch('/api/v1/merchants/${merchant!.id}', body: {
+      final mId = merchant!.id;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('merchant_pause_$mId', until.toIso8601String());
+
+      await _api.patch('/api/v1/merchants/$mId', body: {
         'settings': {'pause_until': until.toIso8601String()}
       });
       await refresh();
@@ -207,7 +174,11 @@ class DashboardNotifier extends ChangeNotifier {
   Future<void> resumeMerchant() async {
     if (merchant == null) return;
     try {
-      await _api.patch('/api/v1/merchants/${merchant!.id}', body: {
+      final mId = merchant!.id;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('merchant_pause_$mId');
+
+      await _api.patch('/api/v1/merchants/$mId', body: {
         'settings': {'pause_until': null}
       });
       await refresh();
@@ -221,7 +192,17 @@ class DashboardNotifier extends ChangeNotifier {
       {required bool enabled, String? opening, String? closing}) async {
     if (merchant == null) return;
     try {
-      await _api.patch('/api/v1/merchants/${merchant!.id}', body: {
+      final mId = merchant!.id;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('merchant_auto_sched_$mId', enabled);
+      if (opening != null) {
+        await prefs.setString('merchant_open_time_$mId', opening);
+      }
+      if (closing != null) {
+        await prefs.setString('merchant_close_time_$mId', closing);
+      }
+
+      await _api.patch('/api/v1/merchants/$mId', body: {
         'settings': {
           'auto_schedule_enabled': enabled,
           'opening_time': enabled ? opening : null,
@@ -282,5 +263,75 @@ class DashboardNotifier extends ChangeNotifier {
       notifyListeners();
       return null;
     }
+  }
+
+  // ── KPIs calculés ─────────────────────────────────────────
+  int get pendingCount =>
+      orders.where((o) => o.status == OrderStatus.pending).length;
+  int get acceptedCount =>
+      orders.where((o) => o.status == OrderStatus.accepted).length;
+  int get inDeliveryCount =>
+      orders.where((o) => o.status == OrderStatus.inDelivery).length;
+  int get deliveredCount =>
+      orders.where((o) => o.status == OrderStatus.delivered).length;
+  int get totalCount => orders.length;
+
+  int get revenueDay {
+    final startOfDay =
+        DateTime.now().copyWith(hour: 0, minute: 0, second: 0, millisecond: 0);
+    return orders
+        .where((o) =>
+            o.status == OrderStatus.delivered &&
+            (o.deliveredAt ?? o.createdAt).isAfter(startOfDay))
+        .fold(0, (s, o) => s + o.itemsAmount);
+  }
+
+  int get revenueWeek {
+    final start = DateTime.now().subtract(const Duration(days: 7));
+    return orders
+        .where((o) =>
+            o.status == OrderStatus.delivered &&
+            (o.deliveredAt ?? o.createdAt).isAfter(start))
+        .fold(0, (s, o) => s + o.itemsAmount);
+  }
+
+  int get revenueMonth {
+    final start = DateTime.now().subtract(const Duration(days: 30));
+    return orders
+        .where((o) =>
+            o.status == OrderStatus.delivered &&
+            (o.deliveredAt ?? o.createdAt).isAfter(start))
+        .fold(0, (s, o) => s + o.itemsAmount);
+  }
+
+  int get revenueTotal => orders
+      .where((o) => o.status == OrderStatus.delivered)
+      .fold(0, (s, o) => s + o.itemsAmount);
+  int get activeCount => pendingCount + acceptedCount + inDeliveryCount;
+
+  List<({String id, String title, String body})> get alerts {
+    final list = <({String id, String title, String body})>[];
+    if (pendingCount > 0) {
+      list.add((
+        id: 'n1',
+        title: '$pendingCount nouvelle(s) commande(s)',
+        body: 'À accepter au plus vite',
+      ));
+    }
+    if (acceptedCount > 0) {
+      list.add((
+        id: 'n2',
+        title: '$acceptedCount en attente livreur',
+        body: 'Préparez les colis',
+      ));
+    }
+    if (merchant != null && !merchant!.isOpen) {
+      list.add((
+        id: 'n3',
+        title: 'Votre boutique est fermée',
+        body: 'Les clients ne peuvent pas commander',
+      ));
+    }
+    return list.take(3).toList();
   }
 }

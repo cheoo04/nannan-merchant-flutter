@@ -1,4 +1,3 @@
-// --- Fichier : lib/core/services/a_nan_nan_services.dart ---
 import 'a_nan_nan_api_client.dart';
 
 class MerchantService {
@@ -6,8 +5,7 @@ class MerchantService {
   const MerchantService(this._api);
 
   Future<List<Map<String, dynamic>>> getMine() async =>
-      (await _api.get('/api/v1/merchants/me') as List)
-          .cast<Map<String, dynamic>>();
+      (await _api.get('/api/v1/merchants/me') as List).cast<Map<String, dynamic>>();
 
   Future<Map<String, dynamic>> getById(String merchantId) async =>
       await _api.get('/api/v1/merchants/$merchantId') as Map<String, dynamic>;
@@ -71,8 +69,7 @@ class CategoryService {
   const CategoryService(this._api);
 
   Future<List<dynamic>> list(String merchantId) async =>
-      await _api.get('/api/v1/merchants/$merchantId/categories')
-          as List<dynamic>;
+      await _api.get('/api/v1/merchants/$merchantId/categories') as List<dynamic>;
 
   Future<Map<String, dynamic>> create(
     String merchantId, {
@@ -121,16 +118,12 @@ class OfferingService {
         'type': type,
         'title': title,
         'slug': slug,
-        if (description != null && description.isNotEmpty)
-          'description': description,
+        if (description != null && description.isNotEmpty) 'description': description,
         'status': status,
         if (imageUrl != null && imageUrl.isNotEmpty) 'image_url': imageUrl,
         if (images != null && images.isNotEmpty) 'images': images,
-        // Ne jamais envoyer une chaîne vide comme UUID
-        if (categoryId != null && categoryId.trim().isNotEmpty)
-          'category_id': categoryId.trim(),
-        if (categoryIds != null && categoryIds.isNotEmpty)
-          'category_ids': categoryIds,
+        if (categoryId != null && categoryId.trim().isNotEmpty) 'category_id': categoryId.trim(),
+        if (categoryIds != null && categoryIds.isNotEmpty) 'category_ids': categoryIds,
         'variants': [
           {
             'price': price,
@@ -141,14 +134,30 @@ class OfferingService {
           }
         ],
       }) as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> update(
+    String offeringId, {
+    String? title,
+    String? description,
+    String? status,
+    String? imageUrl,
+  }) async =>
+      await _api.patch('/api/v1/offerings/$offeringId', body: {
+        if (title != null) 'title': title,
+        if (description != null) 'description': description,
+        if (status != null) 'status': status,
+        if (imageUrl != null) 'image_url': imageUrl,
+      }) as Map<String, dynamic>;
+
+  Future<void> delete(String offeringId) async =>
+      await _api.delete('/api/v1/offerings/$offeringId');
 }
 
 class OrderService {
   final ANanNanApiClient _api;
   const OrderService(this._api);
 
-  Future<List<dynamic>> listForMerchant(String merchantId,
-          {String? statusFilter}) async =>
+  Future<List<dynamic>> listForMerchant(String merchantId, {String? statusFilter}) async =>
       await _api.get('/api/v1/orders', query: {
         'merchant_id': merchantId,
         if (statusFilter != null) 'status_filter': statusFilter,
@@ -157,8 +166,7 @@ class OrderService {
   Future<Map<String, dynamic>> get(String orderId) async =>
       await _api.get('/api/v1/orders/$orderId') as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> updateStatus(
-          String orderId, String targetStatus) async =>
+  Future<Map<String, dynamic>> updateStatus(String orderId, String targetStatus) async =>
       await _api.patch('/api/v1/orders/$orderId/status',
           body: {'target_status': targetStatus}) as Map<String, dynamic>;
 }
@@ -167,8 +175,7 @@ class PublicationService {
   final ANanNanApiClient _api;
   const PublicationService(this._api);
 
-  Future<List<dynamic>> list(String merchantId,
-          {bool activeOnly = true}) async =>
+  Future<List<dynamic>> list(String merchantId, {bool activeOnly = true}) async =>
       await _api.get('/api/v1/merchants/$merchantId/publications',
           query: {'active_only': activeOnly.toString()}) as List<dynamic>;
 
@@ -183,35 +190,28 @@ class PublicationService {
         'title': title,
         'media_url': mediaUrl,
         'media_type': mediaType,
-        if (description != null && description.isNotEmpty)
-          'description': description,
+        if (description != null && description.isNotEmpty) 'description': description,
       }) as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> toggleActive(String publicationId,
-          {bool? isActive}) async =>
+  Future<Map<String, dynamic>> toggleActive(String publicationId, {bool? isActive}) async =>
       await _api.patch('/api/v1/publications/$publicationId/toggle-active',
-              body: isActive != null ? {'is_active': isActive} : null)
-          as Map<String, dynamic>;
+          body: isActive != null ? {'is_active': isActive} : null) as Map<String, dynamic>;
 
-  Future<void> delete(String publicationId) =>
-      _api.delete('/api/v1/publications/$publicationId');
+  Future<void> delete(String publicationId) => _api.delete('/api/v1/publications/$publicationId');
 }
 
-// ── Ordonnances Médicales ─────────────────────────────────────────────────────
 class PrescriptionService {
   final ANanNanApiClient _api;
   const PrescriptionService(this._api);
 
-  Future<List<dynamic>> listForMerchant(String merchantId,
-          {String? status}) async =>
+  Future<List<dynamic>> listForMerchant(String merchantId, {String? status}) async =>
       await _api.get('/api/v1/prescriptions', query: {
         'merchant_id': merchantId,
         if (status != null) 'status': status,
       }) as List<dynamic>;
 
   Future<Map<String, dynamic>> get(String prescriptionId) async =>
-      await _api.get('/api/v1/prescriptions/$prescriptionId')
-          as Map<String, dynamic>;
+      await _api.get('/api/v1/prescriptions/$prescriptionId') as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> submitQuote(
     String prescriptionId, {
@@ -230,14 +230,17 @@ class PrescriptionService {
 
   Future<Map<String, dynamic>> reject(
     String prescriptionId, {
+    required String merchantId,
     String? reason,
   }) async =>
-      await _api.post('/api/v1/prescriptions/$prescriptionId/reject', body: {
-        if (reason != null && reason.isNotEmpty) 'reason': reason,
-      }) as Map<String, dynamic>;
+      await _api.post(
+        '/api/v1/prescriptions/$prescriptionId/reject?merchant_id=$merchantId',
+        body: {
+          if (reason != null && reason.isNotEmpty) 'reason': reason,
+        },
+      ) as Map<String, dynamic>;
 }
 
-// ── Notifications ─────────────────────────────────────────────────────────────
 class NotificationService {
   final ANanNanApiClient _api;
   const NotificationService(this._api);
@@ -250,8 +253,7 @@ class NotificationService {
 
   Future<int> getUnreadCount() async {
     try {
-      final res = await _api.get('/api/v1/notifications/unread-count')
-          as Map<String, dynamic>;
+      final res = await _api.get('/api/v1/notifications/unread-count') as Map<String, dynamic>;
       return res['unread_count'] as int? ?? 0;
     } catch (_) {
       return 0;
@@ -261,8 +263,7 @@ class NotificationService {
   Future<void> markAsRead(String notificationId) async =>
       await _api.patch('/api/v1/notifications/$notificationId/read');
 
-  Future<void> registerDeviceToken(
-          {required String pushToken, String platform = 'android'}) async =>
+  Future<void> registerDeviceToken({required String pushToken, String platform = 'android'}) async =>
       await _api.post('/api/v1/notifications/devices', body: {
         'push_token': pushToken,
         'platform': platform,

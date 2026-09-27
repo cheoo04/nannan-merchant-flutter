@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
-import '../../core/utils/error_message.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/services/a_nan_nan_api_client.dart';
 import '../../core/services/a_nan_nan_services.dart';
@@ -16,7 +17,6 @@ import '../../shared/models/models.dart';
 import '../../shared/merchant_category.dart';
 import '../dashboard/dashboard_notifier.dart';
 
-// ── Modèle produit ────────────────────────────────────────────────────────────
 class DbProduct {
   final String id;
   final String merchantId;
@@ -26,6 +26,7 @@ class DbProduct {
   final String? imageUrl;
   final String category;
   final String? categoryId;
+  final String status;
   final bool isAvailable;
   final int? stock;
   final String cityCode;
@@ -39,6 +40,7 @@ class DbProduct {
     this.imageUrl,
     required this.category,
     this.categoryId,
+    required this.status,
     required this.isAvailable,
     this.stock,
     required this.cityCode,
@@ -61,6 +63,8 @@ class DbProduct {
 
     final catId = j['category_id'] as String?;
     final catName = (catId != null ? categoryNames[catId] : null) ?? '';
+    final statusStr = (j['status'] as String? ?? 'active').toLowerCase();
+    final isInStock = defaultVariant?['is_in_stock'] as bool? ?? true;
 
     return DbProduct(
       id: j['id'] as String,
@@ -71,14 +75,14 @@ class DbProduct {
       imageUrl: j['image_url'] as String?,
       category: catName,
       categoryId: catId,
-      isAvailable: defaultVariant?['is_in_stock'] as bool? ?? true,
+      status: statusStr,
+      isAvailable: (statusStr == 'active') && isInStock,
       stock: defaultVariant?['stock_quantity'] as int?,
       cityCode: 'oume',
     );
   }
 }
 
-// ── Notifier produits ─────────────────────────────────────────────────────────
 class ProductsNotifier extends ChangeNotifier {
   final DashboardNotifier dashboardNotifier;
   final _api = ANanNanApiClient();
@@ -93,6 +97,8 @@ class ProductsNotifier extends ChangeNotifier {
   String categoryFilter = 'all';
   String availFilter = 'all';
 
+  Timer? _pollingTimer;
+
   MerchantModel? get merchant => dashboardNotifier.merchant;
   bool get loadingMerchant => dashboardNotifier.loadingMerchant;
 
@@ -100,6 +106,9 @@ class ProductsNotifier extends ChangeNotifier {
       : merchantId = merchantId ?? NeonSession.merchantId {
     dashboardNotifier.addListener(_onMerchantChanged);
     _init();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (merchantId != null) refresh();
+    });
   }
 
   Future<void> _init() async {
@@ -138,21 +147,38 @@ class ProductsNotifier extends ChangeNotifier {
             if (c['id'] != null && c['name'] != null)
               c['id'] as String: c['name'] as String,
         };
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[Products] Erreur chargement catégories: $e');
+      }
 
       final data = await _offerings.list(merchantId!);
       products = data
           .cast<Map<String, dynamic>>()
           .map((e) => DbProduct.fromOffering(e, categoryNames: categoryMap))
+          .where((p) => p.status != 'archived')
           .toList();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Products] Erreur chargement offres: $e');
     } finally {
       loadingProducts = false;
       notifyListeners();
     }
   }
 
-  Future<void> refresh() => _loadCategoriesAndProducts();
+  Future<void> refresh() async {
+    if (merchantId == null) return;
+    try {
+      final data = await _offerings.list(merchantId!);
+      products = data
+          .cast<Map<String, dynamic>>()
+          .map((e) => DbProduct.fromOffering(e, categoryNames: categoryMap))
+          .where((p) => p.status != 'archived')
+          .toList();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[Products] Erreur refresh: $e');
+    }
+  }
 
   List<String> get categories {
     final set = products.map((p) => p.category).where((c) => c.isNotEmpty).toSet();
@@ -180,29 +206,35 @@ class ProductsNotifier extends ChangeNotifier {
 
   Future<void> toggleAvailability(DbProduct p) async {
     try {
-      await _api.patch('/api/v1/offerings/${p.id}', body: {
-        'status': p.isAvailable ? 'draft' : 'active',
-      });
+      final targetStatus = p.isAvailable ? 'draft' : 'active';
+      await _offerings.update(p.id, status: targetStatus);
       await refresh();
-    } catch (_) {
-      toast.info("Option en cours de déploiement sur l'API.");
+      toast.success(targetStatus == 'active' ? 'Produit visible' : 'Produit masqué');
+    } catch (e) {
+      debugPrint('[Products] Erreur toggle availability: $e');
+      toast.error('Action impossible pour le moment');
     }
   }
 
   Future<void> deleteProduct(String id) async {
     try {
-      await _api.delete('/api/v1/offerings/$id');
+      await _offerings.delete(id);
+      products.removeWhere((p) => p.id == id);
+      notifyListeners();
       await refresh();
-    } catch (_) {
-      toast.info("La suppression directe sera disponible dans la prochaine mise à jour backend.");
+      toast.success('Produit supprimé');
+    } catch (e) {
+      debugPrint('[Products] Erreur delete product: $e');
+      toast.error('Impossible de supprimer ce produit pour le moment');
     }
   }
 
   Future<String?> uploadImage(String path, Uint8List bytes) async {
     try {
       return await _api.uploadFile(bytes: bytes, filename: path, folder: 'products');
-    } on ANanNanApiException catch (e) {
-      toast.error(e.message);
+    } catch (e) {
+      debugPrint('[Products] Erreur upload image: $e');
+      toast.error("Échec de l'envoi de la photo");
       return null;
     }
   }
@@ -238,24 +270,31 @@ class ProductsNotifier extends ChangeNotifier {
             slug: _slugify(trimmedCat),
           );
           targetCategoryId = newCat['id'] as String?;
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[Products] Erreur création catégorie: $e');
+        }
       }
     }
 
-    await _offerings.create(
-      merchantId!,
-      title: name,
-      slug: _slugify(name),
-      description: description,
-      price: priceXof.toDouble(),
-      stockQuantity: stock,
-      isInStock: stock == null || stock > 0,
-      imageUrl: imageUrl,
-      categoryId: targetCategoryId,
-      status: 'active',
-    );
-
-    await _loadCategoriesAndProducts();
+    try {
+      await _offerings.create(
+        merchantId!,
+        title: name,
+        slug: _slugify(name),
+        description: description,
+        price: priceXof.toDouble(),
+        stockQuantity: stock,
+        isInStock: stock == null || stock > 0,
+        imageUrl: imageUrl,
+        categoryId: targetCategoryId,
+        status: 'active',
+      );
+      await _loadCategoriesAndProducts();
+      toast.success('Produit créé');
+    } catch (e) {
+      debugPrint('[Products] Erreur création produit: $e');
+      toast.error('Impossible de créer le produit');
+    }
   }
 
   Future<void> updateProduct(
@@ -268,14 +307,17 @@ class ProductsNotifier extends ChangeNotifier {
     String? category,
   }) async {
     try {
-      await _api.patch('/api/v1/offerings/$id', body: {
-        'title': name,
-        if (description != null) 'description': description,
-        if (imageUrl != null) 'image_url': imageUrl,
-      });
+      await _offerings.update(
+        id,
+        title: name,
+        description: description,
+        imageUrl: imageUrl,
+      );
       await refresh();
-    } catch (_) {
-      toast.info("La modification sera active dès l'ajout du PATCH /offerings sur le serveur.");
+      toast.success('Produit mis à jour');
+    } catch (e) {
+      debugPrint('[Products] Erreur mise à jour produit: $e');
+      toast.error('Impossible de modifier ce produit');
     }
   }
 
@@ -283,18 +325,19 @@ class ProductsNotifier extends ChangeNotifier {
     final base = s.toLowerCase().trim()
         .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
         .replaceAll(RegExp(r'\s+'), '-');
+    final validBase = base.isNotEmpty ? base : 'produit';
     final suffix = DateTime.now().millisecondsSinceEpoch.toRadixString(36).substring(6);
-    return '$base-$suffix';
+    return '$validBase-$suffix';
   }
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
     dashboardNotifier.removeListener(_onMerchantChanged);
     super.dispose();
   }
 }
 
-// ── PRODUCTS SCREEN ───────────────────────────────────────────────────────────
 class ProductsScreen extends StatefulWidget {
   final DashboardNotifier dashboardNotifier;
   final int currentNavIndex;
@@ -353,12 +396,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       ),
     );
     if (ok != true) return;
-    try {
-      await _n.deleteProduct(p.id);
-      toast.success('Produit supprimé');
-    } catch (e) {
-      toast.error(friendlyError(e));
-    }
+    await _n.deleteProduct(p.id);
   }
 
   @override
@@ -547,14 +585,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
                       child: _ProductRow(
                         product: p,
-                        onToggle: () async {
-                          try {
-                            await _n.toggleAvailability(p);
-                            toast.success(p.isAvailable ? 'Produit masqué' : 'Produit visible');
-                          } catch (e) {
-                            toast.error(friendlyError(e));
-                          }
-                        },
+                        onToggle: () => _n.toggleAvailability(p),
                         onEdit: () {
                           _editing = p;
                           setState(() => _showEditor = true);
@@ -590,7 +621,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 }
 
-// ── HEADER PRODUITS ───────────────────────────────────────────────────────────
 class _ProductsHeader extends StatelessWidget {
   final double topPadding;
   final ProductsNotifier notifier;
@@ -626,32 +656,39 @@ class _ProductsHeader extends StatelessWidget {
               GestureDetector(
                 onTap: onBack,
                 child: Container(
-                  width: 44, height: 44,
+                  width: 44,
+                  height: 44,
                   decoration: const BoxDecoration(color: AppColors.headerOverlay, shape: BoxShape.circle),
                   child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
                 ),
               ),
-              Row(
-                children: [
-                  Text(
-                    notifier.merchant?.name ?? '—',
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-                  ),
-                  if (onNotifications != null) ...[
-                    const SizedBox(width: 10),
-                    NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications!),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        notifier.merchant?.name ?? 'Mon commerce',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    if (onNotifications != null) ...[
+                      const SizedBox(width: 10),
+                      NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications!),
+                    ],
                   ],
-                ],
+                ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           const Text('Mes produits',
-              style: TextStyle(color: Colors.white, fontSize: 24,
-                  fontWeight: FontWeight.w700, fontFamily: 'Sora')),
+              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700, fontFamily: 'Sora')),
           const SizedBox(height: 4),
-          const Text('Catalogue & disponibilité de votre boutique.',
-              style: TextStyle(color: Colors.white, fontSize: 12)),
+          const Text('Catalogue & disponibilité de votre boutique.', style: TextStyle(color: Colors.white, fontSize: 12)),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -687,7 +724,6 @@ class _ProductsHeader extends StatelessWidget {
   }
 }
 
-// ── STATUT BOUTIQUE ───────────────────────────────────────────────────────────
 class _ShopAvailability extends StatefulWidget {
   final ProductsNotifier notifier;
 
@@ -733,6 +769,7 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
     final m = widget.notifier.merchant!;
     final label = m.statusLabel.label;
     final isPaused = m.pauseUntil != null &&
+        DateTime.tryParse(m.pauseUntil!) != null &&
         DateTime.parse(m.pauseUntil!).isAfter(DateTime.now());
 
     return Container(
@@ -765,13 +802,9 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
               ),
               GestureDetector(
                 onTap: () async {
-                  try {
-                    final wasOpen = widget.notifier.merchant?.isOpen ?? false;
-                    await widget.notifier.toggleOpen();
-                    toast.success(!wasOpen ? 'Boutique ouverte' : 'Boutique fermée');
-                  } catch (e) {
-                    toast.error(friendlyError(e));
-                  }
+                  final wasOpen = widget.notifier.merchant?.isOpen ?? false;
+                  await widget.notifier.toggleOpen();
+                  toast.success(!wasOpen ? 'Boutique ouverte' : 'Boutique fermée');
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -801,12 +834,8 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
                 padding: const EdgeInsets.only(right: 6),
                 child: GestureDetector(
                   onTap: () async {
-                    try {
-                      await widget.notifier.pauseMerchant(min);
-                      toast.success('Pause $min min');
-                    } catch (e) {
-                      toast.error(friendlyError(e));
-                    }
+                    await widget.notifier.pauseMerchant(min);
+                    toast.success('Pause $min min');
                   },
                   child: Container(
                     height: 40,
@@ -833,12 +862,8 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
             const SizedBox(height: 8),
             GestureDetector(
               onTap: () async {
-                try {
-                  await widget.notifier.resumeMerchant();
-                  toast.success('Pause levée');
-                } catch (e) {
-                  toast.error(friendlyError(e));
-                }
+                await widget.notifier.resumeMerchant();
+                toast.success('Pause levée');
               },
               child: Container(
                 height: 40, width: double.infinity,
@@ -864,7 +889,6 @@ class _ShopAvailabilityState extends State<_ShopAvailability> {
   }
 }
 
-// ── FILTRES CATALOGUE ─────────────────────────────────────────────────────────
 class _FilterChip extends StatelessWidget {
   final String label;
   final bool active;
@@ -898,7 +922,6 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-// ── PRODUCT ROW ───────────────────────────────────────────────────────────────
 class _ProductRow extends StatelessWidget {
   final DbProduct product;
   final VoidCallback onToggle;
@@ -1046,7 +1069,6 @@ class _ProductRow extends StatelessWidget {
   }
 }
 
-// ── PRODUCT EDITOR ────────────────────────────────────────────────────────────
 class _ProductEditor extends StatefulWidget {
   final String merchantId;
   final DbProduct? initial;
@@ -1136,7 +1158,6 @@ class _ProductEditorState extends State<_ProductEditor> {
           stock: stock,
           category: _category.text.trim(),
         );
-        toast.success('Produit mis à jour');
       } else {
         await widget.notifier.createProduct(
           name: _name.text.trim(),
@@ -1146,11 +1167,11 @@ class _ProductEditorState extends State<_ProductEditor> {
           stock: stock,
           category: _category.text.trim(),
         );
-        toast.success('Produit créé avec succès');
       }
       widget.onClose();
     } catch (e) {
-      toast.error(friendlyError(e));
+      debugPrint('[ProductEditor] Erreur submit: $e');
+      toast.error('Une erreur est survenue');
     } finally {
       setState(() => _saving = false);
     }
@@ -1319,7 +1340,6 @@ class _ProductEditorState extends State<_ProductEditor> {
   }
 }
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
 class _FieldLabel extends StatelessWidget {
   final String label;
   const _FieldLabel({required this.label});

@@ -1,14 +1,8 @@
-// lib/core/services/a_nan_nan_api_client.dart
-//
-// Client HTTP pour la nouvelle API (api-a-nan-nan.vercel.app), basé sur
-// l'openapi.json réel du 19/09. Remplace l'ancienne version qui supposait
-// à tort une réutilisation du JWT Supabase — cette API a sa propre auth
-// téléphone + PIN à 4 chiffres (register/login/refresh), complètement
-// indépendante de Supabase Auth.
-
+// --- Fichier : lib/core/services/a_nan_nan_api_client.dart ---
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ANanNanApiException implements Exception {
@@ -32,7 +26,6 @@ class ANanNanApiClient {
 
   ANanNanApiClient({http.Client? client}) : _http = client ?? http.Client();
 
-  // ── Session (persistée en local, pas de Supabase ici) ────────────
   Future<void> _loadSession() async {
     if (_accessToken != null) return;
     final prefs = await SharedPreferences.getInstance();
@@ -62,7 +55,6 @@ class ANanNanApiClient {
   }
 
   // ── Auth ───────────────────────────────────────────────────────
-  /// Inscription — téléphone au format 10 chiffres ou +225..., PIN 4 chiffres.
   Future<Map<String, dynamic>> register({
     required String phone,
     required String pin,
@@ -79,31 +71,34 @@ class ANanNanApiClient {
       if (email != null) 'email': email,
       if (referralCode != null) 'referral_code': referralCode,
     });
-    // AuthResponse = { user, tokens }
     final tokens = body['tokens'] as Map<String, dynamic>;
-    await _saveSession(tokens['access_token'] as String, tokens['refresh_token'] as String);
+    await _saveSession(
+        tokens['access_token'] as String, tokens['refresh_token'] as String);
     return body['user'] as Map<String, dynamic>;
   }
 
-  /// Connexion — mêmes identifiants que register (téléphone + PIN),
-  /// PAS d'email ni de mot de passe : ce backend n'en a pas.
   Future<void> login({required String phone, required String pin}) async {
     final body = await _postPublic('/api/v1/auth/login', {
       'phone': phone,
       'pin': pin,
     });
-    // TokenResponse direct (pas enveloppé dans "tokens" ici, contrairement à register)
-    await _saveSession(body['access_token'] as String, body['refresh_token'] as String);
+    await _saveSession(
+        body['access_token'] as String, body['refresh_token'] as String);
   }
 
   Future<void> refreshSession() async {
     await _loadSession();
-    if (_refreshToken == null) throw const ANanNanApiException(401, 'Pas de session à rafraîchir');
-    final body = await _postPublic('/api/v1/auth/refresh', {'refresh_token': _refreshToken});
-    await _saveSession(body['access_token'] as String, body['refresh_token'] as String);
+    if (_refreshToken == null) {
+      throw const ANanNanApiException(401, 'Pas de session à rafraîchir');
+    }
+    final body = await _postPublic(
+        '/api/v1/auth/refresh', {'refresh_token': _refreshToken});
+    await _saveSession(
+        body['access_token'] as String, body['refresh_token'] as String);
   }
 
-  Future<Map<String, dynamic>> me() async => await get('/api/v1/auth/me') as Map<String, dynamic>;
+  Future<Map<String, dynamic>> me() async =>
+      await get('/api/v1/auth/me') as Map<String, dynamic>;
 
   Future<void> logout() => clearSession();
 
@@ -111,7 +106,8 @@ class ANanNanApiClient {
   Future<Map<String, String>> _authHeaders() async {
     await _loadSession();
     if (_accessToken == null) {
-      throw const ANanNanApiException(401, 'Non connecté (téléphone + PIN requis)');
+      throw const ANanNanApiException(
+          401, 'Non connecté (téléphone + PIN requis)');
     }
     return {
       'Content-Type': 'application/json',
@@ -124,25 +120,30 @@ class ANanNanApiClient {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: query);
     var res = await _http.get(uri, headers: await _authHeaders());
     if (res.statusCode == 401) {
-      res = await _retryAfterRefresh(() => _http.get(uri, headers: _headersSync()));
+      res = await _retryAfterRefresh(
+          () => _http.get(uri, headers: _headersSync()));
     }
     return _handle(res);
   }
 
   Future<dynamic> post(String path, {Object? body}) async {
     final uri = Uri.parse('$baseUrl$path');
-    var res = await _http.post(uri, headers: await _authHeaders(), body: jsonEncode(body));
+    var res = await _http.post(uri,
+        headers: await _authHeaders(), body: jsonEncode(body));
     if (res.statusCode == 401) {
-      res = await _retryAfterRefresh(() => _http.post(uri, headers: _headersSync(), body: jsonEncode(body)));
+      res = await _retryAfterRefresh(() =>
+          _http.post(uri, headers: _headersSync(), body: jsonEncode(body)));
     }
     return _handle(res);
   }
 
   Future<dynamic> patch(String path, {Object? body}) async {
     final uri = Uri.parse('$baseUrl$path');
-    var res = await _http.patch(uri, headers: await _authHeaders(), body: jsonEncode(body));
+    var res = await _http.patch(uri,
+        headers: await _authHeaders(), body: jsonEncode(body));
     if (res.statusCode == 401) {
-      res = await _retryAfterRefresh(() => _http.patch(uri, headers: _headersSync(), body: jsonEncode(body)));
+      res = await _retryAfterRefresh(() =>
+          _http.patch(uri, headers: _headersSync(), body: jsonEncode(body)));
     }
     return _handle(res);
   }
@@ -151,14 +152,34 @@ class ANanNanApiClient {
     final uri = Uri.parse('$baseUrl$path');
     var res = await _http.delete(uri, headers: await _authHeaders());
     if (res.statusCode == 401) {
-      res = await _retryAfterRefresh(() => _http.delete(uri, headers: _headersSync()));
+      res = await _retryAfterRefresh(
+          () => _http.delete(uri, headers: _headersSync()));
     }
     return _handle(res);
   }
 
-  /// Téléverse un fichier (image produit, photo de boutique, document KYC...)
-  /// via POST /api/v1/uploads (multipart/form-data). Retourne l'URL publique.
-  /// `folder` sert à ranger côté serveur (ex: 'products', 'merchants', 'documents').
+  MediaType _resolveMediaType(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'png':
+        return MediaType('image', 'png');
+      case 'webp':
+        return MediaType('image', 'webp');
+      case 'gif':
+        return MediaType('image', 'gif');
+      case 'pdf':
+        return MediaType('application', 'pdf');
+      case 'mp4':
+        return MediaType('video', 'mp4');
+      case 'mov':
+        return MediaType('video', 'quicktime');
+      case 'jpg':
+      case 'jpeg':
+      default:
+        return MediaType('image', 'jpeg');
+    }
+  }
+
   Future<String> uploadFile({
     required List<int> bytes,
     required String filename,
@@ -169,10 +190,17 @@ class ANanNanApiClient {
       throw const ANanNanApiException(401, 'Non connecté');
     }
     final uri = Uri.parse('$baseUrl/api/v1/uploads');
+    final mediaType = _resolveMediaType(filename);
+
     final request = http.MultipartRequest('POST', uri)
       ..headers['Authorization'] = 'Bearer $_accessToken'
       ..fields['folder'] = folder
-      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+      ..files.add(http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: filename,
+        contentType: mediaType,
+      ));
 
     var streamed = await _http.send(request);
     var res = await http.Response.fromStream(streamed);
@@ -182,7 +210,12 @@ class ANanNanApiClient {
       final retry = http.MultipartRequest('POST', uri)
         ..headers['Authorization'] = 'Bearer $_accessToken'
         ..fields['folder'] = folder
-        ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+        ..files.add(http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: filename,
+          contentType: mediaType,
+        ));
       streamed = await _http.send(retry);
       res = await http.Response.fromStream(streamed);
     }
@@ -197,7 +230,8 @@ class ANanNanApiClient {
         'Authorization': 'Bearer $_accessToken',
       };
 
-  Future<http.Response> _retryAfterRefresh(Future<http.Response> Function() retry) async {
+  Future<http.Response> _retryAfterRefresh(
+      Future<http.Response> Function() retry) async {
     try {
       await refreshSession();
       return await retry();
@@ -207,12 +241,14 @@ class ANanNanApiClient {
     }
   }
 
-  // ── Appel public (pas de token requis) ────────────────────────
   Future<Map<String, dynamic>> _postPublic(String path, Object? body) async {
     final uri = Uri.parse('$baseUrl$path');
     final res = await _http.post(
       uri,
-      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
       body: jsonEncode(body),
     );
     return _handle(res) as Map<String, dynamic>;
@@ -229,14 +265,12 @@ class ANanNanApiClient {
       if (decoded is Map && decoded['detail'] is String) {
         message = decoded['detail'] as String;
       } else if (decoded is Map && decoded['detail'] is List) {
-        // HTTPValidationError (422) : liste de ValidationError
         message = (decoded['detail'] as List)
-            .map((e) => e is Map ? '${e['loc']?.last}: ${e['msg']}' : e.toString())
+            .map((e) =>
+                e is Map ? '${e['loc']?.last}: ${e['msg']}' : e.toString())
             .join(', ');
       }
-    } catch (_) {
-      // corps non-JSON, on garde le texte brut
-    }
+    } catch (_) {}
     if (kDebugMode) {
       debugPrint('ANanNanApiClient error ${res.statusCode}: $message');
     }

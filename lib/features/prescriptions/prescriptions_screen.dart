@@ -1,4 +1,3 @@
-// --- Fichier : lib/features/prescriptions/prescriptions_screen.dart ---
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -11,7 +10,6 @@ import '../../core/services/neon_session.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/widgets/notification_bell_button.dart';
 
-// ── Modèle ────────────────────────────────────────────────────────────────────
 class PrescriptionRow {
   final String id;
   final String clientId;
@@ -51,8 +49,7 @@ class PrescriptionRow {
       try {
         final decoded = jsonDecode(j['quote_details']);
         if (decoded is List) {
-          items =
-              decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          items = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
         }
       } catch (_) {}
     } else if (j['quote_items'] != null) {
@@ -62,8 +59,7 @@ class PrescriptionRow {
     }
 
     final image = j['image_url'] as String?;
-    final imagesList =
-        (j['image_paths'] as List<dynamic>?)?.cast<String>() ?? [];
+    final imagesList = (j['image_paths'] as List<dynamic>?)?.cast<String>() ?? [];
     if (image != null && image.isNotEmpty && !imagesList.contains(image)) {
       imagesList.insert(0, image);
     }
@@ -105,7 +101,6 @@ const _statusLabel = {
   'cancelled': 'Annulée',
 };
 
-// ── Notifier ──────────────────────────────────────────────────────────────────
 class PrescriptionsNotifier extends ChangeNotifier {
   final _api = ANanNanApiClient();
   late final _service = PrescriptionService(_api);
@@ -150,12 +145,10 @@ class PrescriptionsNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<PrescriptionRow> get inbox => prescriptions
-      .where((p) => p.status == 'received' || p.status == 'analyzing')
-      .toList();
-  List<PrescriptionRow> get quoted => prescriptions
-      .where((p) => p.status == 'quoted' || p.status == 'accepted')
-      .toList();
+  List<PrescriptionRow> get inbox =>
+      prescriptions.where((p) => p.status == 'received' || p.status == 'analyzing').toList();
+  List<PrescriptionRow> get quoted =>
+      prescriptions.where((p) => p.status == 'quoted' || p.status == 'accepted').toList();
   List<PrescriptionRow> get done =>
       prescriptions.where((p) => p.status == 'paid').toList();
 
@@ -164,8 +157,12 @@ class PrescriptionsNotifier extends ChangeNotifier {
   }
 
   Future<void> setStatus(String id, String status) async {
-    if (status == 'cancelled') {
-      await _service.reject(id, reason: 'Refusée par le pharmacien');
+    if (status == 'cancelled' && merchantId != null) {
+      await _service.reject(
+        id,
+        merchantId: merchantId!,
+        reason: 'Refusée par le pharmacien',
+      );
     }
     await load();
   }
@@ -192,7 +189,6 @@ class PrescriptionsNotifier extends ChangeNotifier {
   }
 }
 
-// ── ÉCRAN PRINCIPAL ───────────────────────────────────────────────────────────
 class PrescriptionsScreen extends StatefulWidget {
   final int currentNavIndex;
   final ValueChanged<int> onNavTap;
@@ -251,8 +247,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
       return Scaffold(
         backgroundColor: AppColors.background,
         body: const Center(
-          child: CircularProgressIndicator(
-              color: AppColors.primary, strokeWidth: 2),
+          child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
         ),
         bottomNavigationBar: MerchantBottomNav(
             currentIndex: widget.currentNavIndex,
@@ -281,8 +276,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
                 title: 'À traiter',
                 items: _n.inbox,
                 openId: _openId,
-                onToggle: (id) =>
-                    setState(() => _openId = _openId == id ? null : id),
+                onToggle: (id) => setState(() => _openId = _openId == id ? null : id),
                 notifier: _n,
                 onGoToOrders: () => widget.onNavTap(1),
                 isOpen: (_openSection ?? _defaultOpenSection) == 'À traiter',
@@ -293,12 +287,10 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
                 title: 'Devis envoyés',
                 items: _n.quoted,
                 openId: _openId,
-                onToggle: (id) =>
-                    setState(() => _openId = _openId == id ? null : id),
+                onToggle: (id) => setState(() => _openId = _openId == id ? null : id),
                 notifier: _n,
                 onGoToOrders: () => widget.onNavTap(1),
-                isOpen:
-                    (_openSection ?? _defaultOpenSection) == 'Devis envoyés',
+                isOpen: (_openSection ?? _defaultOpenSection) == 'Devis envoyés',
                 onToggleSection: () => _toggleSection('Devis envoyés'),
               ),
             if (_n.done.isNotEmpty)
@@ -306,8 +298,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
                 title: 'Payées',
                 items: _n.done,
                 openId: _openId,
-                onToggle: (id) =>
-                    setState(() => _openId = _openId == id ? null : id),
+                onToggle: (id) => setState(() => _openId = _openId == id ? null : id),
                 notifier: _n,
                 onGoToOrders: () => widget.onNavTap(1),
                 isOpen: (_openSection ?? _defaultOpenSection) == 'Payées',
@@ -319,13 +310,11 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
                   padding: EdgeInsets.all(40),
                   child: Column(
                     children: [
-                      Icon(Icons.medication_outlined,
-                          size: 48, color: AppColors.mutedForeground),
+                      Icon(Icons.medication_outlined, size: 48, color: AppColors.mutedForeground),
                       SizedBox(height: 12),
                       Text('Aucune ordonnance reçue pour le moment.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 13, color: AppColors.mutedForeground)),
+                          style: TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
                     ],
                   ),
                 ),
@@ -342,7 +331,6 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
   }
 }
 
-// ── Header ────────────────────────────────────────────────────────────────────
 class _PrescriptionsHeader extends StatelessWidget {
   final double topPadding;
   final VoidCallback onBack;
@@ -382,13 +370,11 @@ class _PrescriptionsHeader extends StatelessWidget {
                     color: AppColors.headerOverlay,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.arrow_back_rounded,
-                      color: Colors.white, size: 20),
+                  child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
                 ),
               ),
               if (onNotifications != null)
-                NotificationBellButton(
-                    unreadCount: unreadCount, onTap: onNotifications!),
+                NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications!),
             ],
           ),
           const SizedBox(height: 12),
@@ -412,7 +398,6 @@ class _PrescriptionsHeader extends StatelessWidget {
   }
 }
 
-// ── Section ───────────────────────────────────────────────────────────────────
 class _Section extends StatelessWidget {
   final String title;
   final List<PrescriptionRow> items;
@@ -446,8 +431,7 @@ class _Section extends StatelessWidget {
               onTap: onToggleSection,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: isOpen ? AppColors.primary : AppColors.card,
                   borderRadius: BorderRadius.circular(999),
@@ -462,13 +446,10 @@ class _Section extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color:
-                                isOpen ? Colors.white : AppColors.foreground)),
+                            color: isOpen ? Colors.white : AppColors.foreground)),
                     const SizedBox(width: 6),
                     Icon(
-                      isOpen
-                          ? Icons.expand_less_rounded
-                          : Icons.expand_more_rounded,
+                      isOpen ? Icons.expand_less_rounded : Icons.expand_more_rounded,
                       size: 18,
                       color: isOpen ? Colors.white : AppColors.mutedForeground,
                     ),
@@ -495,7 +476,6 @@ class _Section extends StatelessWidget {
   }
 }
 
-// ── Carte ordonnance ──────────────────────────────────────────────────────────
 class _PrescriptionCard extends StatefulWidget {
   final PrescriptionRow p;
   final bool open;
@@ -558,7 +538,8 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
   int get _subtotal => _items.fold<int>(
         0,
         (s, i) =>
-            s + (i['qty'] as int? ?? 1) * (i['unit_price_xof'] as int? ?? 0),
+            s +
+            (i['qty'] as int? ?? 1) * (i['unit_price_xof'] as int? ?? 0),
       );
   int get _total => _subtotal;
 
@@ -655,7 +636,7 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.foreground)),
                         Text(
-                          '${p.imagePaths.length} photo${p.imagePaths.length > 1 ? 's' : ''} · '
+                          '${p.imagePaths.length} photo${p.imagePaths.length > 1 ? "s" : ""} · '
                           '${formatDateShort(p.createdAt)} ${formatTime(p.createdAt)}',
                           style: const TextStyle(
                               fontSize: 11, color: AppColors.mutedForeground),
@@ -686,8 +667,7 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
           if (widget.open) ...[
             Container(
               decoration: const BoxDecoration(
-                border: Border(
-                    top: BorderSide(color: AppColors.border, width: 0.5)),
+                border: Border(top: BorderSide(color: AppColors.border, width: 0.5)),
               ),
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -781,11 +761,10 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                               ),
                             )),
                     GestureDetector(
-                      onTap: () => setState(() => _items
-                          .add({'name': '', 'qty': 1, 'unit_price_xof': 0})),
+                      onTap: () => setState(() =>
+                          _items.add({'name': '', 'qty': 1, 'unit_price_xof': 0})),
                       child: const Row(children: [
-                        Icon(Icons.add_rounded,
-                            size: 14, color: AppColors.primary),
+                        Icon(Icons.add_rounded, size: 14, color: AppColors.primary),
                         SizedBox(width: 4),
                         Text('Ajouter un produit',
                             style: TextStyle(
@@ -838,8 +817,7 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                       height: 48,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          gradient:
-                              _submitting ? null : AppColors.gradientPrimary,
+                          gradient: _submitting ? null : AppColors.gradientPrimary,
                           color: _submitting
                               ? AppColors.primary.withValues(alpha: 0.5)
                               : null,
@@ -889,8 +867,7 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                                 size: 16, color: AppColors.success),
                             SizedBox(width: 8),
                             Expanded(
-                              child: Text(
-                                  'Paiement reçu — préparer la commande.',
+                              child: Text('Paiement reçu : préparer la commande.',
                                   style: TextStyle(
                                       fontSize: 12,
                                       color: AppColors.success,
@@ -929,7 +906,6 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
   }
 }
 
-// ── Ligne médicament dans le formulaire devis ─────────────────────────────────
 class _QuoteItemRow extends StatefulWidget {
   final Map<String, dynamic> item;
   final ValueChanged<Map<String, dynamic>> onChanged;
@@ -953,8 +929,7 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
   @override
   void initState() {
     super.initState();
-    _nameCtrl =
-        TextEditingController(text: widget.item['name'] as String? ?? '');
+    _nameCtrl = TextEditingController(text: widget.item['name'] as String? ?? '');
     final price = widget.item['unit_price_xof'] as int? ?? 0;
     _priceCtrl = TextEditingController(text: price != 0 ? '$price' : '');
   }
@@ -983,8 +958,7 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
               onChanged: (v) => widget.onChanged({...item, 'name': v}),
               decoration: const InputDecoration(
                 hintText: 'Médicament',
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 isDense: true,
               ),
               style: const TextStyle(fontSize: 12),
@@ -1034,8 +1008,7 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
               textAlign: TextAlign.right,
               decoration: const InputDecoration(
                 hintText: 'Prix',
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 isDense: true,
               ),
               style: const TextStyle(fontSize: 12),
