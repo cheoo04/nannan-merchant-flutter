@@ -118,7 +118,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
           const SizedBox(height: 14),
 
-          // ── ONGLETS DE STATUT (Défilement fluide) ──────
           SizedBox(
             height: 38,
             child: ListView.separated(
@@ -162,7 +161,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
           const SizedBox(height: 10),
 
-          // ── LISTE DES COMMANDES ──────────────────────────
           Expanded(
             child: ListenableBuilder(
               listenable: _notifier,
@@ -251,7 +249,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 }
 
-// ── HEADER COMMANDES ──────────────────────────────────────────────────────────
 class _OrdersHeader extends StatelessWidget {
   final double topPadding;
   final VoidCallback onBack;
@@ -311,7 +308,6 @@ class _OrdersHeader extends StatelessWidget {
   }
 }
 
-// ── CARTE DE COMMANDE MODERNE & TAILLÉE MÉTIER ────────────────────────────────
 class _OrderCard extends StatefulWidget {
   final OrderModel order;
   final OrdersNotifier notifier;
@@ -360,7 +356,6 @@ class _OrderCardState extends State<_OrderCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Ligne 1 : En-tête commande (N°, heure, mode paiement, statut) ──
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
             child: Column(
@@ -400,7 +395,6 @@ class _OrderCardState extends State<_OrderCard> {
 
                 const SizedBox(height: 8),
 
-                // Montant et mode de paiement
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -431,7 +425,6 @@ class _OrderCardState extends State<_OrderCard> {
 
           const Divider(height: 1, color: AppColors.border),
 
-          // ── Ligne 2 : Détail des articles commandés ────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
             child: Column(
@@ -479,7 +472,6 @@ class _OrderCardState extends State<_OrderCard> {
                         ),
                       )),
 
-                // Notes ou repère géographique du client
                 if (o.clientComment != null && o.clientComment!.trim().isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Container(
@@ -506,7 +498,6 @@ class _OrderCardState extends State<_OrderCard> {
                   ),
                 ],
 
-                // Adresse de livraison
                 if (o.deliveryAddressText != null && o.deliveryAddressText!.trim().isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Row(
@@ -528,8 +519,6 @@ class _OrderCardState extends State<_OrderCard> {
             ),
           ),
 
-          // ── Ligne 3 : Actions selon l'état de la commande ──────────────────
-          // Cas 1 : Nouvelle commande en attente (Accepter en 1 clic ou Refuser)
           if (o.status == OrderStatus.pending) ...[
             Container(
               decoration: const BoxDecoration(
@@ -580,14 +569,13 @@ class _OrderCardState extends State<_OrderCard> {
             ),
           ],
 
-          // Cas 2 : Commande acceptée (En préparation, en attente du coursier)
           if (o.status == OrderStatus.accepted) ...[
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.primarySoft,
-                borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(20), bottomRight: Radius.circular(20)),
+                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(20), bottomRight: Radius.circular(20)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -633,14 +621,13 @@ class _OrderCardState extends State<_OrderCard> {
             ),
           ],
 
-          // Cas 3 : En cours de livraison par le coursier
           if (o.status == OrderStatus.inDelivery) ...[
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.warmSoft,
-                borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(20), bottomRight: Radius.circular(20)),
+                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(20), bottomRight: Radius.circular(20)),
               ),
               child: const Row(
                 children: [
@@ -660,7 +647,6 @@ class _OrderCardState extends State<_OrderCard> {
   }
 }
 
-// ── STATUS CHIP MODERNE ───────────────────────────────────────────────────────
 class _StatusChip extends StatelessWidget {
   final OrderStatus status;
 
