@@ -4,13 +4,6 @@ import '../../core/theme/app_colors.dart';
 import 'pin_keypad.dart';
 import 'pin_storage.dart';
 
-/// Configuration obligatoire du PIN — affiché juste après la première
-/// connexion (email/mot de passe), avant d'entrer dans l'espace marchand.
-/// Deux étapes : saisie, puis confirmation (doivent correspondre).
-///
-/// [onDone] est appelé une fois le PIN enregistré ; c'est à l'appelant de
-/// naviguer ensuite vers l'espace marchand (ce widget ne connaît pas
-/// `MerchantShell` pour rester découplé).
 class PinSetupScreen extends StatefulWidget {
   final String userId;
   final VoidCallback onDone;
@@ -46,7 +39,6 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
 
   Future<void> _onComplete() async {
     if (!_confirming) {
-      // Fin de la 1ère saisie → passe à la confirmation
       setState(() {
         _firstPin = _entry;
         _entry = '';
@@ -54,7 +46,6 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
       });
       return;
     }
-    // Fin de la confirmation
     if (_entry != _firstPin) {
       setState(() {
         _error = true;
@@ -73,15 +64,8 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
     return PopScope(
-      // Étape obligatoire — pas de retour arrière possible vers Login tant
-      // que ce n'est pas terminé.
       canPop: false,
       child: Scaffold(
-        // Pas de TextField ici (clavier custom PinKeypad) — on ignore
-        // l'inset clavier, sinon un débordement furtif flashe pendant la
-        // transition depuis le formulaire email/mot de passe (dont le
-        // clavier système finit de se fermer en même temps que cet écran
-        // apparaît).
         resizeToAvoidBottomInset: false,
         backgroundColor: AppColors.background,
         body: SafeArea(
@@ -102,7 +86,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                       ? 'Les deux codes ne correspondent pas.\nRecommençons depuis le début.'
                       : (_confirming
                           ? 'Répétez le même code pour vous assurer\nde ne pas vous être trompé.'
-                          : 'Choisissez 4 chiffres dont vous vous souviendrez —\nvous en aurez besoin à chaque ouverture de l\'app.'),
+                          : 'Choisissez 4 chiffres dont vous vous souviendrez :\nvous en aurez besoin à chaque ouverture de l\'app.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       fontSize: 13,

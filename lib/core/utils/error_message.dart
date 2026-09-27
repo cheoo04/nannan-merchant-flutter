@@ -1,10 +1,7 @@
-// --- Fichier : lib/core/utils/error_message.dart ---
 import 'dart:async';
 import 'dart:io';
 import '../services/a_nan_nan_api_client.dart';
 
-/// Transforme n'importe quelle exception technique (SocketException,
-/// TimeoutException, ANanNanApiException, ...) en un message clair en français.
 String friendlyError(Object error, {String? fallback}) {
   if (error is SocketException) {
     return 'Pas de connexion internet. Vérifiez votre réseau et réessayez.';
@@ -22,16 +19,27 @@ String friendlyError(Object error, {String? fallback}) {
     return 'Une erreur inattendue est survenue. Réessayez.';
   }
 
-  // Erreurs retournées par l'API Neon/FastAPI
   if (error is ANanNanApiException) {
     if (error.statusCode == 401) {
       return 'Session expirée ou identifiants incorrects.';
     }
+    if (error.statusCode == 403) {
+      return 'Accès non autorisé.';
+    }
     if (error.statusCode == 404) {
-      return 'Ressource introuvable.';
+      return 'Élément introuvable.';
     }
     if (error.statusCode == 422) {
-      return error.message.isNotEmpty ? error.message : 'Données invalides.';
+      // Nettoyage des messages de validation Pydantic/FastAPI
+      final msg = error.message;
+      if (msg.contains('loc') || msg.contains('Input should be') || msg.contains('value_error')) {
+        return 'Vérifiez les informations saisies.';
+      }
+      return msg.isNotEmpty ? msg : 'Informations invalides.';
+    }
+    // Erreurs 500 et plantages serveur : toujours un message propre et poli
+    if (error.statusCode >= 500) {
+      return 'Une difficulté technique temporaire est survenue sur le serveur. Réessayez dans un instant.';
     }
     return error.message;
   }
@@ -46,6 +54,10 @@ String friendlyError(Object error, {String? fallback}) {
       raw.contains('network is unreachable') ||
       raw.contains('handshakeexception')) {
     return 'Pas de connexion internet. Vérifiez votre réseau et réessayez.';
+  }
+
+  if (raw.contains('greenlet') || raw.contains('sql') || raw.contains('asyncpg') || raw.contains('traceback')) {
+    return 'Une difficulté technique temporaire est survenue. Réessayez.';
   }
 
   return fallback ?? 'Une erreur est survenue. Réessayez.';

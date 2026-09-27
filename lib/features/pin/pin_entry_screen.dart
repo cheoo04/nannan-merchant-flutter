@@ -6,21 +6,16 @@ import '../../core/theme/app_colors.dart';
 import 'pin_keypad.dart';
 import 'pin_storage.dart';
 
-/// Saisie du PIN pour déverrouiller une session déjà valide (Supabase reste
-/// connecté en arrière-plan — ce n'est pas une ré-authentification, juste un
-/// verrou local, comme Wave).
-///
-/// [onUnlocked] est appelé après un code correct. [onForgotPin] est appelé
-/// si le marchand ne se souvient plus de son code (efface le PIN local et
-/// doit repasser par email/mot de passe pour en redéfinir un nouveau —
-/// impossible de redonner l'ancien PIN oublié).
 class PinEntryScreen extends StatefulWidget {
   final String userId;
   final VoidCallback onUnlocked;
   final VoidCallback onForgotPin;
 
   const PinEntryScreen({
-    super.key, required this.userId, required this.onUnlocked, required this.onForgotPin,
+    super.key,
+    required this.userId,
+    required this.onUnlocked,
+    required this.onForgotPin,
   });
 
   @override
@@ -54,8 +49,6 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
     if (!mounted) return;
     setState(() => _lockoutSeconds = seconds);
     if (seconds > 0) {
-      // Calculé une seule fois puis décompté localement — pas de lecture du
-      // secure storage à chaque tick, seulement au démarrage du compte à rebours.
       final endTime = DateTime.now().add(Duration(seconds: seconds));
       _lockoutTimer?.cancel();
       _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -97,7 +90,8 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
         });
         break;
       case PinVerifyResult.locked:
-        setState(() { _entry = '';
+        setState(() {
+          _entry = '';
           _checking = false;
         });
         await _refreshLockout();
@@ -112,7 +106,7 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
         title: const Text('Code PIN oublié',
             style: TextStyle(fontFamily: 'Sora', fontWeight: FontWeight.w700)),
         content: const Text(
-            'Vous allez devoir vous reconnecter avec votre email et votre mot de passe pour définir un nouveau code.'),
+            'Vous allez devoir vous reconnecter avec votre numéro et votre mot de passe pour définir un nouveau code.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -137,9 +131,6 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
     final top = MediaQuery.of(context).padding.top;
     final locked = _lockoutSeconds > 0;
     return Scaffold(
-      // Même raison que pin_setup_screen.dart — pas de TextField système,
-      // on ignore l'inset clavier transitoire pour éviter le débordement
-      // furtif pendant les transitions (connexion, retour d'arrière-plan).
       resizeToAvoidBottomInset: false,
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -154,7 +145,7 @@ class _PinEntryScreenState extends State<PinEntryScreen> {
               const SizedBox(height: 8),
               Text(
                 locked
-                    ? 'Trop de tentatives — réessayez dans ${_lockoutSeconds}s'
+                    ? 'Trop de tentatives : réessayez dans ${_lockoutSeconds}s'
                     : (_error ? 'Code incorrect, réessayez.' : 'Espace marchand A Nan-Nan'),
                 style: TextStyle(
                     fontSize: 13,
