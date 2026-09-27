@@ -1,6 +1,6 @@
-// --- Fichier : lib/features/orders/orders_repository.dart ---
 import '../../core/services/a_nan_nan_api_client.dart';
 import '../../core/services/a_nan_nan_services.dart';
+import '../../core/utils/error_message.dart';
 import '../../shared/models/models.dart';
 
 class MerchantIdentity {
@@ -17,7 +17,6 @@ class OrdersRepository {
       : _api = api ?? ANanNanApiClient(),
         _orderService = OrderService(api ?? ANanNanApiClient());
 
-  /// Résout le marchand à partir de GET /api/v1/merchants/me
   Future<MerchantIdentity?> resolveMerchant(String userId) async {
     try {
       final merchants = await MerchantService(_api).getMine();
@@ -32,7 +31,6 @@ class OrdersRepository {
     }
   }
 
-  /// Charge les commandes d'un marchand depuis l'API Neon
   Future<List<OrderModel>> fetchOrders(
     String merchantId, {
     String? statusFilter,
@@ -47,7 +45,6 @@ class OrdersRepository {
         .toList();
   }
 
-  /// Récupère les items d'une commande via GET /api/v1/orders/{orderId}
   Future<List<OrderItemModel>> fetchOrderItems(String orderId) async {
     final order = await _orderService.get(orderId);
     final items = (order['items'] as List?) ?? [];
@@ -57,23 +54,27 @@ class OrdersRepository {
         .toList();
   }
 
-  /// Accepter la commande -> passe le statut à 'preparing' ou 'confirmed'
-  Future<bool> acceptOrder(String orderId) async {
+  // Tente de confirmer ou de préparer la commande sur le serveur Neon
+  Future<String?> acceptOrder(String orderId, {OrderStatus? currentStatus}) async {
     try {
-      await _orderService.updateStatus(orderId, 'preparing');
-      return true;
-    } catch (_) {
-      return false;
+      try {
+        await _orderService.updateStatus(orderId, 'preparing');
+        return null;
+      } catch (_) {
+        await _orderService.updateStatus(orderId, 'confirmed');
+        return null;
+      }
+    } catch (e) {
+      return friendlyError(e);
     }
   }
 
-  /// Refuser ou annuler la commande -> passe le statut à 'cancelled'
-  Future<bool> refuseOrder(String orderId) async {
+  Future<String?> refuseOrder(String orderId) async {
     try {
       await _orderService.updateStatus(orderId, 'cancelled');
-      return true;
-    } catch (_) {
-      return false;
+      return null;
+    } catch (e) {
+      return friendlyError(e);
     }
   }
 }

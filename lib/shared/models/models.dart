@@ -1,6 +1,3 @@
-// --- Fichier : lib/shared/models/models.dart ---
-
-// Helper de conversion sécurisé pour éviter tout crash de type
 int _parseInt(dynamic value, [int defaultValue = 0]) {
   if (value == null) return defaultValue;
   if (value is int) return value;
@@ -9,6 +6,16 @@ int _parseInt(dynamic value, [int defaultValue = 0]) {
     return double.tryParse(value)?.round() ?? defaultValue;
   }
   return defaultValue;
+}
+
+// Génère strictement 4 chiffres (0-9) sans lettres à partir d'un identifiant
+String _derive4DigitCode(String id) {
+  final digits = id.replaceAll(RegExp(r'\D'), '');
+  if (digits.length >= 4) {
+    return digits.substring(0, 4);
+  }
+  final hash = id.hashCode.abs().toString();
+  return hash.padLeft(4, '0').substring(hash.length - 4);
 }
 
 // ── MerchantModel ─────────────────────────────────────────────────────────────
@@ -53,50 +60,90 @@ class MerchantModel {
     required this.createdAt,
   });
 
+  MerchantModel copyWith({
+    String? id,
+    String? ownerId,
+    String? name,
+    String? category,
+    String? description,
+    String? address,
+    String? phone,
+    String? imageUrl,
+    bool? isOpen,
+    String? openingTime,
+    String? closingTime,
+    String? pauseUntil,
+    bool clearPause = false,
+    bool? autoScheduleEnabled,
+    String? status,
+    String? cityCode,
+    double? lat,
+    double? lng,
+    DateTime? createdAt,
+  }) {
+    return MerchantModel(
+      id: id ?? this.id,
+      ownerId: ownerId ?? this.ownerId,
+      name: name ?? this.name,
+      category: category ?? this.category,
+      description: description ?? this.description,
+      address: address ?? this.address,
+      phone: phone ?? this.phone,
+      imageUrl: imageUrl ?? this.imageUrl,
+      isOpen: isOpen ?? this.isOpen,
+      openingTime: openingTime ?? this.openingTime,
+      closingTime: closingTime ?? this.closingTime,
+      pauseUntil: clearPause ? null : (pauseUntil ?? this.pauseUntil),
+      autoScheduleEnabled: autoScheduleEnabled ?? this.autoScheduleEnabled,
+      status: status ?? this.status,
+      cityCode: cityCode ?? this.cityCode,
+      lat: lat ?? this.lat,
+      lng: lng ?? this.lng,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
   factory MerchantModel.fromJson(Map<String, dynamic> j) {
     final settings = j['settings'] as Map<String, dynamic>?;
-
+    final rawIsOpen = j['is_open'] as bool? ?? settings?['is_open'] as bool?;
     final openStatus = j['status']?.toString() ?? 'pending';
-    final isOpenSetting =
-        settings?['is_open'] as bool? ?? (openStatus == 'active');
+
+    final rawPause = j['pause_until'] as String? ?? settings?['pause_until'] as String?;
+    String? validPause;
+    if (rawPause != null) {
+      final parsedDate = DateTime.tryParse(rawPause);
+      if (parsedDate != null && parsedDate.toUtc().isAfter(DateTime.now().toUtc())) {
+        validPause = rawPause;
+      }
+    }
 
     return MerchantModel(
       id: j['id'] as String,
-      ownerId:
-          j['owner_id'] as String? ?? j['organization_id'] as String? ?? '',
+      ownerId: j['owner_id'] as String? ?? j['organization_id'] as String? ?? '',
       name: j['name'] as String? ?? '',
-      category: j['business_type'] as String? ??
-          j['category'] as String? ??
-          'commerce',
+      category: j['business_type'] as String? ?? j['category'] as String? ?? 'commerce',
       description: j['description'] as String?,
       address: j['address'] as String?,
       phone: j['phone'] as String?,
       imageUrl: j['logo_url'] as String? ?? j['image_url'] as String?,
-      isOpen: isOpenSetting,
-      openingTime:
-          settings?['opening_time'] as String? ?? j['opening_time'] as String?,
-      closingTime:
-          settings?['closing_time'] as String? ?? j['closing_time'] as String?,
-      pauseUntil:
-          settings?['pause_until'] as String? ?? j['pause_until'] as String?,
-      autoScheduleEnabled: settings?['auto_schedule_enabled'] as bool? ??
-          j['auto_schedule_enabled'] as bool? ??
-          false,
+      isOpen: rawIsOpen ?? (openStatus == 'active'),
+      openingTime: j['opening_time'] as String? ?? settings?['opening_time'] as String?,
+      closingTime: j['closing_time'] as String? ?? settings?['closing_time'] as String?,
+      pauseUntil: validPause,
+      autoScheduleEnabled: j['auto_schedule_enabled'] as bool? ?? settings?['auto_schedule_enabled'] as bool? ?? false,
       status: openStatus,
       cityCode: j['city_code'] as String? ?? 'oume',
-      lat:
-          (j['latitude'] as num?)?.toDouble() ?? (j['lat'] as num?)?.toDouble(),
-      lng: (j['longitude'] as num?)?.toDouble() ??
-          (j['lng'] as num?)?.toDouble(),
-      createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ??
-          DateTime.now(),
+      lat: (j['latitude'] as num?)?.toDouble() ?? (j['lat'] as num?)?.toDouble(),
+      lng: (j['longitude'] as num?)?.toDouble() ?? (j['lng'] as num?)?.toDouble(),
+      createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ?? DateTime.now(),
     );
   }
 
   bool get isOpenNow {
     if (status != 'active' && !isOpen) return false;
-    if (pauseUntil != null && DateTime.tryParse(pauseUntil!) != null) {
-      if (DateTime.parse(pauseUntil!).isAfter(DateTime.now())) {
+    if (pauseUntil != null) {
+      final d = DateTime.tryParse(pauseUntil!);
+      if (d != null && d.toUtc().isAfter(DateTime.now().toUtc())) {
         return false;
       }
     }
@@ -104,8 +151,9 @@ class MerchantModel {
   }
 
   ({String label, String tone}) get statusLabel {
-    if (pauseUntil != null && DateTime.tryParse(pauseUntil!) != null) {
-      if (DateTime.parse(pauseUntil!).isAfter(DateTime.now())) {
+    if (pauseUntil != null) {
+      final d = DateTime.tryParse(pauseUntil!);
+      if (d != null && d.toUtc().isAfter(DateTime.now().toUtc())) {
         return (label: 'En pause', tone: 'paused');
       }
     }
@@ -124,7 +172,6 @@ enum OrderStatus {
   cancelled,
   refunded;
 
-  // Mappe les statuts réels du backend Neon OpenAPI avec les onglets UI
   static OrderStatus fromString(String s) => switch (s.toLowerCase()) {
         'pending' || 'confirmed' => OrderStatus.pending,
         'accepted' || 'preparing' || 'ready_for_pickup' => OrderStatus.accepted,
@@ -209,8 +256,10 @@ class OrderModel {
     }
 
     final idStr = j['id']?.toString() ?? '';
-    final shortCode =
-        idStr.length >= 4 ? idStr.substring(0, 4).toUpperCase() : '1234';
+
+    // Génération d'un code strictement numérique à 4 chiffres (ex: 6701)
+    final numCode = _derive4DigitCode(idStr);
+    final pickupNumCode = _derive4DigitCode('${idStr}_pickup');
 
     return OrderModel(
       id: idStr,
@@ -221,30 +270,22 @@ class OrderModel {
       totalAmount: _parseInt(j['total_amount']),
       paymentMethod: j['payment_method']?.toString() ?? 'Espèces',
       paymentStatus: j['payment_status']?.toString() ?? 'pending',
-      deliveryAddressId:
-          (j['delivery_address_id'] ?? j['shipping_address_id']) as String?,
+      deliveryAddressId: (j['delivery_address_id'] ?? j['shipping_address_id']) as String?,
       deliveryAddressText: addrText,
       deliveryLat: (j['address'] as Map?)?.tryGet<double>('lat'),
       deliveryLng: (j['address'] as Map?)?.tryGet<double>('lng'),
       clientComment: (j['notes'] ?? j['client_comment']) as String?,
-      deliveryMode: j['order_type']?.toString() ??
-          j['delivery_mode']?.toString() ??
-          'delivery',
+      deliveryMode: j['order_type']?.toString() ?? j['delivery_mode']?.toString() ?? 'delivery',
       deliveryFee: _parseInt(j['shipping_amount'] ?? j['delivery_fee']),
       cashChangeNeeded: j['cash_change_needed'] as String?,
-      acceptCode: j['accept_code'] as String? ?? shortCode,
-      pickupCode: j['pickup_code'] as String? ?? shortCode,
-      deliveryCode: j['delivery_code'] as String? ?? shortCode,
+      acceptCode: j['accept_code'] as String? ?? numCode,
+      pickupCode: j['pickup_code'] as String? ?? pickupNumCode,
+      deliveryCode: j['delivery_code'] as String? ?? numCode,
       scheduledAt: j['scheduled_at'] as String?,
       cityCode: j['city_code'] as String? ?? 'oume',
-      createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ??
-          DateTime.now(),
-      deliveredAt: j['delivered_at'] != null
-          ? DateTime.tryParse(j['delivered_at'].toString())
-          : null,
-      merchantConfirmedAt: j['merchant_confirmed_at'] != null
-          ? DateTime.tryParse(j['merchant_confirmed_at'].toString())
-          : null,
+      createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ?? DateTime.now(),
+      deliveredAt: j['delivered_at'] != null ? DateTime.tryParse(j['delivered_at'].toString()) : null,
+      merchantConfirmedAt: j['merchant_confirmed_at'] != null ? DateTime.tryParse(j['merchant_confirmed_at'].toString()) : null,
     );
   }
 }
@@ -323,9 +364,8 @@ class NotificationRow {
   bool get isUnread => readAt == null;
 
   factory NotificationRow.fromJson(Map<String, dynamic> j) {
-    final order = j['orders'] as Map<String, dynamic>?;
+    final payload = j['data_payload'] as Map<String, dynamic>?;
     final isReadBool = j['is_read'] as bool? ?? false;
-
     DateTime? readDateTime;
     if (j['read_at'] != null) {
       readDateTime = DateTime.tryParse(j['read_at'].toString());
@@ -339,14 +379,12 @@ class NotificationRow {
       type: (j['event_type'] ?? j['type'])?.toString() ?? 'system',
       title: j['title'] as String? ?? 'Notification',
       body: j['body'] as String?,
-      orderId: (j['related_id'] ?? j['order_id'])?.toString(),
+      orderId: (payload?['order_id'] ?? j['related_id'] ?? j['order_id'])?.toString(),
       readAt: readDateTime,
-      createdAt: DateTime.tryParse(
-              j['sent_at']?.toString() ?? j['created_at']?.toString() ?? '') ??
-          DateTime.now(),
-      orderAcceptCode: order?['accept_code'] as String?,
-      orderTotalAmount: _parseInt(order?['total_amount']),
-      orderStatus: order?['status'] as String?,
+      createdAt: DateTime.tryParse(j['sent_at']?.toString() ?? j['created_at']?.toString() ?? '') ?? DateTime.now(),
+      orderAcceptCode: payload?['accept_code']?.toString() ?? j['order_accept_code']?.toString(),
+      orderTotalAmount: _parseInt(payload?['amount'] ?? payload?['total_amount'] ?? j['order_total_amount']),
+      orderStatus: payload?['status']?.toString() ?? j['order_status']?.toString(),
     );
   }
 }

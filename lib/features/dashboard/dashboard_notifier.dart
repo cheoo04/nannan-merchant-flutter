@@ -1,14 +1,16 @@
-// --- Fichier : lib/features/dashboard/dashboard_notifier.dart ---
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../shared/models/models.dart';
 import '../orders/orders_repository.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/services/a_nan_nan_api_client.dart';
 import '../../core/services/a_nan_nan_services.dart';
 import '../../core/services/neon_session.dart';
+
+// Date passée universelle pour forcer l'écrasement de la pause sur le serveur
+const String _kClearedPauseDate = '1970-01-01T00:00:00.000Z';
 
 class DashboardNotifier extends ChangeNotifier {
   final OrdersRepository _ordersRepo;
@@ -21,9 +23,14 @@ class DashboardNotifier extends ChangeNotifier {
   bool loadingOrders = true;
   String? error;
 
+  Timer? _pollingTimer;
+
   DashboardNotifier({OrdersRepository? ordersRepo})
       : _ordersRepo = ordersRepo ?? OrdersRepository() {
     _init();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (merchant != null) refresh();
+    });
   }
 
   Future<void> _init() async {
@@ -39,28 +46,7 @@ class DashboardNotifier extends ChangeNotifier {
       if (myMerchants.isNotEmpty) {
         final data = myMerchants.first;
         NeonSession.setCurrentMerchant(data);
-
-        final prefs = await SharedPreferences.getInstance();
-        final mId = data['id'] as String;
-        final localIsOpen = prefs.getBool('merchant_is_open_$mId') ??
-            (data['status'] == 'active');
-        final localPause = prefs.getString('merchant_pause_$mId');
-        final localOpenTime = prefs.getString('merchant_open_time_$mId');
-        final localCloseTime = prefs.getString('merchant_close_time_$mId');
-        final localAutoSched =
-            prefs.getBool('merchant_auto_sched_$mId') ?? false;
-
-        merchant = MerchantModel.fromJson({
-          ...data,
-          'settings': {
-            'is_open': localIsOpen,
-            'pause_until': localPause,
-            'opening_time': localOpenTime,
-            'closing_time': localCloseTime,
-            'auto_schedule_enabled': localAutoSched,
-          }
-        });
-
+        merchant = MerchantModel.fromJson(data);
         await _loadOrders(merchant!.id);
       } else {
         merchant = null;
@@ -68,6 +54,7 @@ class DashboardNotifier extends ChangeNotifier {
       }
       error = null;
     } catch (e) {
+      debugPrint('[Dashboard] Erreur chargement marchand: $e');
       error = friendlyError(e);
       loadingOrders = false;
     } finally {
@@ -84,6 +71,7 @@ class DashboardNotifier extends ChangeNotifier {
       orders = await _ordersRepo.fetchOrders(merchantId);
       error = null;
     } catch (e) {
+      debugPrint('[Dashboard] Erreur chargement commandes: $e');
       error = friendlyError(e);
     } finally {
       loadingOrders = false;
@@ -99,120 +87,104 @@ class DashboardNotifier extends ChangeNotifier {
     try {
       orders = await _ordersRepo.fetchOrders(merchant!.id);
       final refreshedMerchant = await _merchantService.getById(merchant!.id);
-
-      final prefs = await SharedPreferences.getInstance();
-      final mId = merchant!.id;
-      final localIsOpen =
-          prefs.getBool('merchant_is_open_$mId') ?? merchant!.isOpen;
-      final localPause = prefs.getString('merchant_pause_$mId');
-      final localOpenTime = prefs.getString('merchant_open_time_$mId');
-      final localCloseTime = prefs.getString('merchant_close_time_$mId');
-      final localAutoSched = prefs.getBool('merchant_auto_sched_$mId') ?? false;
-
-      merchant = MerchantModel.fromJson({
-        ...refreshedMerchant,
-        'settings': {
-          'is_open': localIsOpen,
-          'pause_until': localPause,
-          'opening_time': localOpenTime,
-          'closing_time': localCloseTime,
-          'auto_schedule_enabled': localAutoSched,
-        }
-      });
+      merchant = MerchantModel.fromJson(refreshedMerchant);
       error = null;
       notifyListeners();
     } catch (e) {
-      error = friendlyError(e);
-      notifyListeners();
+      debugPrint('[Dashboard] Erreur refresh: $e');
     }
   }
 
+  // ── Toggle Ouvert/Fermé (Annule définitivement toute pause) ──
   Future<void> toggleOpen() async {
     if (merchant == null) return;
     try {
       final willBeOpen = !merchant!.isOpen;
       final mId = merchant!.id;
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('merchant_is_open_$mId', willBeOpen);
-      if (willBeOpen) {
-        await prefs.remove('merchant_pause_$mId');
-      }
+      // Mise à jour optimiste immédiate
+      merchant = merchant!.copyWith(
+        isOpen: willBeOpen,
+        clearPause: true,
+      );
+      notifyListeners();
 
+      // On force la fin de pause sur le serveur avec la date passée
       await _api.patch('/api/v1/merchants/$mId', body: {
-        'settings': {
-          'is_open': willBeOpen,
-          'status': willBeOpen ? 'active' : 'closed',
-        }
+        'is_open': willBeOpen,
+        'pause_until': _kClearedPauseDate,
       });
+
       await refresh();
     } catch (e) {
-      error = friendlyError(e);
-      notifyListeners();
+      debugPrint('[Dashboard] Erreur toggleOpen: $e');
     }
   }
 
+  // ── Mettre en pause ──
   Future<void> pauseMerchant(int minutes) async {
     if (merchant == null) return;
     try {
-      final until = DateTime.now().add(Duration(minutes: minutes));
+      final until = DateTime.now().toUtc().add(Duration(minutes: minutes));
+      final untilIso = until.toIso8601String();
       final mId = merchant!.id;
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('merchant_pause_$mId', until.toIso8601String());
+      merchant = merchant!.copyWith(
+        pauseUntil: untilIso,
+      );
+      notifyListeners();
 
-      await _api.patch('/api/v1/merchants/$mId', body: {
-        'settings': {'pause_until': until.toIso8601String()}
-      });
+      await _merchantService.update(mId, pauseUntil: untilIso);
       await refresh();
     } catch (e) {
-      error = friendlyError(e);
-      notifyListeners();
+      debugPrint('[Dashboard] Erreur pauseMerchant: $e');
     }
   }
 
+  // ── Reprendre maintenant (Lève la pause à 100%) ──
   Future<void> resumeMerchant() async {
     if (merchant == null) return;
     try {
       final mId = merchant!.id;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('merchant_pause_$mId');
 
+      // 1. L'UI bascule instantanément : la pause disparaît tout de suite
+      merchant = merchant!.copyWith(
+        clearPause: true,
+        isOpen: true,
+      );
+      notifyListeners();
+
+      // 2. On envoie la date passée au serveur Neon pour écraser la pause en base
       await _api.patch('/api/v1/merchants/$mId', body: {
-        'settings': {'pause_until': null}
+        'is_open': true,
+        'pause_until': _kClearedPauseDate,
       });
+
       await refresh();
     } catch (e) {
-      error = friendlyError(e);
-      notifyListeners();
+      debugPrint('[Dashboard] Erreur resumeMerchant: $e');
     }
   }
 
-  Future<void> saveSchedule(
-      {required bool enabled, String? opening, String? closing}) async {
+  Future<void> saveSchedule({required bool enabled, String? opening, String? closing}) async {
     if (merchant == null) return;
     try {
-      final mId = merchant!.id;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('merchant_auto_sched_$mId', enabled);
-      if (opening != null) {
-        await prefs.setString('merchant_open_time_$mId', opening);
-      }
-      if (closing != null) {
-        await prefs.setString('merchant_close_time_$mId', closing);
-      }
+      merchant = merchant!.copyWith(
+        autoScheduleEnabled: enabled,
+        openingTime: opening,
+        closingTime: closing,
+      );
+      notifyListeners();
 
-      await _api.patch('/api/v1/merchants/$mId', body: {
-        'settings': {
-          'auto_schedule_enabled': enabled,
-          'opening_time': enabled ? opening : null,
-          'closing_time': enabled ? closing : null,
-        }
-      });
+      await _merchantService.update(
+        merchant!.id,
+        autoScheduleEnabled: enabled,
+        openingTime: opening,
+        closingTime: closing,
+      );
       await refresh();
     } catch (e) {
-      error = friendlyError(e);
-      notifyListeners();
+      debugPrint('[Dashboard] Erreur saveSchedule: $e');
     }
   }
 
@@ -231,16 +203,21 @@ class DashboardNotifier extends ChangeNotifier {
       );
       await refresh();
     } catch (e) {
-      error = friendlyError(e);
-      notifyListeners();
+      debugPrint('[Dashboard] Erreur updateLocation: $e');
       rethrow;
     }
   }
 
   Future<void> updateImage(String? imageUrl) async {
     if (merchant == null) return;
-    await _merchantService.update(merchant!.id, logoUrl: imageUrl);
-    await refresh();
+    try {
+      merchant = merchant!.copyWith(imageUrl: imageUrl);
+      notifyListeners();
+      await _merchantService.update(merchant!.id, logoUrl: imageUrl);
+      await refresh();
+    } catch (e) {
+      debugPrint('[Dashboard] Erreur updateImage: $e');
+    }
   }
 
   Future<String?> uploadShopImage(File file) async {
@@ -259,54 +236,40 @@ class DashboardNotifier extends ChangeNotifier {
       await updateImage(url);
       return url;
     } catch (e) {
-      error = friendlyError(e);
-      notifyListeners();
+      debugPrint('[Dashboard] Erreur uploadShopImage: $e');
       return null;
     }
   }
 
   // ── KPIs calculés ─────────────────────────────────────────
-  int get pendingCount =>
-      orders.where((o) => o.status == OrderStatus.pending).length;
-  int get acceptedCount =>
-      orders.where((o) => o.status == OrderStatus.accepted).length;
-  int get inDeliveryCount =>
-      orders.where((o) => o.status == OrderStatus.inDelivery).length;
-  int get deliveredCount =>
-      orders.where((o) => o.status == OrderStatus.delivered).length;
+  int get pendingCount => orders.where((o) => o.status == OrderStatus.pending).length;
+  int get acceptedCount => orders.where((o) => o.status == OrderStatus.accepted).length;
+  int get inDeliveryCount => orders.where((o) => o.status == OrderStatus.inDelivery).length;
+  int get deliveredCount => orders.where((o) => o.status == OrderStatus.delivered).length;
   int get totalCount => orders.length;
 
   int get revenueDay {
-    final startOfDay =
-        DateTime.now().copyWith(hour: 0, minute: 0, second: 0, millisecond: 0);
+    final startOfDay = DateTime.now().copyWith(hour: 0, minute: 0, second: 0, millisecond: 0);
     return orders
-        .where((o) =>
-            o.status == OrderStatus.delivered &&
-            (o.deliveredAt ?? o.createdAt).isAfter(startOfDay))
+        .where((o) => o.status == OrderStatus.delivered && (o.deliveredAt ?? o.createdAt).isAfter(startOfDay))
         .fold(0, (s, o) => s + o.itemsAmount);
   }
 
   int get revenueWeek {
     final start = DateTime.now().subtract(const Duration(days: 7));
     return orders
-        .where((o) =>
-            o.status == OrderStatus.delivered &&
-            (o.deliveredAt ?? o.createdAt).isAfter(start))
+        .where((o) => o.status == OrderStatus.delivered && (o.deliveredAt ?? o.createdAt).isAfter(start))
         .fold(0, (s, o) => s + o.itemsAmount);
   }
 
   int get revenueMonth {
     final start = DateTime.now().subtract(const Duration(days: 30));
     return orders
-        .where((o) =>
-            o.status == OrderStatus.delivered &&
-            (o.deliveredAt ?? o.createdAt).isAfter(start))
+        .where((o) => o.status == OrderStatus.delivered && (o.deliveredAt ?? o.createdAt).isAfter(start))
         .fold(0, (s, o) => s + o.itemsAmount);
   }
 
-  int get revenueTotal => orders
-      .where((o) => o.status == OrderStatus.delivered)
-      .fold(0, (s, o) => s + o.itemsAmount);
+  int get revenueTotal => orders.where((o) => o.status == OrderStatus.delivered).fold(0, (s, o) => s + o.itemsAmount);
   int get activeCount => pendingCount + acceptedCount + inDeliveryCount;
 
   List<({String id, String title, String body})> get alerts {
@@ -333,5 +296,11 @@ class DashboardNotifier extends ChangeNotifier {
       ));
     }
     return list.take(3).toList();
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
   }
 }

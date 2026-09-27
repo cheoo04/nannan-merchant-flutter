@@ -37,6 +37,7 @@ class MerchantService {
         if (storyImages != null) 'story_images': storyImages,
       }) as Map<String, dynamic>;
 
+  // Prend en charge les nouveaux champs directs de l'OpenAPI du 27 septembre
   Future<Map<String, dynamic>> update(
     String merchantId, {
     String? name,
@@ -49,6 +50,11 @@ class MerchantService {
     String? phone,
     List<String>? storyImages,
     Map<String, dynamic>? settings,
+    bool? isOpen,
+    String? openingTime,
+    String? closingTime,
+    String? pauseUntil,
+    bool? autoScheduleEnabled,
   }) async =>
       await _api.patch('/api/v1/merchants/$merchantId', body: {
         if (name != null) 'name': name,
@@ -61,6 +67,11 @@ class MerchantService {
         if (phone != null) 'phone': phone,
         if (storyImages != null) 'story_images': storyImages,
         if (settings != null) 'settings': settings,
+        if (isOpen != null) 'is_open': isOpen,
+        if (openingTime != null) 'opening_time': openingTime,
+        if (closingTime != null) 'closing_time': closingTime,
+        if (pauseUntil != null) 'pause_until': pauseUntil,
+        if (autoScheduleEnabled != null) 'auto_schedule_enabled': autoScheduleEnabled,
       }) as Map<String, dynamic>;
 }
 

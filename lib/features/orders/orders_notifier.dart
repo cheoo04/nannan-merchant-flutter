@@ -1,4 +1,4 @@
-// --- Fichier : lib/features/orders/orders_notifier.dart ---
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../shared/models/models.dart';
 import '../../shared/merchant_category.dart';
@@ -14,20 +14,21 @@ class OrdersNotifier extends ChangeNotifier {
   bool loading = true;
   String? error;
 
-  // État UI
   String activeTab = 'all';
-  String? acceptingOrderId;
-  String codeInput = '';
   String? busyOrderId;
 
   String? _merchantId;
   String _merchantCategory = '';
+  Timer? _pollingTimer;
 
   bool get isPharmacy => categoryNeedsPrescriptionFlow(_merchantCategory);
 
-  OrdersNotifier({OrdersRepository? repo})
-      : _repo = repo ?? OrdersRepository() {
+  OrdersNotifier({OrdersRepository? repo}) : _repo = repo ?? OrdersRepository() {
     _init();
+    // Synchronisation automatique des commandes toutes les 15 secondes
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (_merchantId != null) refresh();
+    });
   }
 
   Future<void> _init() async {
@@ -65,8 +66,7 @@ class OrdersNotifier extends ChangeNotifier {
       error = null;
       notifyListeners();
     } catch (e) {
-      error = friendlyError(e);
-      notifyListeners();
+      debugPrint('[Orders] Erreur refresh: $e');
     }
   }
 
@@ -104,33 +104,15 @@ class OrdersNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  void startAccept(String orderId) {
-    acceptingOrderId = orderId;
-    codeInput = '';
-    notifyListeners();
-  }
-
-  void cancelAccept() {
-    acceptingOrderId = null;
-    codeInput = '';
-    notifyListeners();
-  }
-
-  void setCode(String v) {
-    final digits = v.replaceAll(RegExp(r'\D'), '');
-    codeInput = digits.length > 4 ? digits.substring(0, 4) : digits;
-    notifyListeners();
-  }
-
+  // Acceptation directe en 1 seul clic sans saisie de code
   Future<String?> acceptOrder(String orderId) async {
     busyOrderId = orderId;
     notifyListeners();
     try {
-      final ok = await _repo.acceptOrder(orderId);
-      if (!ok) return 'Commande déjà traitée ou erreur serveur';
+      final order = orders.firstWhere((o) => o.id == orderId);
+      final err = await _repo.acceptOrder(orderId, currentStatus: order.status);
+      if (err != null) return err;
 
-      acceptingOrderId = null;
-      codeInput = '';
       await refresh();
       return null;
     } catch (e) {
@@ -145,8 +127,9 @@ class OrdersNotifier extends ChangeNotifier {
     busyOrderId = orderId;
     notifyListeners();
     try {
-      final ok = await _repo.refuseOrder(orderId);
-      if (!ok) return 'Commande déjà traitée ou erreur serveur';
+      final err = await _repo.refuseOrder(orderId);
+      if (err != null) return err;
+
       await refresh();
       return null;
     } catch (e) {
@@ -155,5 +138,11 @@ class OrdersNotifier extends ChangeNotifier {
       busyOrderId = null;
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
   }
 }
