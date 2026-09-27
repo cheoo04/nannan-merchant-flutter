@@ -55,8 +55,8 @@ class OrdersRepository {
         .toList();
   }
 
-  // Envoie directement 'confirmed' pour valider la commande depuis l'état 'pending'
-  Future<String?> acceptOrder(String orderId, {OrderStatus? currentStatus}) async {
+  // Envoi réel du statut officiel 'confirmed' au backend Neon
+  Future<String?> acceptOrder(String orderId) async {
     try {
       await _orderService.updateStatus(orderId, 'confirmed');
       return null;
@@ -66,6 +66,7 @@ class OrdersRepository {
     }
   }
 
+  // Envoi réel du statut officiel 'cancelled' au backend Neon
   Future<String?> refuseOrder(String orderId) async {
     try {
       await _orderService.updateStatus(orderId, 'cancelled');

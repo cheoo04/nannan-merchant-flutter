@@ -8,7 +8,6 @@ int _parseInt(dynamic value, [int defaultValue = 0]) {
   return defaultValue;
 }
 
-// Génère strictement 4 chiffres (0-9) sans lettres à partir d'un identifiant
 String _derive4DigitCode(String id) {
   final digits = id.replaceAll(RegExp(r'\D'), '');
   if (digits.length >= 4) {
@@ -172,9 +171,10 @@ enum OrderStatus {
   cancelled,
   refunded;
 
+  // 'confirmed' est le statut post-acceptation sur Neon -> il bascule dans 'accepted' (En cours)
   static OrderStatus fromString(String s) => switch (s.toLowerCase()) {
-        'pending' || 'confirmed' => OrderStatus.pending,
-        'accepted' || 'preparing' || 'ready_for_pickup' => OrderStatus.accepted,
+        'pending' => OrderStatus.pending,
+        'confirmed' || 'accepted' || 'preparing' || 'ready_for_pickup' => OrderStatus.accepted,
         'in_delivery' || 'delivering' => OrderStatus.inDelivery,
         'delivered' => OrderStatus.delivered,
         'cancelled' => OrderStatus.cancelled,
@@ -244,6 +244,60 @@ class OrderModel {
     this.merchantConfirmedAt,
   });
 
+  OrderModel copyWith({
+    String? id,
+    String? clientId,
+    String? merchantId,
+    String? courierId,
+    OrderStatus? status,
+    int? totalAmount,
+    String? paymentMethod,
+    String? paymentStatus,
+    String? deliveryAddressId,
+    String? deliveryAddressText,
+    double? deliveryLat,
+    double? deliveryLng,
+    String? clientComment,
+    String? deliveryMode,
+    int? deliveryFee,
+    String? cashChangeNeeded,
+    String? acceptCode,
+    String? pickupCode,
+    String? deliveryCode,
+    String? scheduledAt,
+    String? cityCode,
+    DateTime? createdAt,
+    DateTime? deliveredAt,
+    DateTime? merchantConfirmedAt,
+  }) {
+    return OrderModel(
+      id: id ?? this.id,
+      clientId: clientId ?? this.clientId,
+      merchantId: merchantId ?? this.merchantId,
+      courierId: courierId ?? this.courierId,
+      status: status ?? this.status,
+      totalAmount: totalAmount ?? this.totalAmount,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      deliveryAddressId: deliveryAddressId ?? this.deliveryAddressId,
+      deliveryAddressText: deliveryAddressText ?? this.deliveryAddressText,
+      deliveryLat: deliveryLat ?? this.deliveryLat,
+      deliveryLng: deliveryLng ?? this.deliveryLng,
+      clientComment: clientComment ?? this.clientComment,
+      deliveryMode: deliveryMode ?? this.deliveryMode,
+      deliveryFee: deliveryFee ?? this.deliveryFee,
+      cashChangeNeeded: cashChangeNeeded ?? this.cashChangeNeeded,
+      acceptCode: acceptCode ?? this.acceptCode,
+      pickupCode: pickupCode ?? this.pickupCode,
+      deliveryCode: deliveryCode ?? this.deliveryCode,
+      scheduledAt: scheduledAt ?? this.scheduledAt,
+      cityCode: cityCode ?? this.cityCode,
+      createdAt: createdAt ?? this.createdAt,
+      deliveredAt: deliveredAt ?? this.deliveredAt,
+      merchantConfirmedAt: merchantConfirmedAt ?? this.merchantConfirmedAt,
+    );
+  }
+
   factory OrderModel.fromJson(Map<String, dynamic> j) {
     final addr = j['address'] as Map<String, dynamic>?;
     String? addrText;
@@ -256,8 +310,6 @@ class OrderModel {
     }
 
     final idStr = j['id']?.toString() ?? '';
-
-    // Génération d'un code strictement numérique à 4 chiffres (ex: 6701)
     final numCode = _derive4DigitCode(idStr);
     final pickupNumCode = _derive4DigitCode('${idStr}_pickup');
 

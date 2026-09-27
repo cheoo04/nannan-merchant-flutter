@@ -25,7 +25,6 @@ class OrdersNotifier extends ChangeNotifier {
 
   OrdersNotifier({OrdersRepository? repo}) : _repo = repo ?? OrdersRepository() {
     _init();
-    // Synchronisation automatique des commandes toutes les 15 secondes
     _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (_merchantId != null) refresh();
     });
@@ -104,13 +103,11 @@ class OrdersNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Acceptation directe en 1 seul clic sans saisie de code
   Future<String?> acceptOrder(String orderId) async {
     busyOrderId = orderId;
     notifyListeners();
     try {
-      final order = orders.firstWhere((o) => o.id == orderId);
-      final err = await _repo.acceptOrder(orderId, currentStatus: order.status);
+      final err = await _repo.acceptOrder(orderId);
       if (err != null) return err;
 
       await refresh();
