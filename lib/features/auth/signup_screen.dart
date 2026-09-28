@@ -33,30 +33,41 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
+  void _clearError() {
+    if (_error != null) setState(() => _error = null);
+  }
+
   Future<void> _signup() async {
     final firstName = _firstName.text.trim();
     final lastName = _lastName.text.trim();
-    final phone = CiPhone.normalize(_phone.text);
+    final rawPhone = _phone.text.trim();
     final pin = _pin.text.trim();
+    final confirm = _confirmPin.text.trim();
 
     if (firstName.length < 2) {
-      setState(() => _error = 'Veuillez entrer votre prénom');
+      setState(() =>
+          _error = 'Veuillez entrer un prénom valide (au moins 2 lettres).');
       return;
     }
     if (lastName.length < 2) {
-      setState(() => _error = 'Veuillez entrer votre nom de famille');
+      setState(
+          () => _error = 'Veuillez entrer un nom valide (au moins 2 lettres).');
       return;
     }
+
+    final phone = CiPhone.normalize(rawPhone);
     if (!CiPhone.isValid(phone)) {
-      setState(() => _error = 'Numéro invalide. Format attendu : 01 02 03 04 05');
+      setState(() => _error =
+          'Numéro invalide : 10 chiffres attendus (ex: 07 01 02 03 04).');
       return;
     }
     if (!RegExp(r'^\d{4}$').hasMatch(pin)) {
-      setState(() => _error = 'Le code PIN doit contenir exactement 4 chiffres');
+      setState(
+          () => _error = 'Le code PIN doit comporter exactement 4 chiffres.');
       return;
     }
-    if (pin != _confirmPin.text.trim()) {
-      setState(() => _error = 'Les codes PIN ne correspondent pas');
+    if (pin != confirm) {
+      setState(() => _error = 'Les deux codes PIN ne correspondent pas.');
       return;
     }
 
@@ -84,11 +95,11 @@ class _SignupScreenState extends State<SignupScreen> {
       }
     } on ANanNanApiException catch (e) {
       setState(() => _error = e.statusCode == 422
-          ? 'Vérifiez les informations saisies'
+          ? 'Vérifiez les informations saisies.'
           : e.message);
-    } catch (e) {
-      setState(() => _error =
-          'Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
+    } catch (_) {
+      setState(() =>
+          _error = 'Erreur de connexion. Vérifiez votre réseau et réessayez.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -123,7 +134,8 @@ class _SignupScreenState extends State<SignupScreen> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(18),
                     ),
-                    child: const Icon(Icons.store_rounded, color: AppColors.primary, size: 32),
+                    child: const Icon(Icons.store_rounded,
+                        color: AppColors.primary, size: 32),
                   ),
                   const SizedBox(height: 12),
                   const Text(
@@ -142,13 +154,11 @@ class _SignupScreenState extends State<SignupScreen> {
                 ],
               ),
             ),
-
             Padding(
               padding: EdgeInsets.fromLTRB(24, 24, 24, bottom + 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Prénom + Nom
                   Row(
                     children: [
                       Expanded(
@@ -159,11 +169,13 @@ class _SignupScreenState extends State<SignupScreen> {
                             const SizedBox(height: 4),
                             TextField(
                               controller: _firstName,
+                              maxLength: 50,
+                              onChanged: (_) => _clearError(),
                               textCapitalization: TextCapitalization.words,
                               decoration: _inputDecoration(
                                 hint: 'Aïcha',
                                 icon: Icons.person_outline_rounded,
-                              ),
+                              ).copyWith(counterText: ''),
                             ),
                           ],
                         ),
@@ -177,33 +189,33 @@ class _SignupScreenState extends State<SignupScreen> {
                             const SizedBox(height: 4),
                             TextField(
                               controller: _lastName,
+                              maxLength: 50,
+                              onChanged: (_) => _clearError(),
                               textCapitalization: TextCapitalization.characters,
                               decoration: _inputDecoration(
                                 hint: 'Koné',
                                 icon: Icons.badge_outlined,
-                              ),
+                              ).copyWith(counterText: ''),
                             ),
                           ],
                         ),
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 12),
-
                   const _FieldLabel(text: 'Numéro de téléphone'),
                   const SizedBox(height: 4),
                   TextField(
                     controller: _phone,
                     keyboardType: TextInputType.phone,
+                    maxLength: 14,
+                    onChanged: (_) => _clearError(),
                     decoration: _inputDecoration(
                       hint: '01 02 03 04 05',
                       icon: Icons.phone_outlined,
-                    ),
+                    ).copyWith(counterText: ''),
                   ),
-
                   const SizedBox(height: 12),
-
                   const _FieldLabel(text: 'Code PIN (4 chiffres)'),
                   const SizedBox(height: 4),
                   TextField(
@@ -211,22 +223,23 @@ class _SignupScreenState extends State<SignupScreen> {
                     obscureText: _obscure,
                     keyboardType: TextInputType.number,
                     maxLength: 4,
+                    onChanged: (_) => _clearError(),
                     decoration: _inputDecoration(
                       hint: '••••',
                       icon: Icons.lock_outline_rounded,
                       suffix: GestureDetector(
                         onTap: () => setState(() => _obscure = !_obscure),
                         child: Icon(
-                          _obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                          _obscure
+                              ? Icons.visibility_off_rounded
+                              : Icons.visibility_rounded,
                           color: AppColors.mutedForeground,
                           size: 18,
                         ),
                       ),
                     ).copyWith(counterText: ''),
                   ),
-
                   const SizedBox(height: 12),
-
                   const _FieldLabel(text: 'Confirmer le code PIN'),
                   const SizedBox(height: 4),
                   TextField(
@@ -234,16 +247,17 @@ class _SignupScreenState extends State<SignupScreen> {
                     obscureText: _obscure,
                     keyboardType: TextInputType.number,
                     maxLength: 4,
+                    onChanged: (_) => _clearError(),
                     decoration: _inputDecoration(
                       hint: '••••',
                       icon: Icons.lock_outline_rounded,
                     ).copyWith(counterText: ''),
                   ),
-
                   if (_error != null) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: AppColors.destructive.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
@@ -255,46 +269,50 @@ class _SignupScreenState extends State<SignupScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(_error!,
-                                style: const TextStyle(fontSize: 12, color: AppColors.destructive)),
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.destructive)),
                           ),
                         ],
                       ),
                     ),
                   ],
-
                   const SizedBox(height: 24),
-
                   SizedBox(
                     width: double.infinity,
                     height: 52,
                     child: ElevatedButton(
                       onPressed: _loading ? null : _signup,
                       style: ElevatedButton.styleFrom(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(999)),
                       ),
                       child: _loading
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
                           : const Text('Créer mon compte',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                              style: TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.w700)),
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
                   Center(
                     child: GestureDetector(
                       onTap: () => Navigator.of(context).pop(),
                       child: const Text.rich(
                         TextSpan(
                           text: 'Déjà un compte ? ',
-                          style: TextStyle(fontSize: 13, color: AppColors.mutedForeground),
+                          style: TextStyle(
+                              fontSize: 13, color: AppColors.mutedForeground),
                           children: [
                             TextSpan(
                               text: 'Se connecter',
-                              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
+                              style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w700),
                             ),
                           ],
                         ),

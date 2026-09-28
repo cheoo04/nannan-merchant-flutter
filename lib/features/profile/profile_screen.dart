@@ -12,6 +12,7 @@ import '../../core/services/neon_session.dart';
 import '../../shared/widgets/skeleton.dart';
 import '../dashboard/dashboard_notifier.dart';
 import '../location_picker/location_picker_screen.dart';
+import '../../core/utils/ci_phone.dart';
 
 const String _supportPhoneDisplay = '+225 05 65 07 48 68';
 const String _supportPhoneDial = '+2250565074868';
@@ -1054,28 +1055,42 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   }
 
   Future<void> _save() async {
-    if (_nameCtrl.text.trim().isEmpty) {
-      toast.error('Le nom ne peut pas être vide');
+    final name = _nameCtrl.text.trim();
+    final rawPhone = _phoneCtrl.text.trim();
+
+    if (name.length < 2) {
+      toast.error('Le nom doit comporter au moins 2 lettres');
       return;
     }
+
+    String cleanPhone = rawPhone;
+    if (rawPhone.isNotEmpty) {
+      cleanPhone = CiPhone.normalize(rawPhone);
+      if (!CiPhone.isValid(cleanPhone)) {
+        toast.error(
+            'Numéro invalide : 10 chiffres attendus (ex: 07 01 02 03 04)');
+        return;
+      }
+    }
+
     setState(() => _saving = true);
     try {
       final merchantId = NeonSession.merchantId;
       if (merchantId != null) {
         await MerchantService(_api).update(
           merchantId,
-          phone: _phoneCtrl.text.trim(),
+          phone: cleanPhone.isNotEmpty ? cleanPhone : null,
         );
       }
       if (mounted) {
         Navigator.of(context).pop((
-          name: _nameCtrl.text.trim(),
-          phone: _phoneCtrl.text.trim(),
+          name: name,
+          phone: cleanPhone,
         ));
       }
     } catch (_) {
       setState(() => _saving = false);
-      if (mounted) toast.error('Échec de la mise à jour');
+      if (mounted) toast.error('Échec de la mise à jour du profil');
     }
   }
 

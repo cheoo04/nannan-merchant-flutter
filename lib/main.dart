@@ -31,19 +31,15 @@ import 'shared/widgets/merchant_bottom_nav.dart';
 import 'features/pin/pin_lock_gate.dart';
 import 'features/pin/pin_storage.dart';
 
-// Gestionnaire exécuté en arrière-plan lorsque l'app est fermée
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   debugPrint('[FCM Background] Reçu : ${message.notification?.title}');
 }
 
-/// Enregistre le token de l'appareil auprès du backend Neon/FastAPI
 Future<void> syncPushTokenWithBackend() async {
   try {
     final messaging = FirebaseMessaging.instance;
-
-    // Demande de permission explicite pour Android 13+ et iOS
     final settings = await messaging.requestPermission(
       alert: true,
       badge: true,
@@ -60,12 +56,10 @@ Future<void> syncPushTokenWithBackend() async {
             pushToken: token,
             platform: Platform.isIOS ? 'ios' : 'android',
           );
-          debugPrint('[FCM] Token enregistré auprès du backend : $token');
         }
       }
     }
 
-    // Écoute les renouvellements de token par Google
     messaging.onTokenRefresh.listen((newToken) async {
       final api = ANanNanApiClient();
       if (await api.isLoggedIn) {
@@ -86,7 +80,6 @@ Future<void> main() async {
 
   await initializeDateFormatting('fr_FR');
 
-  // Initialisation native Firebase
   try {
     await Firebase.initializeApp();
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -94,7 +87,6 @@ Future<void> main() async {
     debugPrint('[Firebase] Erreur initialisation: $e');
   }
 
-  // Déconnexion propre si le refresh token expire définitivement
   ANanNanApiClient.onSessionExpired = () {
     NeonSession.clear();
   };
@@ -147,7 +139,6 @@ class _AuthGateState extends State<_AuthGate> {
   }
 
   void _setupForegroundFCM() {
-    // Affiche un Toast si une notification arrive alors que l'app est ouverte au premier plan
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final title = message.notification?.title;
       final body = message.notification?.body;
@@ -165,7 +156,6 @@ class _AuthGateState extends State<_AuthGate> {
         final me = await _api.me();
         _userId = me['id'] as String;
 
-        // Synchroniser le token FCM de l'appareil
         await syncPushTokenWithBackend();
 
         final myMerchants = await MerchantService(_api).getMine();
@@ -176,10 +166,7 @@ class _AuthGateState extends State<_AuthGate> {
           if (status == 'active') {
             NeonSession.setCurrentMerchant(myMerchant);
             _isApprovedMerchant = true;
-
-            final bType =
-                (myMerchant['business_type'] as String?)?.toLowerCase();
-            _isPharmacy = bType == 'pharmacie' || bType == 'pharmacy';
+            _isPharmacy = NeonSession.isPharmacy;
           } else {
             _isApprovedMerchant = false;
           }
@@ -321,12 +308,16 @@ class _MerchantShellState extends State<MerchantShell> {
             isPharmacy: true)
         : null;
 
+    // Protection anti hors-limite : si l'indice est trop élevé, on revient à l'accueil
+    final maxIndex = _isPharmacy ? 4 : 3;
+    final safeIndex = _index > maxIndex ? 0 : _index;
+
     return IndexedStack(
-      index: _index,
+      index: safeIndex,
       children: [
         DashboardScreen(
           notifier: _dashboard,
-          currentNavIndex: _index,
+          currentNavIndex: safeIndex,
           onNavTap: (i) => setState(() => _index = i),
           onGoToOrders: () => setState(() => _index = ordersIndex),
           onGoToProducts: () => setState(() => _index = productsIndex),
@@ -342,7 +333,7 @@ class _MerchantShellState extends State<MerchantShell> {
               setState(() => _showBecomeMerchant = true),
         ),
         OrdersScreen(
-          currentNavIndex: _index,
+          currentNavIndex: safeIndex,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
           unreadCount: _notifications.unreadCount,
@@ -350,7 +341,7 @@ class _MerchantShellState extends State<MerchantShell> {
         ),
         ProductsScreen(
           dashboardNotifier: _dashboard,
-          currentNavIndex: _index,
+          currentNavIndex: safeIndex,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
           unreadCount: _notifications.unreadCount,
@@ -358,14 +349,14 @@ class _MerchantShellState extends State<MerchantShell> {
         ),
         if (_isPharmacy)
           PrescriptionsScreen(
-            currentNavIndex: _index,
+            currentNavIndex: safeIndex,
             onNavTap: (i) => setState(() => _index = i),
             onGoToDashboard: () => setState(() => _index = 0),
             unreadCount: _notifications.unreadCount,
             onGoToNotifications: _openNotifications,
           ),
         FinanceScreen(
-          currentNavIndex: _index,
+          currentNavIndex: safeIndex,
           onNavTap: (i) => setState(() => _index = i),
           onGoToDashboard: () => setState(() => _index = 0),
           unreadCount: _notifications.unreadCount,
@@ -398,21 +389,45 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  // VALIDATION PRÉALABLE CÔTÉ FLUTTER (FAIL-FAST)
   Future<void> _login() async {
+    final rawPhone = _phone.text.trim();
+    final rawPin = _pin.text.trim();
+
+    // 1. Validation du numéro de téléphone
+    if (rawPhone.isEmpty) {
+      setState(() => _error = 'Veuillez saisir votre numéro de téléphone.');
+      return;
+    }
+    final phone = CiPhone.normalize(rawPhone);
+    if (!CiPhone.isValid(phone)) {
+      setState(() => _error =
+          'Numéro invalide : 10 chiffres attendus (ex: 07 01 02 03 04).');
+      return;
+    }
+
+    // 2. Validation du code PIN à 4 chiffres
+    if (rawPin.isEmpty) {
+      setState(() => _error = 'Veuillez saisir votre code PIN secret.');
+      return;
+    }
+    if (!RegExp(r'^\d{4}$').hasMatch(rawPin)) {
+      setState(
+          () => _error = 'Le code PIN doit comporter exactement 4 chiffres.');
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
     });
+
     try {
-      final phone = CiPhone.normalize(_phone.text);
-      final rawPin = _pin.text.trim();
       await _api.login(phone: phone, pin: rawPin);
       final me = await _api.me();
       final userId = me['id'] as String;
 
       await PinStorage(userId: userId).setPin(rawPin);
-
-      // Enregistrer le token Push Firebase auprès du backend
       await syncPushTokenWithBackend();
 
       final myMerchants = await MerchantService(_api).getMine();
@@ -436,8 +451,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       NeonSession.setCurrentMerchant(myMerchant);
-      final bType = (myMerchant['business_type'] as String?)?.toLowerCase();
-      final isPharmacy = bType == 'pharmacie' || bType == 'pharmacy';
+      final isPharmacy = NeonSession.isPharmacy;
 
       if (mounted) {
         Navigator.of(context).pushReplacement(
@@ -535,6 +549,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _phone,
                     keyboardType: TextInputType.phone,
+                    onChanged: (_) {
+                      if (_error != null) setState(() => _error = null);
+                    },
                     decoration: InputDecoration(
                       hintText: '01 02 03 04 05',
                       hintStyle:
@@ -565,6 +582,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     obscureText: _obscure,
                     keyboardType: TextInputType.number,
                     maxLength: 4,
+                    onChanged: (_) {
+                      if (_error != null) setState(() => _error = null);
+                    },
                     decoration: InputDecoration(
                       hintText: '••••',
                       hintStyle:

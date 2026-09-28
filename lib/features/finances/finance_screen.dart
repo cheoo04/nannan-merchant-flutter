@@ -406,7 +406,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
       bottomNavigationBar: MerchantBottomNav(
         currentIndex: widget.currentNavIndex,
         onTap: widget.onNavTap,
-        isPharmacy: _n.isPharmacy,
+        isPharmacy: NeonSession.isPharmacy,
       ),
     );
   }

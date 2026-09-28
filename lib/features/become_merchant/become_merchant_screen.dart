@@ -15,7 +15,6 @@ import '../location_picker/location_picker_screen.dart';
 const String _supportPhoneDial = '+2250565074868';
 const String _supportPhoneWa = '2250565074868';
 
-// Slugs stricts issus du contrat OpenAPI (/api/v1/business-types)
 const _fallbackCategories = [
   (code: 'restaurant', label: 'Restaurant / Maquis'),
   (code: 'grocery', label: 'Épicerie / Boutique'),
@@ -51,12 +50,10 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
   List<({String code, String label})> _availableCategories =
       _fallbackCategories;
 
-  // Champs gérant
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
   final _phone = TextEditingController();
 
-  // Champs boutique
   final _city = TextEditingController(text: 'Oumé');
   final _address = TextEditingController();
   double? _lat;
@@ -90,7 +87,6 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
 
   Future<void> _checkExistingAndPrefill() async {
     try {
-      // 1. Charger les types d'activité en ligne depuis GET /api/v1/business-types
       try {
         final types = await _api.get('/api/v1/business-types?only_active=true');
         if (types is List && types.isNotEmpty) {
@@ -111,7 +107,6 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
         }
       } catch (_) {}
 
-      // 2. Pré-remplir avec les informations de l'utilisateur connecté
       final me = await _api.me();
       _userId = me['id'] as String?;
 
@@ -125,7 +120,6 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
       final phone = me['phone'] as String?;
       if (phone != null && phone.isNotEmpty) _phone.text = phone;
 
-      // 3. Vérifier si un commerce est déjà approuvé
       final myMerchants = await _merchantService.getMine();
       if (myMerchants.isNotEmpty) {
         final current = myMerchants.first;
@@ -166,27 +160,48 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
     if (mounted) setState(() => _checkingExisting = false);
   }
 
+  // VALIDATION CLIENT-SIDE STRICTE
   void _submitInfo() {
-    if (_firstName.text.trim().isEmpty || _lastName.text.trim().isEmpty) {
-      toast.error('Renseignez le prénom et le nom du gérant');
+    final first = _firstName.text.trim();
+    final last = _lastName.text.trim();
+    final rawPhone = _phone.text.trim();
+    final bName = _businessName.text.trim();
+    final addr = _address.text.trim();
+
+    if (first.length < 2) {
+      toast.error('Le prénom du gérant doit comporter au moins 2 caractères');
       return;
     }
-    if (_phone.text.trim().isEmpty) {
-      toast.error('Renseignez le numéro de téléphone');
+    if (last.length < 2) {
+      toast.error('Le nom du gérant doit comporter au moins 2 caractères');
       return;
     }
-    if (_businessName.text.trim().isEmpty) {
-      toast.error('Indiquez le nom de votre commerce');
+    final cleanPhone = CiPhone.normalize(rawPhone);
+    if (!CiPhone.isValid(cleanPhone)) {
+      toast
+          .error('Numéro invalide : 10 chiffres attendus (ex: 07 01 02 03 04)');
       return;
     }
-    if (_address.text.trim().isEmpty) {
-      toast.error("Indiquez l'adresse ou repère du commerce");
+    if (bName.length < 2) {
+      toast.error(
+          'Le nom de votre commerce doit comporter au moins 2 caractères');
+      return;
+    }
+    if (bName.length > 100) {
+      toast.error(
+          'Le nom de votre commerce ne peut pas dépasser 100 caractères');
+      return;
+    }
+    if (addr.length < 3) {
+      toast.error("Précisez l'adresse ou le repère physique de votre boutique");
       return;
     }
     if (_lat == null || _lng == null) {
-      toast.error('Positionnez votre commerce sur la carte');
+      toast.error(
+          'Positionnez votre boutique sur la carte (GPS requis pour les livreurs)');
       return;
     }
+
     setState(() => _step = _Step.terms);
   }
 
@@ -213,7 +228,7 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
 
   Future<void> _submitTerms() async {
     if (!_accepted) {
-      toast.error('Vous devez accepter les conditions');
+      toast.error('Vous devez accepter les conditions pour continuer');
       return;
     }
 
@@ -235,7 +250,9 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
         'latitude': _lat,
         'longitude': _lng,
         if (_description.text.trim().isNotEmpty)
-          'description': _description.text.trim(),
+          'description': _description.text
+              .trim()
+              .substring(0, _description.text.trim().length.clamp(0, 500)),
       });
 
       if (_userId != null) {
@@ -243,14 +260,14 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
         await prefs.setBool('pending_application_$_userId', true);
       }
 
-      toast.success('Demande envoyée avec succès');
+      toast.success('Dossier soumis avec succès !');
       setState(() => _step = _Step.pending);
     } on ANanNanApiException catch (e) {
       toast.error(e.statusCode == 404
           ? "Code d'activité non reconnu par le serveur"
           : e.message);
     } catch (e) {
-      toast.error('Erreur de connexion. Réessayez.');
+      toast.error('Erreur de connexion. Vérifiez votre réseau.');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -264,8 +281,7 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
         final status = current['status'] as String? ?? 'pending';
         if (status == 'active') {
           NeonSession.setCurrentMerchant(current);
-          final bType = (current['business_type'] as String?)?.toLowerCase();
-          final isPharmacy = bType == 'pharmacie' || bType == 'pharmacy';
+          final isPharmacy = NeonSession.isPharmacy;
 
           if (mounted) {
             toast.success('Félicitations ! Votre boutique a été validée.');
@@ -278,8 +294,7 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
           return;
         }
       }
-      toast.info(
-          'Dossier reçu : en attente de validation par l\'administrateur.');
+      toast.info('Dossier reçu : en cours d\'examen par l\'administrateur.');
     } catch (_) {
       toast.error('Erreur de connexion lors de la vérification.');
     }
@@ -512,6 +527,7 @@ class _StepInfo extends StatelessWidget {
                 label: 'Prénom du gérant',
                 controller: firstName,
                 placeholder: 'Marie',
+                maxLength: 50,
               ),
             ),
             const SizedBox(width: 12),
@@ -520,32 +536,40 @@ class _StepInfo extends StatelessWidget {
                 label: 'Nom du gérant',
                 controller: lastName,
                 placeholder: 'Kouassi',
+                maxLength: 50,
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
         _Field(
-          label: 'Numéro WhatsApp / Contact',
+          label: 'Numéro de contact professionnel',
           controller: phone,
           placeholder: '07 00 00 00 00',
           type: TextInputType.phone,
+          maxLength: 14,
         ),
         const SizedBox(height: 12),
         _Field(
-            label: 'Nom du commerce',
-            controller: businessName,
-            placeholder: 'Restaurant Chez Marie'),
+          label: 'Nom commercial du commerce',
+          controller: businessName,
+          placeholder: 'Restaurant Chez Marie',
+          maxLength: 100,
+        ),
         const SizedBox(height: 12),
         _Field(
-            label: 'Quartier / Ville',
-            controller: city,
-            placeholder: 'Oumé Centre'),
+          label: 'Quartier / Commune',
+          controller: city,
+          placeholder: 'Oumé Centre',
+          maxLength: 60,
+        ),
         const SizedBox(height: 12),
         _Field(
-            label: 'Adresse ou repère précis',
-            controller: address,
-            placeholder: 'Face Mairie, à côté de la pharmacie'),
+          label: 'Adresse ou repère précis',
+          controller: address,
+          placeholder: 'Face Mairie, à côté de la pharmacie',
+          maxLength: 200,
+        ),
         const SizedBox(height: 8),
         GestureDetector(
           onTap: onPickLocation,
@@ -640,6 +664,7 @@ class _StepInfo extends StatelessWidget {
         TextField(
           controller: description,
           maxLines: 2,
+          maxLength: 300,
           decoration: InputDecoration(
             hintText: 'Spécialités, horaires ou informations utiles…',
             hintStyle:
@@ -660,7 +685,7 @@ class _StepInfo extends StatelessWidget {
             fillColor: AppColors.card,
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           height: 52,
@@ -990,12 +1015,14 @@ class _Field extends StatelessWidget {
   final TextEditingController controller;
   final String? placeholder;
   final TextInputType type;
+  final int? maxLength;
 
   const _Field({
     required this.label,
     required this.controller,
     this.placeholder,
     this.type = TextInputType.text,
+    this.maxLength,
   });
 
   @override
@@ -1008,12 +1035,14 @@ class _Field extends StatelessWidget {
         TextField(
           controller: controller,
           keyboardType: type,
+          maxLength: maxLength,
           decoration: InputDecoration(
             hintText: placeholder,
             hintStyle:
                 const TextStyle(fontSize: 13, color: AppColors.mutedForeground),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            counterText: '',
             border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(color: AppColors.border)),

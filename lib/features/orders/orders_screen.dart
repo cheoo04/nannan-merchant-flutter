@@ -7,6 +7,7 @@ import '../../shared/widgets/notification_bell_button.dart';
 import '../../shared/widgets/skeleton.dart';
 import 'orders_notifier.dart';
 import '../../shared/models/models.dart';
+import '../../core/services/neon_session.dart';
 
 class OrdersScreen extends StatefulWidget {
   final VoidCallback onGoToDashboard;
@@ -63,7 +64,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           'Refuser cette commande ?',
-          style: TextStyle(fontFamily: 'Sora', fontWeight: FontWeight.w700, fontSize: 16),
+          style: TextStyle(
+              fontFamily: 'Sora', fontWeight: FontWeight.w700, fontSize: 16),
         ),
         content: const Text(
           'Le client sera notifié de l\'annulation.',
@@ -77,7 +79,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: AppColors.destructive),
-            child: const Text('Confirmer le refus', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text('Confirmer le refus',
+                style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -115,9 +118,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             unreadCount: widget.unreadCount,
             onNotifications: widget.onGoToNotifications,
           ),
-
           const SizedBox(height: 14),
-
           SizedBox(
             height: 38,
             child: ListView.separated(
@@ -133,13 +134,21 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   onTap: () => _notifier.setTab(tab.id),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
                     decoration: BoxDecoration(
                       color: active ? AppColors.primary : AppColors.card,
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: active ? AppColors.primary : AppColors.border),
+                      border: Border.all(
+                          color: active ? AppColors.primary : AppColors.border),
                       boxShadow: active
-                          ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 2))]
+                          ? [
+                              BoxShadow(
+                                  color:
+                                      AppColors.primary.withValues(alpha: 0.25),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2))
+                            ]
                           : null,
                     ),
                     alignment: Alignment.center,
@@ -156,9 +165,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
               },
             ),
           ),
-
           const SizedBox(height: 10),
-
           Expanded(
             child: ListenableBuilder(
               listenable: _notifier,
@@ -178,7 +185,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     child: ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       children: [
-                        SizedBox(height: MediaQuery.of(context).size.height * 0.22),
+                        SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.22),
                         Center(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -192,18 +200,25 @@ class _OrdersScreenState extends State<OrdersScreen> {
                               child: const Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.inbox_rounded, size: 36, color: AppColors.mutedForeground),
+                                  Icon(Icons.inbox_rounded,
+                                      size: 36,
+                                      color: AppColors.mutedForeground),
                                   SizedBox(height: 12),
                                   Text(
                                     'Aucune commande dans cette section',
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.foreground),
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.foreground),
                                   ),
                                   SizedBox(height: 4),
                                   Text(
                                     'Tirez vers le bas pour actualiser à tout moment.',
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.mutedForeground),
                                   ),
                                 ],
                               ),
@@ -241,7 +256,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       bottomNavigationBar: MerchantBottomNav(
         currentIndex: widget.currentNavIndex,
         onTap: widget.onNavTap,
-        isPharmacy: _notifier.isPharmacy,
+        isPharmacy: NeonSession.isPharmacy,
       ),
     );
   }
@@ -282,18 +297,25 @@ class _OrdersHeader extends StatelessWidget {
                 child: Container(
                   width: 44,
                   height: 44,
-                  decoration: const BoxDecoration(color: AppColors.headerOverlay, shape: BoxShape.circle),
-                  child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                  decoration: const BoxDecoration(
+                      color: AppColors.headerOverlay, shape: BoxShape.circle),
+                  child: const Icon(Icons.arrow_back_rounded,
+                      color: Colors.white, size: 20),
                 ),
               ),
               if (onNotifications != null)
-                NotificationBellButton(unreadCount: unreadCount, onTap: onNotifications!),
+                NotificationBellButton(
+                    unreadCount: unreadCount, onTap: onNotifications!),
             ],
           ),
           const SizedBox(height: 12),
           const Text(
             'Commandes',
-            style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700, fontFamily: 'Sora'),
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Sora'),
           ),
           const SizedBox(height: 4),
           const Text(
@@ -338,14 +360,16 @@ class _OrderCardState extends State<_OrderCard> {
   Widget build(BuildContext context) {
     final o = widget.order;
     final isBusy = widget.notifier.busyOrderId == o.id;
-    final shortId = o.id.length >= 8 ? o.id.substring(0, 8).toUpperCase() : o.id.toUpperCase();
+    final shortId = o.id.length >= 8
+        ? o.id.substring(0, 8).toUpperCase()
+        : o.id.toUpperCase();
     final timeStr = formatTime(o.createdAt);
 
     final commentText = o.clientComment?.trim() ?? '';
     final addressText = o.deliveryAddressText?.trim() ?? '';
-    final isDuplicate = commentText.isNotEmpty && 
-                        addressText.isNotEmpty && 
-                        commentText.toLowerCase() == addressText.toLowerCase();
+    final isDuplicate = commentText.isNotEmpty &&
+        addressText.isNotEmpty &&
+        commentText.toLowerCase() == addressText.toLowerCase();
 
     return Container(
       decoration: BoxDecoration(
@@ -353,8 +377,10 @@ class _OrderCardState extends State<_OrderCard> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.border, width: 0.6),
         boxShadow: const [
-          BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 2)),
-          BoxShadow(color: Color(0x0A000000), blurRadius: 16, offset: Offset(0, 6)),
+          BoxShadow(
+              color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 2)),
+          BoxShadow(
+              color: Color(0x0A000000), blurRadius: 16, offset: Offset(0, 6)),
         ],
       ),
       child: Column(
@@ -371,7 +397,8 @@ class _OrderCardState extends State<_OrderCard> {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: AppColors.primarySoft,
                             borderRadius: BorderRadius.circular(8),
@@ -389,26 +416,31 @@ class _OrderCardState extends State<_OrderCard> {
                         const SizedBox(width: 8),
                         Text(
                           timeStr,
-                          style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.mutedForeground,
+                              fontWeight: FontWeight.w500),
                         ),
                       ],
                     ),
                     _StatusChip(status: o.status),
                   ],
                 ),
-
                 const SizedBox(height: 8),
-
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.payments_outlined, size: 14, color: AppColors.mutedForeground),
+                        const Icon(Icons.payments_outlined,
+                            size: 14, color: AppColors.mutedForeground),
                         const SizedBox(width: 4),
                         Text(
                           o.paymentMethod,
-                          style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.mutedForeground,
+                              fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -440,7 +472,8 @@ class _OrderCardState extends State<_OrderCard> {
                     child: SizedBox(
                       height: 14,
                       width: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.primary),
                     ),
                   )
                 else
@@ -449,14 +482,18 @@ class _OrderCardState extends State<_OrderCard> {
                         child: Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
                                 color: AppColors.secondary,
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 '${it.qty}x',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.foreground),
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.foreground),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -465,17 +502,22 @@ class _OrderCardState extends State<_OrderCard> {
                                 it.productName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.foreground),
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.foreground),
                               ),
                             ),
                             Text(
                               formatXOF(it.subtotal),
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.foreground),
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.foreground),
                             ),
                           ],
                         ),
                       )),
-
                 if (commentText.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Container(
@@ -484,36 +526,42 @@ class _OrderCardState extends State<_OrderCard> {
                     decoration: BoxDecoration(
                       color: AppColors.warmSoft,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.warm.withValues(alpha: 0.3)),
+                      border: Border.all(
+                          color: AppColors.warm.withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.mode_comment_outlined, size: 14, color: AppColors.warm),
+                        const Icon(Icons.mode_comment_outlined,
+                            size: 14, color: AppColors.warm),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             commentText,
-                            style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppColors.foreground),
+                            style: const TextStyle(
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                                color: AppColors.foreground),
                           ),
                         ),
                       ],
                     ),
                   ),
                 ],
-
                 if (addressText.isNotEmpty && !isDuplicate) ...[
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Icon(Icons.location_on_outlined, size: 14, color: AppColors.mutedForeground),
+                      const Icon(Icons.location_on_outlined,
+                          size: 14, color: AppColors.mutedForeground),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           addressText,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
+                          style: const TextStyle(
+                              fontSize: 11, color: AppColors.mutedForeground),
                         ),
                       ),
                     ],
@@ -527,7 +575,8 @@ class _OrderCardState extends State<_OrderCard> {
           if (o.status == OrderStatus.pending) ...[
             Container(
               decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.border, width: 0.6)),
+                border: Border(
+                    top: BorderSide(color: AppColors.border, width: 0.6)),
               ),
               child: Row(
                 children: [
@@ -537,9 +586,15 @@ class _OrderCardState extends State<_OrderCard> {
                       onPressed: isBusy ? null : widget.onRefuse,
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.only(bottomLeft: Radius.circular(20))),
+                        shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.only(
+                                bottomLeft: Radius.circular(20))),
                       ),
-                      child: const Text('Refuser', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.destructive)),
+                      child: const Text('Refuser',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.destructive)),
                     ),
                   ),
                   Container(width: 1, height: 48, color: AppColors.border),
@@ -551,14 +606,24 @@ class _OrderCardState extends State<_OrderCard> {
                         backgroundColor: AppColors.success,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         elevation: 0,
-                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.only(bottomRight: Radius.circular(20))),
+                        shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.only(
+                                bottomRight: Radius.circular(20))),
                       ),
                       icon: isBusy
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.check_circle_rounded, size: 18, color: Colors.white),
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.check_circle_rounded,
+                              size: 18, color: Colors.white),
                       label: Text(
                         isBusy ? 'Validation...' : 'Accepter la commande',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white),
                       ),
                     ),
                   ),
@@ -574,33 +639,44 @@ class _OrderCardState extends State<_OrderCard> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: const BoxDecoration(
                 color: AppColors.primarySoft,
-                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(20), bottomRight: Radius.circular(20)),
+                borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.inventory_2_rounded, size: 18, color: AppColors.primary),
+                      Icon(Icons.inventory_2_rounded,
+                          size: 18, color: AppColors.primary),
                       SizedBox(width: 8),
                       Text(
                         'En préparation',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary),
                       ),
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                      border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       children: [
                         const Text(
                           'Code retrait : ',
-                          style: TextStyle(fontSize: 11, color: AppColors.mutedForeground, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.mutedForeground,
+                              fontWeight: FontWeight.w600),
                         ),
                         Text(
                           o.pickupCode,
@@ -626,15 +702,21 @@ class _OrderCardState extends State<_OrderCard> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: const BoxDecoration(
                 color: AppColors.warmSoft,
-                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(20), bottomRight: Radius.circular(20)),
+                borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20)),
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.two_wheeler_rounded, size: 18, color: AppColors.warm),
+                  Icon(Icons.two_wheeler_rounded,
+                      size: 18, color: AppColors.warm),
                   SizedBox(width: 8),
                   Text(
                     'Prise en charge par le coursier en route vers le client',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.warm),
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.warm),
                   ),
                 ],
               ),
@@ -655,10 +737,26 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final (bg, fg, label) = switch (status) {
       OrderStatus.pending => (AppColors.warmSoft, AppColors.warm, 'À valider'),
-      OrderStatus.accepted => (AppColors.primarySoft, AppColors.primary, 'En cours'),
-      OrderStatus.inDelivery => (AppColors.warmSoft, AppColors.warm, 'En livraison'),
-      OrderStatus.delivered => (const Color(0xFFE8F9EE), AppColors.success, 'Livrée'),
-      OrderStatus.cancelled || OrderStatus.refunded => (const Color(0xFFFEECEB), AppColors.destructive, 'Annulée'),
+      OrderStatus.accepted => (
+          AppColors.primarySoft,
+          AppColors.primary,
+          'En cours'
+        ),
+      OrderStatus.inDelivery => (
+          AppColors.warmSoft,
+          AppColors.warm,
+          'En livraison'
+        ),
+      OrderStatus.delivered => (
+          const Color(0xFFE8F9EE),
+          AppColors.success,
+          'Livrée'
+        ),
+      OrderStatus.cancelled || OrderStatus.refunded => (
+          const Color(0xFFFEECEB),
+          AppColors.destructive,
+          'Annulée'
+        ),
     };
 
     return Container(

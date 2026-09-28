@@ -1,34 +1,25 @@
+// --- Fichier : lib/shared/widgets/merchant_bottom_nav.dart ---
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/services/neon_session.dart';
 
-/// Barre de navigation marchand — dynamique selon le métier.
-///
-/// - Tout commerçant : Accueil / Commandes / Produits / Finance (4 onglets).
-/// - Pharmacie uniquement : + Ordonnances, inséré avant Finance (5 onglets).
-/// - "Stories" n'est PAS un onglet fixe : usage occasionnel, il vit comme
-///   action rapide sur le Dashboard (voir _NavCard "Publications").
-///
-/// Règle produit : jamais plus de 5 onglets dans cette barre.
-///
-/// Pour éviter tout décalage d'index entre écrans, ne pas coder les indices
-/// en dur ailleurs : utiliser [MerchantBottomNav.indexFor].
 enum MerchantTab { home, orders, products, prescriptions, finance, profile }
 
 class MerchantBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
-  final bool isPharmacy;
+  final bool? isPharmacy;
 
   const MerchantBottomNav({
     super.key,
     required this.currentIndex,
     required this.onTap,
-    required this.isPharmacy,
+    this.isPharmacy,
   });
 
-  /// Ordre canonique des onglets pour ce type de commerce.
-  /// "Profil" n'est PAS un onglet (même raison que Stories) : accessible
-  /// via l'icône dédiée du header Dashboard, pas la barre du bas.
+  // Immunité absolue : si la session est une pharmacie, la barre a TOUJOURS 5 onglets
+  bool get _resolvedIsPharmacy => isPharmacy == true || NeonSession.isPharmacy;
+
   static List<MerchantTab> tabsFor({required bool isPharmacy}) => [
         MerchantTab.home,
         MerchantTab.orders,
@@ -37,8 +28,6 @@ class MerchantBottomNav extends StatelessWidget {
         MerchantTab.finance,
       ];
 
-  /// Index à passer à [currentIndex] pour un onglet donné, selon le métier.
-  /// Ex: MerchantBottomNav.indexFor(MerchantTab.finance, isPharmacy: true) == 4
   static int indexFor(MerchantTab tab, {required bool isPharmacy}) =>
       tabsFor(isPharmacy: isPharmacy).indexOf(tab);
 
@@ -63,8 +52,7 @@ class MerchantBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
-    final tabs = tabsFor(isPharmacy: isPharmacy);
-    assert(tabs.length <= 5, 'MerchantBottomNav ne doit jamais dépasser 5 onglets');
+    final tabs = tabsFor(isPharmacy: _resolvedIsPharmacy);
 
     return Container(
       decoration: BoxDecoration(
@@ -74,7 +62,7 @@ class MerchantBottomNav extends StatelessWidget {
         ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x14000000), // shadow-tab
+            color: Color(0x14000000),
             blurRadius: 24,
             offset: Offset(0, -4),
           ),
@@ -82,7 +70,7 @@ class MerchantBottomNav extends StatelessWidget {
       ),
       child: Padding(
         padding: EdgeInsets.only(
-          bottom: bottomPadding, // safe area
+          bottom: bottomPadding,
           top: 6,
         ),
         child: Row(
@@ -123,7 +111,6 @@ class _NavItem extends StatelessWidget {
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: SizedBox(
-          // touch target min 44pt
           height: 44,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -138,8 +125,8 @@ class _NavItem extends StatelessWidget {
                 label,
                 style: TextStyle(
                   fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: color,
+                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                  color: color, // S'allume en bleu vif quand actif !
                 ),
               ),
             ],
