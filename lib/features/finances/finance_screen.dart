@@ -1,4 +1,5 @@
 // --- Fichier : lib/features/finances/finance_screen.dart ---
+import 'dart:async';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
@@ -11,7 +12,6 @@ import '../../shared/models/models.dart';
 import '../../core/services/neon_session.dart';
 import '../orders/orders_repository.dart';
 
-// ── Notifier ──────────────────────────────────────────────────────────────────
 class FinanceNotifier extends ChangeNotifier {
   final OrdersRepository _repo;
 
@@ -20,12 +20,17 @@ class FinanceNotifier extends ChangeNotifier {
   String range = 'week';
   String _merchantCategory = '';
   String? _merchantId;
+  Timer? _pollingTimer;
 
   bool get isPharmacy => categoryNeedsPrescriptionFlow(_merchantCategory);
 
   FinanceNotifier({OrdersRepository? repo})
       : _repo = repo ?? OrdersRepository() {
     _init();
+    // Rafraîchissement automatique toutes les 15 secondes
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (_merchantId != null) load();
+    });
   }
 
   Future<void> _init() async {
@@ -112,9 +117,14 @@ class FinanceNotifier extends ChangeNotifier {
   int get totalSales => chartData.fold(0, (s, d) => s + d.sales);
   int get totalOrders => chartData.fold(0, (s, d) => s + d.count);
   int get refundedTotal => refunded.fold(0, (s, o) => s + o.itemsAmount);
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
 }
 
-// ── FINANCE SCREEN ────────────────────────────────────────────────────────────
 class FinanceScreen extends StatefulWidget {
   final VoidCallback onGoToDashboard;
   final int currentNavIndex;
@@ -162,7 +172,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // ── HEADER ──────────────────────────────────────
             SliverToBoxAdapter(
               child: _FinanceHeader(
                 topPadding: top,
@@ -173,10 +182,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 onNotifications: widget.onGoToNotifications,
               ),
             ),
-
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
-
-            // ── LOADING ─────────────────────────────────────
             if (_n.loading)
               const SliverToBoxAdapter(
                 child: Padding(
@@ -184,8 +190,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   child: SkeletonList(count: 3),
                 ),
               ),
-
-            // ── ÉTAT VIDE ────────────────────────────────────
             if (!_n.loading && _n.orders.isEmpty)
               SliverToBoxAdapter(
                 child: Padding(
@@ -212,8 +216,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   ),
                 ),
               ),
-
-            // ── SÉLECTEUR PÉRIODE ────────────────────────────
             if (!_n.loading)
               SliverToBoxAdapter(
                 child: Padding(
@@ -260,10 +262,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   ),
                 ),
               ),
-
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
-            // ── GRAPHIQUE BARRES ─────────────────────────────
             if (!_n.loading)
               SliverToBoxAdapter(
                 child: Padding(
@@ -277,10 +276,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   ),
                 ),
               ),
-
             const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
-            // ── COMMANDES ANNULÉES/REMBOURSÉES ───────────────
             if (!_n.loading)
               SliverToBoxAdapter(
                 child: Padding(
@@ -349,10 +345,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   ),
                 ),
               ),
-
             const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
-            // ── HISTORIQUE PAIEMENTS ─────────────────────────
             if (!_n.loading)
               SliverToBoxAdapter(
                 child: Padding(
@@ -406,7 +399,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   ),
                 ),
               ),
-
             const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
         ),
@@ -420,7 +412,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
   }
 }
 
-// ── HEADER ────────────────────────────────────────────────────────────────────
 class _FinanceHeader extends StatelessWidget {
   final double topPadding;
   final VoidCallback onBack;
@@ -544,7 +535,6 @@ class _HeaderKpi extends StatelessWidget {
   }
 }
 
-// ── GRAPHIQUE BARRES ───────────────────────────────────────────────────────────
 class _SalesBarChart extends StatelessWidget {
   final List<({String label, int sales, int count})> data;
 

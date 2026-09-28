@@ -1,3 +1,5 @@
+// --- Fichier : lib/features/prescriptions/prescriptions_screen.dart ---
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -77,7 +79,7 @@ class PrescriptionRow {
       id: j['id'] as String,
       clientId: (j['patient_user_id'] ?? j['client_id'] ?? '') as String,
       merchantId: j['merchant_id'] as String? ?? '',
-      status: j['status'] as String? ?? 'received',
+      status: (j['status'] as String? ?? 'pending').toLowerCase(),
       imagePaths: imagesList,
       clientNote: (j['notes'] ?? j['client_note']) as String?,
       deliveryAddress: j['delivery_address'] as String?,
@@ -89,18 +91,22 @@ class PrescriptionRow {
           ? j['quote_details'] as String?
           : (j['pharmacist_note'] as String?),
       orderId: j['order_id'] as String?,
-      createdAt: DateTime.parse(j['created_at'] as String),
+      createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 }
 
 const _statusLabel = {
+  'pending': 'À traiter',
+  'submitted': 'À traiter',
   'received': 'Reçue',
   'analyzing': 'En analyse',
   'quoted': 'Devis envoyé',
   'accepted': 'Accepté',
   'paid': 'Payée',
   'cancelled': 'Annulée',
+  'rejected': 'Refusée',
 };
 
 class PrescriptionsNotifier extends ChangeNotifier {
@@ -110,9 +116,13 @@ class PrescriptionsNotifier extends ChangeNotifier {
   List<PrescriptionRow> prescriptions = [];
   bool loading = true;
   String? merchantId;
+  Timer? _pollingTimer;
 
   PrescriptionsNotifier() {
     _init();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (merchantId != null) load();
+    });
   }
 
   Future<void> _init() async {
@@ -148,27 +158,22 @@ class PrescriptionsNotifier extends ChangeNotifier {
   }
 
   List<PrescriptionRow> get inbox => prescriptions
-      .where((p) => p.status == 'received' || p.status == 'analyzing')
+      .where((p) =>
+          p.status == 'pending' ||
+          p.status == 'submitted' ||
+          p.status == 'received' ||
+          p.status == 'analyzing')
       .toList();
+
   List<PrescriptionRow> get quoted => prescriptions
       .where((p) => p.status == 'quoted' || p.status == 'accepted')
       .toList();
+
   List<PrescriptionRow> get done =>
       prescriptions.where((p) => p.status == 'paid').toList();
 
   Future<String?> getSignedUrl(String path) async {
     return path;
-  }
-
-  Future<void> setStatus(String id, String status) async {
-    if (status == 'cancelled' && merchantId != null) {
-      await _service.reject(
-        id,
-        merchantId: merchantId!,
-        reason: 'Refusée par le pharmacien',
-      );
-    }
-    await load();
   }
 
   Future<void> submitQuote(
@@ -190,6 +195,22 @@ class PrescriptionsNotifier extends ChangeNotifier {
       details: jsonEncode(items),
     );
     await load();
+  }
+
+  Future<void> reject(String id, String reason) async {
+    if (merchantId == null) return;
+    await _service.reject(
+      id,
+      merchantId: merchantId!,
+      reason: reason,
+    );
+    await load();
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
   }
 }
 
@@ -313,7 +334,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
                 isOpen: (_openSection ?? _defaultOpenSection) == 'Payées',
                 onToggleSection: () => _toggleSection('Payées'),
               ),
-            if (_n.prescriptions.isEmpty)
+            if (_n.inbox.isEmpty && _n.quoted.isEmpty && _n.done.isEmpty)
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.all(40),
@@ -560,31 +581,112 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
   int get _total => _subtotal;
 
   Future<void> _sendQuote() async {
-    final cleaned = _items
-        .where((i) =>
-            (i['name'] as String?)?.trim().isNotEmpty == true &&
-            (i['unit_price_xof'] as int? ?? 0) > 0 &&
-            (i['qty'] as int? ?? 0) > 0)
-        .toList();
-    if (cleaned.isEmpty) {
-      toast.error('Ajoutez au moins un produit');
+    // 1. On filtre les lignes qui ont au moins un début de saisie
+    final filledRows = _items.where((i) {
+      final name = (i['name'] as String?)?.trim() ?? '';
+      final price = i['unit_price_xof'] as int? ?? 0;
+      return name.isNotEmpty || price > 0;
+    }).toList();
+
+    if (filledRows.isEmpty) {
+      toast.error('Renseignez au moins un médicament avec son prix');
       return;
     }
+
+    // 2. Vérification précise champ par champ avec message explicite
+    for (final i in filledRows) {
+      final name = (i['name'] as String?)?.trim() ?? '';
+      final price = i['unit_price_xof'] as int? ?? 0;
+      final qty = i['qty'] as int? ?? 1;
+
+      if (name.isEmpty) {
+        toast.error('Renseignez le nom du médicament');
+        return;
+      }
+      if (price <= 0) {
+        toast.error('Indiquez le prix pour « $name »');
+        return;
+      }
+      if (qty <= 0) {
+        toast.error('Quantité invalide pour « $name »');
+        return;
+      }
+    }
+
     setState(() => _submitting = true);
     try {
       await widget.notifier.submitQuote(
         widget.p.id,
-        items: cleaned,
-        readyMin: int.tryParse(_readyMin.text) ?? 20,
+        items: filledRows,
+        readyMin:
+            int.tryParse(_readyMin.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
+                20,
         note: _note.text.trim().isEmpty ? null : _note.text.trim(),
       );
-      toast.success(widget.p.status == 'quoted'
-          ? 'Devis mis à jour'
-          : 'Devis envoyé au client');
+      toast.success('Devis envoyé au client');
     } catch (_) {
-      toast.error("Échec d'envoi");
+      toast.error("Échec d'envoi du devis");
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _rejectPrescription() async {
+    final reasonCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Refuser l\'ordonnance',
+            style: TextStyle(
+                fontFamily: 'Sora', fontWeight: FontWeight.w700, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Précisez le motif du refus :',
+                style:
+                    TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: reasonCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                hintText: 'Ex: Médicaments non disponibles en stock',
+                contentPadding: EdgeInsets.all(10),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler',
+                style: TextStyle(color: AppColors.mutedForeground)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.destructive),
+            child: const Text('Confirmer le refus',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      setState(() => _submitting = true);
+      try {
+        final reason = reasonCtrl.text.trim().isNotEmpty
+            ? reasonCtrl.text.trim()
+            : 'Produits non disponibles';
+        await widget.notifier.reject(widget.p.id, reason);
+        toast.info('Ordonnance refusée');
+      } catch (_) {
+        toast.error('Échec du refus de l\'ordonnance');
+      } finally {
+        if (mounted) setState(() => _submitting = false);
+      }
     }
   }
 
@@ -755,7 +857,9 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                             strokeWidth: 2, color: AppColors.primary),
                       ),
                     ),
-                  if (p.status != 'paid' && p.status != 'cancelled') ...[
+                  if (p.status != 'paid' &&
+                      p.status != 'cancelled' &&
+                      p.status != 'rejected') ...[
                     const Text('PRODUITS',
                         style: TextStyle(
                             fontSize: 10,
@@ -870,6 +974,21 @@ class _PrescriptionCardState extends State<_PrescriptionCard> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: _submitting ? null : _rejectPrescription,
+                        icon: const Icon(Icons.cancel_outlined,
+                            size: 14, color: AppColors.destructive),
+                        label: const Text(
+                          'Refuser cette ordonnance',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.destructive,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
                   ],
                   if (p.status == 'paid')
                     Container(
@@ -952,7 +1071,22 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
     _nameCtrl =
         TextEditingController(text: widget.item['name'] as String? ?? '');
     final price = widget.item['unit_price_xof'] as int? ?? 0;
-    _priceCtrl = TextEditingController(text: price != 0 ? '$price' : '');
+    _priceCtrl = TextEditingController(text: price > 0 ? '$price' : '');
+  }
+
+  @override
+  void didUpdateWidget(_QuoteItemRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item['name'] != widget.item['name'] &&
+        _nameCtrl.text != widget.item['name']) {
+      _nameCtrl.text = widget.item['name'] as String? ?? '';
+    }
+    final price = widget.item['unit_price_xof'] as int? ?? 0;
+    final priceStr = price > 0 ? '$price' : '';
+    if (oldWidget.item['unit_price_xof'] != widget.item['unit_price_xof'] &&
+        _priceCtrl.text != priceStr) {
+      _priceCtrl.text = priceStr;
+    }
   }
 
   @override
@@ -964,7 +1098,6 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
 
   @override
   Widget build(BuildContext context) {
-    final item = widget.item;
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -976,7 +1109,10 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
           Expanded(
             child: TextField(
               controller: _nameCtrl,
-              onChanged: (v) => widget.onChanged({...item, 'name': v}),
+              onChanged: (v) => widget.onChanged({
+                ...widget.item,
+                'name': v,
+              }),
               decoration: const InputDecoration(
                 hintText: 'Médicament',
                 contentPadding:
@@ -995,13 +1131,13 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
                 color: AppColors.card,
                 iconColor: AppColors.foreground,
                 onTap: () => widget.onChanged({
-                  ...item,
-                  'qty': ((item['qty'] as int? ?? 1) - 1).clamp(1, 99),
+                  ...widget.item,
+                  'qty': ((widget.item['qty'] as int? ?? 1) - 1).clamp(1, 99),
                 }),
               ),
               SizedBox(
                 width: 24,
-                child: Text('${item['qty'] ?? 1}',
+                child: Text('${widget.item['qty'] ?? 1}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                         fontSize: 12, fontWeight: FontWeight.w700)),
@@ -1011,25 +1147,30 @@ class _QuoteItemRowState extends State<_QuoteItemRow> {
                 color: AppColors.primary,
                 iconColor: Colors.white,
                 onTap: () => widget.onChanged({
-                  ...item,
-                  'qty': (item['qty'] as int? ?? 1) + 1,
+                  ...widget.item,
+                  'qty': (widget.item['qty'] as int? ?? 1) + 1,
                 }),
               ),
             ],
           ),
           const SizedBox(width: 6),
           SizedBox(
-            width: 68,
+            width: 76,
             child: TextField(
               controller: _priceCtrl,
-              onChanged: (v) => widget.onChanged({
-                ...item,
-                'unit_price_xof': int.tryParse(v) ?? 0,
-              }),
+              onChanged: (v) {
+                // Nettoyage automatique des espaces et caractères non numériques
+                final cleanNum =
+                    int.tryParse(v.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+                widget.onChanged({
+                  ...widget.item,
+                  'unit_price_xof': cleanNum,
+                });
+              },
               keyboardType: TextInputType.number,
               textAlign: TextAlign.right,
               decoration: const InputDecoration(
-                hintText: 'Prix',
+                hintText: 'Prix F',
                 contentPadding:
                     EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 isDense: true,
