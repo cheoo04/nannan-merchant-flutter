@@ -1,6 +1,8 @@
 // --- Fichier : lib/core/services/a_nan_nan_services.dart ---
 import 'a_nan_nan_api_client.dart';
 
+const String _kClearedPauseDate = '1970-01-01T00:00:00.000Z';
+
 class MerchantService {
   final ANanNanApiClient _api;
   const MerchantService(this._api);
@@ -77,7 +79,7 @@ class MerchantService {
     };
 
     if (clearPause) {
-      body['pause_until'] = null;
+      body['pause_until'] = _kClearedPauseDate;
     } else if (pauseUntil != null) {
       body['pause_until'] = pauseUntil;
     }

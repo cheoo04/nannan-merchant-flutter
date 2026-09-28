@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "275128729591",
+    "project_id": "anannan-oume",
+    "storage_bucket": "anannan-oume.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:275128729591:android:f67ab9cf73682fc64938f2",
+        "android_client_info": {
+          "package_name": "com.nannan.nannan_merchant"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDveOdiTc7E0xBlZ769qb00SVSqcFBfT6w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

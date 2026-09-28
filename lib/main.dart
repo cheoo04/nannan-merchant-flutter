@@ -1,9 +1,12 @@
 // --- Fichier : lib/main.dart ---
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_colors.dart';
@@ -28,11 +31,73 @@ import 'shared/widgets/merchant_bottom_nav.dart';
 import 'features/pin/pin_lock_gate.dart';
 import 'features/pin/pin_storage.dart';
 
+// Gestionnaire exécuté en arrière-plan lorsque l'app est fermée
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint('[FCM Background] Reçu : ${message.notification?.title}');
+}
+
+/// Enregistre le token de l'appareil auprès du backend Neon/FastAPI
+Future<void> syncPushTokenWithBackend() async {
+  try {
+    final messaging = FirebaseMessaging.instance;
+
+    // Demande de permission explicite pour Android 13+ et iOS
+    final settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional) {
+      final token = await messaging.getToken();
+      if (token != null) {
+        final api = ANanNanApiClient();
+        if (await api.isLoggedIn) {
+          await NotificationService(api).registerDeviceToken(
+            pushToken: token,
+            platform: Platform.isIOS ? 'ios' : 'android',
+          );
+          debugPrint('[FCM] Token enregistré auprès du backend : $token');
+        }
+      }
+    }
+
+    // Écoute les renouvellements de token par Google
+    messaging.onTokenRefresh.listen((newToken) async {
+      final api = ANanNanApiClient();
+      if (await api.isLoggedIn) {
+        await NotificationService(api).registerDeviceToken(
+          pushToken: newToken,
+          platform: Platform.isIOS ? 'ios' : 'android',
+        );
+      }
+    });
+  } catch (e) {
+    debugPrint('[FCM] Erreur synchronisation token: $e');
+  }
+}
+
 Future<void> main() async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: binding);
 
   await initializeDateFormatting('fr_FR');
+
+  // Initialisation native Firebase
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    debugPrint('[Firebase] Erreur initialisation: $e');
+  }
+
+  // Déconnexion propre si le refresh token expire définitivement
+  ANanNanApiClient.onSessionExpired = () {
+    NeonSession.clear();
+  };
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -78,6 +143,18 @@ class _AuthGateState extends State<_AuthGate> {
   void initState() {
     super.initState();
     _check();
+    _setupForegroundFCM();
+  }
+
+  void _setupForegroundFCM() {
+    // Affiche un Toast si une notification arrive alors que l'app est ouverte au premier plan
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      final title = message.notification?.title;
+      final body = message.notification?.body;
+      if (title != null) {
+        toast.info(title, description: body);
+      }
+    });
   }
 
   Future<void> _check() async {
@@ -87,6 +164,9 @@ class _AuthGateState extends State<_AuthGate> {
         _isLoggedIn = true;
         final me = await _api.me();
         _userId = me['id'] as String;
+
+        // Synchroniser le token FCM de l'appareil
+        await syncPushTokenWithBackend();
 
         final myMerchants = await MerchantService(_api).getMine();
         if (myMerchants.isNotEmpty) {
@@ -121,10 +201,8 @@ class _AuthGateState extends State<_AuthGate> {
   Widget build(BuildContext context) {
     if (_checking) return const SizedBox.shrink();
 
-    // 1. Non connecté -> Login
     if (!_isLoggedIn) return const LoginScreen();
 
-    // 2. Connecté mais pas encore de boutique approuvée -> Écran d'attente direct
     if (!_isApprovedMerchant) {
       return BecomeMerchantScreen(
         startAtPending: true,
@@ -132,7 +210,6 @@ class _AuthGateState extends State<_AuthGate> {
       );
     }
 
-    // 3. Marchand approuvé -> Accès avec verrou PIN Wave
     return PinLockGate(
       userId: _userId!,
       startLocked: true,
@@ -333,15 +410,15 @@ class _LoginScreenState extends State<LoginScreen> {
       final me = await _api.me();
       final userId = me['id'] as String;
 
-      // On synchronise directement le PIN de connexion avec le verrou local :
-      // plus jamais de question redondante pour créer un code PIN !
       await PinStorage(userId: userId).setPin(rawPin);
+
+      // Enregistrer le token Push Firebase auprès du backend
+      await syncPushTokenWithBackend();
 
       final myMerchants = await MerchantService(_api).getMine();
       final myMerchant = myMerchants.isNotEmpty ? myMerchants.first : null;
       final status = myMerchant?['status'] as String? ?? 'pending';
 
-      // Pas de boutique ou boutique pas encore active -> Écran d'attente
       if (myMerchant == null || status != 'active') {
         if (mounted) {
           Navigator.of(context).pushReplacement(
@@ -358,7 +435,6 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // Boutique approuvée -> Dashboard
       NeonSession.setCurrentMerchant(myMerchant);
       final bType = (myMerchant['business_type'] as String?)?.toLowerCase();
       final isPharmacy = bType == 'pharmacie' || bType == 'pharmacy';

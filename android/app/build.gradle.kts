@@ -4,6 +4,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     id("com.android.application")
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services")
     // id("kotlin-android") — retiré : avec AGP 9.0, le support Kotlin est
     // intégré (builtInKotlin=true par défaut). Ce plugin n'est plus nécessaire.
 }

@@ -1,7 +1,9 @@
 // --- Fichier : lib/features/notifications/notifications_notifier.dart ---
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../shared/models/models.dart';
 import '../../core/utils/error_message.dart';
+import '../../core/utils/toast.dart';
 import '../../core/services/a_nan_nan_api_client.dart';
 import '../../core/services/a_nan_nan_services.dart';
 
@@ -15,6 +17,9 @@ class NotificationsNotifier extends ChangeNotifier {
   NotificationFilter filter = NotificationFilter.all;
   bool loading = true;
   String? error;
+  int _lastKnownUnread = 0;
+
+  Timer? _pollingTimer;
 
   int get unreadCount => notifications.where((n) => n.isUnread).length;
 
@@ -24,10 +29,15 @@ class NotificationsNotifier extends ChangeNotifier {
 
   NotificationsNotifier() {
     _init();
+    // Vérification automatique toutes les 15 secondes
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _checkNewNotifications();
+    });
   }
 
   Future<void> _init() async {
     await load();
+    _lastKnownUnread = unreadCount;
   }
 
   Future<void> load() async {
@@ -36,6 +46,7 @@ class NotificationsNotifier extends ChangeNotifier {
       notifications = rows
           .map((e) => NotificationRow.fromJson(e as Map<String, dynamic>))
           .toList();
+      _lastKnownUnread = unreadCount;
       error = null;
     } catch (e) {
       error = friendlyError(e);
@@ -43,6 +54,26 @@ class NotificationsNotifier extends ChangeNotifier {
       loading = false;
       notifyListeners();
     }
+  }
+
+  /// Vérifie si de nouvelles notifications sont arrivées sans saturer la connexion
+  Future<void> _checkNewNotifications() async {
+    try {
+      final remoteUnread = await _service.getUnreadCount();
+      if (remoteUnread > _lastKnownUnread) {
+        // Une nouvelle notification est arrivée !
+        await load();
+        final latest = notifications.firstOrNull;
+        if (latest != null) {
+          toast.info(
+            latest.title,
+            description: latest.body,
+          );
+        }
+      } else if (remoteUnread != unreadCount) {
+        await load();
+      }
+    } catch (_) {}
   }
 
   void setFilter(NotificationFilter f) {
@@ -67,6 +98,7 @@ class NotificationsNotifier extends ChangeNotifier {
         orderTotalAmount: n.orderTotalAmount,
         orderStatus: n.orderStatus,
       );
+      _lastKnownUnread = unreadCount;
       notifyListeners();
 
       try {
@@ -80,5 +112,11 @@ class NotificationsNotifier extends ChangeNotifier {
     for (final n in unread) {
       await markAsRead(n.id);
     }
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
   }
 }

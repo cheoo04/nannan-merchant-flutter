@@ -10,6 +10,10 @@ import '../../core/services/a_nan_nan_api_client.dart';
 import '../../core/services/a_nan_nan_services.dart';
 import '../../core/services/neon_session.dart';
 
+// Date passée universelle pour forcer l'écrasement de la pause dans Neon
+// (Indispensable car FastAPI exclut les nulls via exclude_none=True)
+const String _kClearedPauseDate = '1970-01-01T00:00:00.000Z';
+
 class DashboardNotifier extends ChangeNotifier {
   final OrdersRepository _ordersRepo;
   final ANanNanApiClient _api = ANanNanApiClient();
@@ -93,24 +97,25 @@ class DashboardNotifier extends ChangeNotifier {
     }
   }
 
-  // ── Toggle Ouvert/Fermé (Annule définitivement toute pause via pause_until: null) ──
+  // ── Toggle Ouvert/Fermé (Annule définitivement toute pause) ──
   Future<void> toggleOpen() async {
     if (merchant == null) return;
     try {
       final willBeOpen = !merchant!.isOpen;
       final mId = merchant!.id;
 
+      // Mise à jour optimiste locale immédiate
       merchant = merchant!.copyWith(
         isOpen: willBeOpen,
         clearPause: true,
       );
       notifyListeners();
 
-      await _merchantService.update(
-        mId,
-        isOpen: willBeOpen,
-        clearPause: true,
-      );
+      // Envoi de la date 1970 pour forcer Neon à écraser la pause
+      await _api.patch('/api/v1/merchants/$mId', body: {
+        'is_open': willBeOpen,
+        'pause_until': _kClearedPauseDate,
+      });
 
       await refresh();
     } catch (e) {
@@ -138,23 +143,24 @@ class DashboardNotifier extends ChangeNotifier {
     }
   }
 
-  // ── Reprendre maintenant (Lève la pause à 100%) ──
+  // ── Reprendre maintenant (Lève la pause à 100% et synchronise les appareils) ──
   Future<void> resumeMerchant() async {
     if (merchant == null) return;
     try {
       final mId = merchant!.id;
 
+      // 1. L'UI bascule instantanément : la pause disparaît tout de suite
       merchant = merchant!.copyWith(
         clearPause: true,
         isOpen: true,
       );
       notifyListeners();
 
-      await _merchantService.update(
-        mId,
-        isOpen: true,
-        clearPause: true,
-      );
+      // 2. On envoie la date passée à Neon pour écraser la pause en base
+      await _api.patch('/api/v1/merchants/$mId', body: {
+        'is_open': true,
+        'pause_until': _kClearedPauseDate,
+      });
 
       await refresh();
     } catch (e) {
