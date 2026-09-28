@@ -15,14 +15,14 @@ import '../location_picker/location_picker_screen.dart';
 const String _supportPhoneDial = '+2250565074868';
 const String _supportPhoneWa = '2250565074868';
 
-// Catégories par défaut en cas de coupure réseau (codes réels de la BD Neon)
+// Slugs stricts issus du contrat OpenAPI (/api/v1/business-types)
 const _fallbackCategories = [
   (code: 'restaurant', label: 'Restaurant / Maquis'),
-  (code: 'epicerie', label: 'Épicerie / Boutique'),
-  (code: 'boulangerie', label: 'Boulangerie'),
-  (code: 'pharmacie', label: 'Pharmacie'),
+  (code: 'grocery', label: 'Épicerie / Boutique'),
+  (code: 'bakery', label: 'Boulangerie'),
+  (code: 'pharmacy', label: 'Pharmacie'),
   (code: 'fast_food', label: 'Fast-Food'),
-  (code: 'service', label: 'Autre commerce'),
+  (code: 'retail', label: 'Autre commerce'),
 ];
 
 enum _Step { info, terms, pending }
@@ -48,7 +48,6 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
   bool _checkingExisting = true;
   String? _userId;
 
-  // Catégories chargées dynamiquement depuis l'API Neon
   List<({String code, String label})> _availableCategories =
       _fallbackCategories;
 
@@ -91,7 +90,7 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
 
   Future<void> _checkExistingAndPrefill() async {
     try {
-      // 1. Charger les types d'activité réels depuis GET /api/v1/business-types
+      // 1. Charger les types d'activité en ligne depuis GET /api/v1/business-types
       try {
         final types = await _api.get('/api/v1/business-types?only_active=true');
         if (types is List && types.isNotEmpty) {
@@ -112,7 +111,7 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
         }
       } catch (_) {}
 
-      // 2. Pré-remplir profil
+      // 2. Pré-remplir avec les informations de l'utilisateur connecté
       final me = await _api.me();
       _userId = me['id'] as String?;
 
@@ -445,7 +444,6 @@ class _BecomeMerchantScreenState extends State<BecomeMerchantScreen> {
   }
 }
 
-// ── ÉTAPE 1 : INFORMATIONS ────────────────────────────────────────────────────
 class _StepInfo extends StatelessWidget {
   final TextEditingController firstName,
       lastName,
@@ -486,7 +484,6 @@ class _StepInfo extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Ligne d'en-tête responsive sans risque d'overflow
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -508,7 +505,6 @@ class _StepInfo extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-
         Row(
           children: [
             Expanded(
@@ -529,7 +525,6 @@ class _StepInfo extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-
         _Field(
           label: 'Numéro WhatsApp / Contact',
           controller: phone,
@@ -537,25 +532,21 @@ class _StepInfo extends StatelessWidget {
           type: TextInputType.phone,
         ),
         const SizedBox(height: 12),
-
         _Field(
             label: 'Nom du commerce',
             controller: businessName,
             placeholder: 'Restaurant Chez Marie'),
         const SizedBox(height: 12),
-
         _Field(
             label: 'Quartier / Ville',
             controller: city,
             placeholder: 'Oumé Centre'),
         const SizedBox(height: 12),
-
         _Field(
             label: 'Adresse ou repère précis',
             controller: address,
             placeholder: 'Face Mairie, à côté de la pharmacie'),
         const SizedBox(height: 8),
-
         GestureDetector(
           onTap: onPickLocation,
           child: Container(
@@ -598,7 +589,6 @@ class _StepInfo extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-
         const _FieldLabel(text: 'Secteur d\'activité'),
         const SizedBox(height: 6),
         GridView.count(
@@ -644,9 +634,7 @@ class _StepInfo extends StatelessWidget {
             );
           }).toList(),
         ),
-
         const SizedBox(height: 12),
-
         const _FieldLabel(text: 'Courte description (optionnelle)'),
         const SizedBox(height: 4),
         TextField(
@@ -672,9 +660,7 @@ class _StepInfo extends StatelessWidget {
             fillColor: AppColors.card,
           ),
         ),
-
         const SizedBox(height: 24),
-
         SizedBox(
           width: double.infinity,
           height: 52,
@@ -693,7 +679,6 @@ class _StepInfo extends StatelessWidget {
   }
 }
 
-// ── ÉTAPE 2 : CONDITIONS ──────────────────────────────────────────────────────
 class _StepTerms extends StatelessWidget {
   final bool accepted;
   final ValueChanged<bool> onAcceptChanged;
@@ -837,7 +822,6 @@ class _StepTerms extends StatelessWidget {
   }
 }
 
-// ── ÉTAPE 3 : PENDING (BOUTONS OPÉRATIONNELS) ──────────────────────────────────
 class _StepPending extends StatelessWidget {
   final bool approved;
   final VoidCallback onCheckStatus;
@@ -1001,7 +985,6 @@ class _StepPending extends StatelessWidget {
   }
 }
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
 class _Field extends StatelessWidget {
   final String label;
   final TextEditingController controller;

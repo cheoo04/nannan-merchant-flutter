@@ -1,3 +1,4 @@
+// --- Fichier : lib/features/products/products_screen.dart ---
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -18,6 +19,7 @@ import '../dashboard/dashboard_notifier.dart';
 class DbProduct {
   final String id;
   final String merchantId;
+  final String? variantId;
   final String name;
   final String? description;
   final int priceXof;
@@ -32,6 +34,7 @@ class DbProduct {
   const DbProduct({
     required this.id,
     required this.merchantId,
+    this.variantId,
     required this.name,
     this.description,
     required this.priceXof,
@@ -48,7 +51,6 @@ class DbProduct {
     Map<String, dynamic> j, {
     Map<String, String> categoryNames = const {},
   }) {
-    // Extraction sécurisée de la variante par défaut sans risque d'erreur de typage
     Map<String, dynamic>? defaultVariant;
     final rawVariants = j['variants'];
     if (rawVariants is List && rawVariants.isNotEmpty) {
@@ -83,6 +85,7 @@ class DbProduct {
     return DbProduct(
       id: j['id'] as String,
       merchantId: j['merchant_id'] as String,
+      variantId: defaultVariant?['id'] as String?,
       name: j['title'] as String,
       description: j['description'] as String?,
       priceXof: priceXof,
@@ -335,12 +338,47 @@ class ProductsNotifier extends ChangeNotifier {
     int? stock,
     String? category,
   }) async {
+    final existingProduct = products.where((p) => p.id == id).firstOrNull;
+
+    String? targetCategoryId = existingProduct?.categoryId;
+    if (category != null && category.trim().isNotEmpty) {
+      final trimmedCat = category.trim();
+      final existingEntry = categoryMap.entries.where(
+        (e) => e.value.toLowerCase() == trimmedCat.toLowerCase(),
+      );
+
+      if (existingEntry.isNotEmpty) {
+        targetCategoryId = existingEntry.first.key;
+      } else if (merchantId != null) {
+        try {
+          final newCat = await _categoriesService.create(
+            merchantId!,
+            name: trimmedCat,
+            slug: _slugify(trimmedCat),
+          );
+          targetCategoryId = newCat['id'] as String?;
+        } catch (_) {}
+      }
+    }
+
     try {
       await _offerings.update(
         id,
         title: name,
         description: description,
         imageUrl: imageUrl,
+        categoryId: targetCategoryId,
+        variants: [
+          {
+            if (existingProduct?.variantId != null)
+              'id': existingProduct!.variantId,
+            'price': priceXof.toDouble(),
+            'stock_quantity': stock,
+            'is_in_stock': stock == null || stock > 0,
+            'is_default': true,
+            'position': 0,
+          }
+        ],
       );
       await refresh();
       toast.success('Produit mis à jour');
@@ -351,14 +389,21 @@ class ProductsNotifier extends ChangeNotifier {
   }
 
   String _slugify(String s) {
-    final base = s
+    const withAccents = 'àáâãäåçèéêëìíîïñòóôõöùúûüýÿÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝ';
+    const noAccents = 'aaaaaaceeeeiiiinooooouuuuyyAAAAAACEEEEIIIINOOOOOUUUUY';
+    var text = s;
+    for (int i = 0; i < withAccents.length; i++) {
+      text = text.replaceAll(withAccents[i], noAccents[i]);
+    }
+
+    final base = text
         .toLowerCase()
         .trim()
         .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
         .replaceAll(RegExp(r'\s+'), '-');
     final validBase = base.isNotEmpty ? base : 'produit';
     final suffix =
-        DateTime.now().millisecondsSinceEpoch.toRadixString(36).substring(6);
+        DateTime.now().millisecondsSinceEpoch.toRadixString(36).substring(4);
     return '$validBase-$suffix';
   }
 

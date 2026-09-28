@@ -1,4 +1,5 @@
 // --- Fichier : lib/core/services/a_nan_nan_api_client.dart ---
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -15,16 +16,26 @@ class ANanNanApiException implements Exception {
 }
 
 class ANanNanApiClient {
-  static const String baseUrl = 'https://api-a-nan-nan.vercel.app';
+  static final ANanNanApiClient _instance = ANanNanApiClient._internal();
+  factory ANanNanApiClient({http.Client? client}) {
+    if (client != null) _instance._http = client;
+    return _instance;
+  }
+  ANanNanApiClient._internal() : _http = http.Client();
 
+  static const String baseUrl = 'https://api-a-nan-nan.vercel.app';
   static const _kAccessToken = 'anannan_access_token';
   static const _kRefreshToken = 'anannan_refresh_token';
 
-  final http.Client _http;
+  http.Client _http;
   String? _accessToken;
   String? _refreshToken;
 
-  ANanNanApiClient({http.Client? client}) : _http = client ?? http.Client();
+  // Verrou pour éviter les refreshs simultanés (anti-stampede)
+  Future<void>? _refreshFuture;
+
+  // Callback global branché dans main.dart si la session est définitivement expirée
+  static VoidCallback? onSessionExpired;
 
   Future<void> _loadSession() async {
     if (_accessToken != null) return;
@@ -51,7 +62,7 @@ class ANanNanApiClient {
 
   Future<bool> get isLoggedIn async {
     await _loadSession();
-    return _accessToken != null;
+    return _accessToken != null && _accessToken!.isNotEmpty;
   }
 
   // ── Auth ───────────────────────────────────────────────────────
@@ -87,14 +98,28 @@ class ANanNanApiClient {
   }
 
   Future<void> refreshSession() async {
-    await _loadSession();
-    if (_refreshToken == null) {
-      throw const ANanNanApiException(401, 'Pas de session à rafraîchir');
-    }
-    final body = await _postPublic(
-        '/api/v1/auth/refresh', {'refresh_token': _refreshToken});
-    await _saveSession(
-        body['access_token'] as String, body['refresh_token'] as String);
+    if (_refreshFuture != null) return _refreshFuture!;
+
+    _refreshFuture = () async {
+      await _loadSession();
+      if (_refreshToken == null) {
+        throw const ANanNanApiException(401, 'Pas de session à rafraîchir');
+      }
+      try {
+        final body = await _postPublic(
+            '/api/v1/auth/refresh', {'refresh_token': _refreshToken});
+        await _saveSession(
+            body['access_token'] as String, body['refresh_token'] as String);
+      } catch (e) {
+        await clearSession();
+        onSessionExpired?.call();
+        rethrow;
+      } finally {
+        _refreshFuture = null;
+      }
+    }();
+
+    return _refreshFuture!;
   }
 
   Future<Map<String, dynamic>> me() async =>
@@ -158,6 +183,7 @@ class ANanNanApiClient {
     return _handle(res);
   }
 
+  // ── Téléversement Hybride (Standard < 4 Mo / Pré-signé Cloud Direct >= 4 Mo) ──
   MediaType _resolveMediaType(String filename) {
     final ext = filename.split('.').last.toLowerCase();
     switch (ext) {
@@ -180,17 +206,32 @@ class ANanNanApiClient {
     }
   }
 
+  /// Téléverse un fichier : route automatiquement vers S3 direct (presign)
+  /// pour les vidéos et les fichiers de plus de 4 Mo.
   Future<String> uploadFile({
     required List<int> bytes,
     required String filename,
     String folder = 'general',
   }) async {
+    final mediaType = _resolveMediaType(filename);
+    final isVideo = mediaType.type == 'video';
+    const maxVercelBytes = 4 * 1024 * 1024; // 4 Mo limite Vercel
+
+    // Si c'est une vidéo ou un fichier lourd, utiliser obligatoirement l'URL signée
+    if (isVideo || bytes.length >= maxVercelBytes) {
+      return uploadPresignedFile(
+        bytes: bytes,
+        filename: filename,
+        contentType: mediaType.toString(),
+        folder: folder,
+      );
+    }
+
     await _loadSession();
     if (_accessToken == null) {
       throw const ANanNanApiException(401, 'Non connecté');
     }
     final uri = Uri.parse('$baseUrl/api/v1/uploads');
-    final mediaType = _resolveMediaType(filename);
 
     final request = http.MultipartRequest('POST', uri)
       ..headers['Authorization'] = 'Bearer $_accessToken'
@@ -224,6 +265,45 @@ class ANanNanApiClient {
     return body['url'] as String;
   }
 
+  /// Implémentation conforme OpenAPI de POST /api/v1/uploads/presign
+  /// Contourne Vercel en téléversant directement vers S3/Neon Storage
+  Future<String> uploadPresignedFile({
+    required List<int> bytes,
+    required String filename,
+    required String contentType,
+    String folder = 'publications',
+  }) async {
+    // 1. Demande de l'URL pré-signée au backend
+    final presignData = await post('/api/v1/uploads/presign', body: {
+      'filename': filename,
+      'content_type': contentType,
+      'folder': folder,
+      'size_bytes': bytes.length,
+    }) as Map<String, dynamic>;
+
+    final uploadUrl = presignData['upload_url'] as String;
+    final publicUrl = presignData['public_url'] as String;
+
+    // 2. PUT direct vers le Cloud Storage
+    // NOTE : Aucun Bearer Token ici ! S3 rejetterait la signature sinon.
+    final uploadResponse = await _http.put(
+      Uri.parse(uploadUrl),
+      headers: {
+        'Content-Type': contentType,
+      },
+      body: bytes,
+    );
+
+    if (uploadResponse.statusCode < 200 || uploadResponse.statusCode >= 300) {
+      throw ANanNanApiException(
+        uploadResponse.statusCode,
+        "Échec du transfert direct de la vidéo vers le stockage Cloud.",
+      );
+    }
+
+    return publicUrl;
+  }
+
   Map<String, String> _headersSync() => {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -235,8 +315,9 @@ class ANanNanApiClient {
     try {
       await refreshSession();
       return await retry();
-    } catch (e) {
+    } catch (_) {
       await clearSession();
+      onSessionExpired?.call();
       rethrow;
     }
   }

@@ -151,10 +151,11 @@ class StoriesNotifier extends ChangeNotifier {
     }
   }
 
+  /// Téléversement vidéo branché sur le flux pré-signé S3 direct
   Future<String?> uploadVideo(Uint8List bytes, String ext,
       {String? description}) async {
     if (merchantId == null) return 'Boutique introuvable';
-    if (video != null) return 'Une vidéo existe déjà — supprimez-la d\'abord';
+    if (video != null) return 'Une vidéo existe déjà : supprimez-la d\'abord';
     if (images.length > _maxImages) {
       return 'Avec une vidéo, maximum $_maxImages images. Supprimez ${images.length - _maxImages} image(s).';
     }
@@ -164,9 +165,13 @@ class StoriesNotifier extends ChangeNotifier {
 
     try {
       final filename = 'video_${DateTime.now().millisecondsSinceEpoch}.$ext';
-      final url = await _api.uploadFile(
+      final contentType = ext == 'mov' ? 'video/quicktime' : 'video/mp4';
+
+      // Appel direct vers le Cloud via l'URL signée (contourne Vercel)
+      final url = await _api.uploadPresignedFile(
         bytes: bytes,
         filename: filename,
+        contentType: contentType,
         folder: 'publications',
       );
 
@@ -338,7 +343,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
 
     if (duration != null && duration.inSeconds > _maxVideoSeconds) {
       toast.error(
-        'Vidéo trop longue (${duration.inSeconds}s) — maximum ${_maxVideoSeconds}s (1min30).',
+        'Vidéo trop longue (${duration.inSeconds}s) : maximum ${_maxVideoSeconds}s (1min30).',
       );
       return;
     }
@@ -349,7 +354,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
     if (err != null) {
       toast.error(err);
     } else {
-      toast.success('Vidéo ajoutée');
+      toast.success('Vidéo publiée avec succès !');
     }
   }
 
@@ -541,7 +546,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Publications ($imgCount${hasVideo ? ' + 1 vidéo' : ''})',
+                          'Publications ($imgCount${hasVideo ? " + 1 vidéo" : ""})',
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -636,7 +641,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'Ajoutez des photos et une vidéo pour attirer les clients sur votre fiche.',
+                            'Ajoutez des photos ou une vidéo pour attirer les clients sur votre vitrine.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                                 fontSize: 12, color: AppColors.mutedForeground),
@@ -666,7 +671,6 @@ class _StoriesScreenState extends State<StoriesScreen> {
   }
 }
 
-// ── HEADER ────────────────────────────────────────────────────────────────────
 class _StoriesHeader extends StatelessWidget {
   final double topPadding;
   final VoidCallback onBack;

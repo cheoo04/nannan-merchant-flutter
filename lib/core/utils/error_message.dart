@@ -1,3 +1,4 @@
+// --- Fichier : lib/core/utils/error_message.dart ---
 import 'dart:async';
 import 'dart:io';
 import '../services/a_nan_nan_api_client.dart';
@@ -27,19 +28,25 @@ String friendlyError(Object error, {String? fallback}) {
       return 'Accès non autorisé.';
     }
     if (error.statusCode == 404) {
-      return 'Élément introuvable.';
+      return 'Élément introuvable sur le serveur.';
+    }
+    if (error.statusCode == 413) {
+      return 'Le média sélectionné est trop lourd. Réduisez sa durée ou sa résolution.';
+    }
+    if (error.statusCode == 415) {
+      return 'Format de fichier non pris en charge. Utilisez du MP4 ou JPG/PNG.';
     }
     if (error.statusCode == 422) {
-      // Nettoyage des messages de validation Pydantic/FastAPI
       final msg = error.message;
-      if (msg.contains('loc') || msg.contains('Input should be') || msg.contains('value_error')) {
+      if (msg.contains('loc') ||
+          msg.contains('Input should be') ||
+          msg.contains('value_error')) {
         return 'Vérifiez les informations saisies.';
       }
       return msg.isNotEmpty ? msg : 'Informations invalides.';
     }
-    // Erreurs 500 et plantages serveur : toujours un message propre et poli
     if (error.statusCode >= 500) {
-      return 'Une difficulté technique temporaire est survenue sur le serveur. Réessayez dans un instant.';
+      return 'Difficulté technique temporaire sur le serveur. Réessayez dans un instant.';
     }
     return error.message;
   }
@@ -56,7 +63,10 @@ String friendlyError(Object error, {String? fallback}) {
     return 'Pas de connexion internet. Vérifiez votre réseau et réessayez.';
   }
 
-  if (raw.contains('greenlet') || raw.contains('sql') || raw.contains('asyncpg') || raw.contains('traceback')) {
+  if (raw.contains('greenlet') ||
+      raw.contains('sql') ||
+      raw.contains('asyncpg') ||
+      raw.contains('traceback')) {
     return 'Une difficulté technique temporaire est survenue. Réessayez.';
   }
 

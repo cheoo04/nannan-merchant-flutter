@@ -1,3 +1,4 @@
+// --- Fichier : lib/features/dashboard/dashboard_notifier.dart ---
 import 'dart:async';
 import 'dart:io';
 
@@ -8,9 +9,6 @@ import '../../core/utils/error_message.dart';
 import '../../core/services/a_nan_nan_api_client.dart';
 import '../../core/services/a_nan_nan_services.dart';
 import '../../core/services/neon_session.dart';
-
-// Date passée universelle pour forcer l'écrasement de la pause sur le serveur
-const String _kClearedPauseDate = '1970-01-01T00:00:00.000Z';
 
 class DashboardNotifier extends ChangeNotifier {
   final OrdersRepository _ordersRepo;
@@ -95,25 +93,24 @@ class DashboardNotifier extends ChangeNotifier {
     }
   }
 
-  // ── Toggle Ouvert/Fermé (Annule définitivement toute pause) ──
+  // ── Toggle Ouvert/Fermé (Annule définitivement toute pause via pause_until: null) ──
   Future<void> toggleOpen() async {
     if (merchant == null) return;
     try {
       final willBeOpen = !merchant!.isOpen;
       final mId = merchant!.id;
 
-      // Mise à jour optimiste immédiate
       merchant = merchant!.copyWith(
         isOpen: willBeOpen,
         clearPause: true,
       );
       notifyListeners();
 
-      // On force la fin de pause sur le serveur avec la date passée
-      await _api.patch('/api/v1/merchants/$mId', body: {
-        'is_open': willBeOpen,
-        'pause_until': _kClearedPauseDate,
-      });
+      await _merchantService.update(
+        mId,
+        isOpen: willBeOpen,
+        clearPause: true,
+      );
 
       await refresh();
     } catch (e) {
@@ -147,18 +144,17 @@ class DashboardNotifier extends ChangeNotifier {
     try {
       final mId = merchant!.id;
 
-      // 1. L'UI bascule instantanément : la pause disparaît tout de suite
       merchant = merchant!.copyWith(
         clearPause: true,
         isOpen: true,
       );
       notifyListeners();
 
-      // 2. On envoie la date passée au serveur Neon pour écraser la pause en base
-      await _api.patch('/api/v1/merchants/$mId', body: {
-        'is_open': true,
-        'pause_until': _kClearedPauseDate,
-      });
+      await _merchantService.update(
+        mId,
+        isOpen: true,
+        clearPause: true,
+      );
 
       await refresh();
     } catch (e) {
@@ -166,7 +162,8 @@ class DashboardNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> saveSchedule({required bool enabled, String? opening, String? closing}) async {
+  Future<void> saveSchedule(
+      {required bool enabled, String? opening, String? closing}) async {
     if (merchant == null) return;
     try {
       merchant = merchant!.copyWith(
@@ -242,34 +239,47 @@ class DashboardNotifier extends ChangeNotifier {
   }
 
   // ── KPIs calculés ─────────────────────────────────────────
-  int get pendingCount => orders.where((o) => o.status == OrderStatus.pending).length;
-  int get acceptedCount => orders.where((o) => o.status == OrderStatus.accepted).length;
-  int get inDeliveryCount => orders.where((o) => o.status == OrderStatus.inDelivery).length;
-  int get deliveredCount => orders.where((o) => o.status == OrderStatus.delivered).length;
+  int get pendingCount =>
+      orders.where((o) => o.status == OrderStatus.pending).length;
+  int get acceptedCount =>
+      orders.where((o) => o.status == OrderStatus.accepted).length;
+  int get inDeliveryCount =>
+      orders.where((o) => o.status == OrderStatus.inDelivery).length;
+  int get deliveredCount =>
+      orders.where((o) => o.status == OrderStatus.delivered).length;
   int get totalCount => orders.length;
 
   int get revenueDay {
-    final startOfDay = DateTime.now().copyWith(hour: 0, minute: 0, second: 0, millisecond: 0);
+    final startOfDay =
+        DateTime.now().copyWith(hour: 0, minute: 0, second: 0, millisecond: 0);
     return orders
-        .where((o) => o.status == OrderStatus.delivered && (o.deliveredAt ?? o.createdAt).isAfter(startOfDay))
+        .where((o) =>
+            o.status == OrderStatus.delivered &&
+            (o.deliveredAt ?? o.createdAt).isAfter(startOfDay))
         .fold(0, (s, o) => s + o.itemsAmount);
   }
 
   int get revenueWeek {
     final start = DateTime.now().subtract(const Duration(days: 7));
     return orders
-        .where((o) => o.status == OrderStatus.delivered && (o.deliveredAt ?? o.createdAt).isAfter(start))
+        .where((o) =>
+            o.status == OrderStatus.delivered &&
+            (o.deliveredAt ?? o.createdAt).isAfter(start))
         .fold(0, (s, o) => s + o.itemsAmount);
   }
 
   int get revenueMonth {
     final start = DateTime.now().subtract(const Duration(days: 30));
     return orders
-        .where((o) => o.status == OrderStatus.delivered && (o.deliveredAt ?? o.createdAt).isAfter(start))
+        .where((o) =>
+            o.status == OrderStatus.delivered &&
+            (o.deliveredAt ?? o.createdAt).isAfter(start))
         .fold(0, (s, o) => s + o.itemsAmount);
   }
 
-  int get revenueTotal => orders.where((o) => o.status == OrderStatus.delivered).fold(0, (s, o) => s + o.itemsAmount);
+  int get revenueTotal => orders
+      .where((o) => o.status == OrderStatus.delivered)
+      .fold(0, (s, o) => s + o.itemsAmount);
   int get activeCount => pendingCount + acceptedCount + inDeliveryCount;
 
   List<({String id, String title, String body})> get alerts {
