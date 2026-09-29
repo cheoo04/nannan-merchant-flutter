@@ -1,3 +1,4 @@
+// --- Fichier : lib/features/orders/orders_repository.dart ---
 import 'package:flutter/foundation.dart';
 import '../../core/services/a_nan_nan_api_client.dart';
 import '../../core/services/a_nan_nan_services.dart';
@@ -55,7 +56,6 @@ class OrdersRepository {
         .toList();
   }
 
-  // Confirmation directe de la commande par le commerçant
   Future<String?> acceptOrder(String orderId) async {
     try {
       await _orderService.updateStatus(orderId, 'confirmed');
@@ -66,7 +66,6 @@ class OrdersRepository {
     }
   }
 
-  // Refus ou annulation de la commande
   Future<String?> refuseOrder(String orderId) async {
     try {
       await _orderService.updateStatus(orderId, 'cancelled');
@@ -75,5 +74,10 @@ class OrdersRepository {
       debugPrint('[OrdersRepository] Erreur refuseOrder: $e');
       return friendlyError(e);
     }
+  }
+
+  // Méthode clé pour la transmission au coursier
+  Future<void> updateOrderStatus(String orderId, String targetStatus) async {
+    await _orderService.updateStatus(orderId, targetStatus);
   }
 }

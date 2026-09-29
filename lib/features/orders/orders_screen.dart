@@ -1,3 +1,4 @@
+// --- Fichier : lib/features/orders/orders_screen.dart ---
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/toast.dart';
@@ -5,9 +6,10 @@ import '../../core/utils/formatters.dart';
 import '../../shared/widgets/merchant_bottom_nav.dart';
 import '../../shared/widgets/notification_bell_button.dart';
 import '../../shared/widgets/skeleton.dart';
-import 'orders_notifier.dart';
-import '../../shared/models/models.dart';
 import '../../core/services/neon_session.dart';
+import 'orders_notifier.dart';
+import 'orders_repository.dart';
+import '../../shared/models/models.dart';
 
 class OrdersScreen extends StatefulWidget {
   final VoidCallback onGoToDashboard;
@@ -571,7 +573,7 @@ class _OrderCardState extends State<_OrderCard> {
             ),
           ),
 
-          // Action Accepter / Refuser (pour les nouvelles commandes)
+          // Étape 1 : Accepter / Refuser (pour les nouvelles commandes)
           if (o.status == OrderStatus.pending) ...[
             Container(
               decoration: const BoxDecoration(
@@ -632,63 +634,98 @@ class _OrderCardState extends State<_OrderCard> {
             ),
           ],
 
-          // Commande acceptée en cours : affichage universel du code retrait pour le coursier
+          // Étape 2 : Commande acceptée -> affichage du code retrait + bouton pour prévenir le livreur !
           if (o.status == OrderStatus.accepted) ...[
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.all(14),
               decoration: const BoxDecoration(
                 color: AppColors.primarySoft,
                 borderRadius: BorderRadius.only(
                     bottomLeft: Radius.circular(20),
                     bottomRight: Radius.circular(20)),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
                 children: [
-                  const Row(
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(Icons.inventory_2_rounded,
-                          size: 18, color: AppColors.primary),
-                      SizedBox(width: 8),
-                      Text(
-                        'En préparation',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary),
+                      const Row(
+                        children: [
+                          Icon(Icons.inventory_2_rounded,
+                              size: 18, color: AppColors.primary),
+                          SizedBox(width: 8),
+                          Text(
+                            'En préparation',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Text(
+                              'Code retrait : ',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.mutedForeground,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              o.pickupCode,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                fontFamily: 'Sora',
+                                color: AppColors.foreground,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: AppColors.primary.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Text(
-                          'Code retrait : ',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.mutedForeground,
-                              fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          o.pickupCode,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            fontFamily: 'Sora',
-                            color: AppColors.foreground,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                      ],
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 40,
+                    child: ElevatedButton.icon(
+                      onPressed: isBusy
+                          ? null
+                          : () async {
+                              final repo = OrdersRepository();
+                              await repo.updateOrderStatus(
+                                  o.id, 'ready_for_pickup');
+                              toast.success(
+                                  'Le livreur a été prévenu que le colis est prêt !');
+                              widget.notifier.refresh();
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.check_circle_outline_rounded,
+                          size: 16, color: Colors.white),
+                      label: const Text(
+                        'Commande prête (Signaler au livreur)',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white),
+                      ),
                     ),
                   ),
                 ],

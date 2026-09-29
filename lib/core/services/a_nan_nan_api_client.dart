@@ -31,10 +31,7 @@ class ANanNanApiClient {
   String? _accessToken;
   String? _refreshToken;
 
-  // Verrou pour éviter les refreshs simultanés (anti-stampede)
   Future<void>? _refreshFuture;
-
-  // Callback global branché dans main.dart si la session est définitivement expirée
   static VoidCallback? onSessionExpired;
 
   Future<void> _loadSession() async {
@@ -65,7 +62,6 @@ class ANanNanApiClient {
     return _accessToken != null && _accessToken!.isNotEmpty;
   }
 
-  // ── Auth ───────────────────────────────────────────────────────
   Future<Map<String, dynamic>> register({
     required String phone,
     required String pin,
@@ -127,7 +123,6 @@ class ANanNanApiClient {
 
   Future<void> logout() => clearSession();
 
-  // ── Requêtes génériques authentifiées ─────────────────────────
   Future<Map<String, String>> _authHeaders() async {
     await _loadSession();
     if (_accessToken == null) {
@@ -183,7 +178,6 @@ class ANanNanApiClient {
     return _handle(res);
   }
 
-  // ── Téléversement Hybride (Standard < 4 Mo / Pré-signé Cloud Direct >= 4 Mo) ──
   MediaType _resolveMediaType(String filename) {
     final ext = filename.split('.').last.toLowerCase();
     switch (ext) {
@@ -206,8 +200,6 @@ class ANanNanApiClient {
     }
   }
 
-  /// Téléverse un fichier : route automatiquement vers S3 direct (presign)
-  /// pour les vidéos et les fichiers de plus de 4 Mo.
   Future<String> uploadFile({
     required List<int> bytes,
     required String filename,
@@ -215,9 +207,8 @@ class ANanNanApiClient {
   }) async {
     final mediaType = _resolveMediaType(filename);
     final isVideo = mediaType.type == 'video';
-    const maxVercelBytes = 4 * 1024 * 1024; // 4 Mo limite Vercel
+    const maxVercelBytes = 4 * 1024 * 1024;
 
-    // Si c'est une vidéo ou un fichier lourd, utiliser obligatoirement l'URL signée
     if (isVideo || bytes.length >= maxVercelBytes) {
       return uploadPresignedFile(
         bytes: bytes,
@@ -265,15 +256,12 @@ class ANanNanApiClient {
     return body['url'] as String;
   }
 
-  /// Implémentation conforme OpenAPI de POST /api/v1/uploads/presign
-  /// Contourne Vercel en téléversant directement vers S3/Neon Storage
   Future<String> uploadPresignedFile({
     required List<int> bytes,
     required String filename,
     required String contentType,
     String folder = 'publications',
   }) async {
-    // 1. Demande de l'URL pré-signée au backend
     final presignData = await post('/api/v1/uploads/presign', body: {
       'filename': filename,
       'content_type': contentType,
@@ -284,8 +272,6 @@ class ANanNanApiClient {
     final uploadUrl = presignData['upload_url'] as String;
     final publicUrl = presignData['public_url'] as String;
 
-    // 2. PUT direct vers le Cloud Storage
-    // NOTE : Aucun Bearer Token ici ! S3 rejetterait la signature sinon.
     final uploadResponse = await _http.put(
       Uri.parse(uploadUrl),
       headers: {
@@ -297,7 +283,7 @@ class ANanNanApiClient {
     if (uploadResponse.statusCode < 200 || uploadResponse.statusCode >= 300) {
       throw ANanNanApiException(
         uploadResponse.statusCode,
-        "Échec du transfert direct de la vidéo vers le stockage Cloud.",
+        "Échec du transfert direct du média vers le Cloud.",
       );
     }
 

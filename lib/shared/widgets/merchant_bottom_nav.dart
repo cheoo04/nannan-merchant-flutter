@@ -17,7 +17,6 @@ class MerchantBottomNav extends StatelessWidget {
     this.isPharmacy,
   });
 
-  // Immunité absolue : si la session est une pharmacie, la barre a TOUJOURS 5 onglets
   bool get _resolvedIsPharmacy => isPharmacy == true || NeonSession.isPharmacy;
 
   static List<MerchantTab> tabsFor({required bool isPharmacy}) => [
@@ -126,7 +125,7 @@ class _NavItem extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                  color: color, // S'allume en bleu vif quand actif !
+                  color: color,
                 ),
               ),
             ],
